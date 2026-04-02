@@ -1,0 +1,49 @@
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.routers import chat as chat_router
+from app.routers import export as export_router
+from app.routers import input as input_router
+from app.routers import session as session_router
+from app.routers import spec as spec_router
+from app.routers import validate as validate_router
+from app.session import session_store
+
+
+async def _cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(600)
+        session_store.cleanup()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_cleanup_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(session_router.router, prefix="/api")
+app.include_router(input_router.router, prefix="/api")
+app.include_router(spec_router.router, prefix="/api")
+app.include_router(chat_router.router, prefix="/api")
+app.include_router(validate_router.router, prefix="/api")
+app.include_router(export_router.router, prefix="/api")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
