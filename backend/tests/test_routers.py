@@ -13,7 +13,7 @@ def test_health(client):
 def test_input_text(client):
     response = client.post(
         "/api/input",
-        params={"text": "We need a login system"},
+        json={"text": "We need a login system"},
         headers=SESSION_HEADER,
     )
     assert response.status_code == 200
@@ -25,7 +25,7 @@ def test_input_text(client):
 def test_input_no_session(client):
     response = client.post(
         "/api/input",
-        data={"text": "hello"},
+        json={"text": "hello"},
     )
     assert response.status_code == 400
 
@@ -34,7 +34,7 @@ def test_input_too_long(client):
     long_text = "a" * 50001
     response = client.post(
         "/api/input",
-        params={"text": long_text},
+        json={"text": long_text},
         headers=SESSION_HEADER,
     )
     assert response.status_code == 413
@@ -44,7 +44,7 @@ def test_get_session(client):
     # Create a session via input first
     client.post(
         "/api/input",
-        params={"text": "requirements text"},
+        json={"text": "requirements text"},
         headers=SESSION_HEADER,
     )
     response = client.get("/api/session", headers=SESSION_HEADER)
@@ -72,7 +72,7 @@ def test_export_no_spec(client):
     # Create session via input, then try to export without a spec
     client.post(
         "/api/input",
-        params={"text": "some text"},
+        json={"text": "some text"},
         headers=SESSION_HEADER,
     )
     response = client.get("/api/export", headers=SESSION_HEADER)

@@ -1,0 +1,1939 @@
+---
+alwaysApply: true
+---
+# Nexacro to Vue 변환 규칙
+
+이 규칙들은 Nexacro 화면을 Vue 3 + TypeScript로 변환할 때 따라야 할 코딩 표준과 패턴을 정의합니다.
+
+**프로젝트 구조**:
+- **소스 화면**: `htomss/htomss-ui` (Nexacro XFDL 파일)
+- **타겟 프로젝트**: `tomms-lite-front/src/pages` (Vue 3 + TypeScript)
+- **백엔드**: `tomms-lite-war` (Spring Boot + MyBatis)
+
+## 🎯 핵심 아키텍처 패턴
+
+### 1. Component Structure
+```
+pages/[module]/[category]/[screenId]/
+  ├── index.vue                           ← Main page (REQUIRED)
+  ├── [screenId].scss                     ← Screen-specific styles (REQUIRED)
+  └── components/                         ← Component folder (REQUIRED)
+      ├── [screenId]SearchForm/
+      │   ├── [ScreenId]SearchForm.vue    ← Search form (REQUIRED)
+      │   └── [ScreenId]SearchForm.scss   ← Component styles (REQUIRED)
+      ├── [screenId]DataTable/
+      │   ├── [ScreenId]DataTable.vue     ← Data grid (REQUIRED)
+      │   ├── [ScreenId]DataTable.scss    ← Component styles (REQUIRED)
+      │   └── utils/                      ← DataTable만 utils 폴더 사용!
+      │       └── index.ts                ← Column/row mapping helpers
+      ├── [screenId]SumGrid/
+      │   ├── [ScreenId]SumGrid.vue       ← Summary grid (if needed)
+      │   └── [ScreenId]SumGrid.scss      ← Component styles (REQUIRED)
+      └── [screenId]ProgressList/         ← Progress list (optional, if special status items exist)
+          ├── [ScreenId]ProgressList.vue  ← Special status list component
+          └── [ScreenId]ProgressList.scss ← Component styles (REQUIRED)
+```
+
+**Example (PMDP020)**:
+```
+pages/pm/dp/pmdp020/
+  ├── index.vue
+  ├── pmdp020.scss
+  └── components/
+      ├── pmdp020SearchForm/
+      │   ├── PMDP020SearchForm.vue
+      │   └── PMDP020SearchForm.scss      ← Component-specific styles
+      ├── pmdp020DataTable/               ← DataTable만 utils 폴더!
+      │   ├── PMDP020DataTable.vue
+      │   ├── PMDP020DataTable.scss
+      │   └── utils/
+      │       └── index.ts                ← Column mapping helpers
+      ├── pmdp020SumGrid/                 ← SumGrid는 utils 없음
+      │   ├── PMDP020SumGrid.vue
+      │   └── PMDP020SumGrid.scss
+      └── pmdp020ProgressList/            ← ProgressList (if needed)
+          ├── PMDP020ProgressList.vue
+          └── PMDP020ProgressList.scss
+```
+
+### 2. File Naming Convention
+- **Folders**: lowercase (e.g., `pm/dp/pmdp020/`, `pmdp020SearchForm/`)
+- **Component files**: PascalCase with screenId prefix (e.g., `PMDP020SearchForm.vue`)
+- **Style files**: lowercase (e.g., `pmdp020.scss`)
+- **Type files**: camelCase (e.g., `types.ts`)
+
+### 3. Component Import Patterns (CRITICAL!)
+
+**Rule**: Always use custom components if they exist. Only import from PrimeVue directly for exceptions listed below.
+
+**📚 Complete Component Guide**: See `FrontendGuide/12_커스텀_컴포넌트_가이드.md` for:
+- ✅ All 40+ custom components with import patterns
+- ✅ Props, events, slots documentation
+- ✅ Real-world usage scenarios
+- ✅ Quick reference table
+- ✅ Performance optimization tips
+
+#### ⚠️ PrimeVue Direct Import (EXCEPTIONS ONLY)
+**These components DON'T have custom wrappers - import from PrimeVue directly:**
+```typescript
+// ✅ CORRECT - No custom wrapper exists
+import Column from 'primevue/column';           // DataTable columns
+import InputGroup from 'primevue/inputgroup';   // Input grouping
+import InputGroupAddon from 'primevue/inputgroupaddon';  // Input group addon
+
+// ❌ WRONG - Never import other PrimeVue components directly
+import Button from 'primevue/button';           // Use @/components/common/button
+import Calendar from 'primevue/calendar';       // Use @/components/common/datePicker
+import TreeTable from 'primevue/treetable';     // Use @/components/common/treeTable
+```
+
+**When in doubt**: 
+1. Search for custom component: `ls tomms-lite-front/src/components/common/[componentName]`
+2. If exists → Use custom component
+3. If not exists → Check if it's in exceptions list above
+4. If not in exceptions → Ask or search reference screens
+
+#### Components WITH index.ts (Use Destructuring)
+```typescript
+// ✅ CORRECT - These have index.ts files
+import { Button, ToggleButton } from '@/components/common/button';
+import { DatePicker, RangeDatePicker, SingleDatePicker } from '@/components/common/datePicker';
+import { 
+  SearchForm, 
+  SearchFormContent, 
+  SearchFormField, 
+  SearchFormFieldGroup, 
+  SearchFormRow 
+} from '@/components/common/searchForm';
+import { SearchInput } from '@/components/common/searchInput';
+```
+
+#### Components WITHOUT index.ts (Direct Import)
+```typescript
+// ✅ CORRECT - These DON'T have index.ts, must import .vue directly
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+import InputText from '@/components/common/inputText/InputText.vue';
+import Select from '@/components/common/select/Select.vue';
+import TreeTable from '@/components/common/treeTable/TreeTable.vue';
+```
+
+#### How to Check
+1. Look for `@/components/common/[componentName]/index.ts`
+2. If exists → Use destructuring import `{ ComponentName }`
+3. If not exists → Use direct import `ComponentName.vue`
+4. If component folder doesn't exist → Check exceptions list above
+
+**Reference Pattern (spov010)**:
+```typescript
+// ✅ Destructuring imports (has index.ts)
+import { DatePicker } from '@/components/common/datePicker';
+import { SearchForm, SearchFormContent, SearchFormField, SearchFormFieldGroup, SearchFormRow } from '@/components/common/searchForm';
+
+// ✅ Direct imports (no index.ts)
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+import InputText from '@/components/common/inputText/InputText.vue';
+import Select from '@/components/common/select/Select.vue';
+```
+
+**⚠️ Common Mistakes**:
+```typescript
+// ❌ WRONG - Using PrimeVue directly (when custom exists)
+import Button from 'primevue/button';
+import TreeTable from 'primevue/treetable';
+import InputText from 'primevue/inputtext';
+
+// ✅ CORRECT - Use customized wrapper
+import { Button } from '@/components/common/button';
+import TreeTable from '@/components/common/treeTable/TreeTable.vue';
+import InputText from '@/components/common/inputText/InputText.vue';
+
+// ✅ CORRECT - PrimeVue direct import (EXCEPTIONS ONLY)
+import Column from 'primevue/column';
+import InputGroup from 'primevue/inputgroup';
+
+// ❌ WRONG - Wrong import pattern
+import { SearchFormLabel } from '@/components/common/searchForm';  // SearchFormLabel not exported in index.ts
+
+// ✅ CORRECT - Direct import
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+
+// ❌ WRONG - Wrong path shortcut
+import { Button } from '@/components';  // Too short
+
+// ✅ CORRECT - Full path
+import { Button } from '@/components/common/button';
+```
+
+### 4. Types.ts Location (CRITICAL!)
+
+**⚠️ CRITICAL: types.ts는 화면 폴더가 아닌 API 폴더에 위치해야 합니다!**
+
+#### ✅ 올바른 패턴 (PMDP020, SPOV010 참고)
+```
+api/pages/[module]/[category]/types.ts  ← 공통 types.ts (올바름!)
+```
+
+**예시**:
+- `api/pages/pm/dp/types.ts` - PMDP020, PMDP030, PMDP040 등 모든 PMDP 화면의 타입
+- `api/pages/sp/ov/types.ts` - SPOV010의 타입
+- `api/pages/sp/od/types.ts` - SPOD010의 타입
+
+**Import 패턴**:
+```typescript
+// ✅ API 파일에서 (같은 디렉토리)
+// api/pages/pm/dp/pmdp020.ts
+import {
+  PMDP020SearchParams,
+  PMDP020SelectListResponse,
+  PMDP020SelectStatSumResponse,
+} from './types';  // ← 같은 디렉토리의 types.ts
+
+// ✅ 화면 컴포넌트에서
+// pages/pm/dp/pmdp020/index.vue
+import { PMDP020SearchParams } from '@/api/pages/pm/dp/types';
+```
+
+#### ❌ 잘못된 패턴 (PMDP030, PMDP040, PMDP100 등)
+```
+pages/[module]/[category]/[screenId]/types.ts  ← 각 화면 폴더 안 (잘못됨!)
+```
+
+**잘못된 예시**:
+- `pages/pm/dp/pmdp030/types.ts` ❌
+- `pages/pm/dp/pmdp040/types.ts` ❌
+- `pages/pm/dp/pmdp100/types.ts` ❌
+
+**이유**:
+- 같은 카테고리([module]/[category])의 화면들은 타입을 공유하는 경우가 많음
+- API 파일과 같은 위치에 있어 import 경로가 간단함
+- 프로젝트 전체에서 일관된 패턴 유지 (SPOV010, SPOD010 등 참고)
+
+**수정 방법**:
+1. `pages/[module]/[category]/[screenId]/types.ts` 삭제
+2. `api/pages/[module]/[category]/types.ts`에 타입 추가
+3. 모든 import 경로 수정: `from '@/pages/.../types'` → `from '@/api/pages/.../types'`
+
+### 5. Required Files Checklist
+Every new screen MUST have:
+- ✅ `index.vue` - Main container with ContentHeader
+- ✅ `[screenId].scss` - Screen-specific styles
+- ✅ `api/pages/[module]/[category]/types.ts` - TypeScript interfaces (공통 types.ts)
+- ✅ `components/[screenId]SearchForm/` - Search form component folder
+  - ✅ `[ScreenId]SearchForm.vue` - Search form component
+  - ✅ `[ScreenId]SearchForm.scss` - Search form styles
+- ✅ `components/[screenId]DataTable/` - Data table component folder
+  - ✅ `[ScreenId]DataTable.vue` - Data table component
+  - ✅ `[ScreenId]DataTable.scss` - Data table styles
+- ✅ `components/[screenId]SumGrid/` - Summary grid folder (if needed)
+  - ✅ `[ScreenId]SumGrid.vue` - Summary grid component
+  - ✅ `[ScreenId]SumGrid.scss` - Summary grid styles
+- ✅ API file in `api/pages/[module]/[category]/[screenId].ts` (if backend exists)
+- ✅ Types file in `api/pages/[module]/[category]/types.ts` (공통 types.ts)
+
+---
+
+## 🔥 Critical DO's and DON'Ts
+
+### ✅ MUST DO
+
+#### 1. **API File Structure** (CRITICAL!)
+```typescript
+// ⭐ CRITICAL: Direct axios import (NOT useHtomssApi)
+import api from '@/plugins/axios';
+import { ApiResponse } from '@/types/api';
+import { formatErrorMessage } from '@/utils/formatErrorMessage';
+
+// ⭐ CRITICAL: Types import from same directory
+import {
+  PMDP020SearchParams,
+  PMDP020SelectListResponse,
+  PMDP020SelectStatSumResponse,
+} from './types';  // ← 같은 디렉토리의 types.ts
+
+// ⭐ CRITICAL: API endpoints
+const Api = {
+  selectDpReqStatSum: '/online/mvcJson/PMDP020-selectDpReqStatSum',
+  selectDpReqList: '/online/mvcJson/PMDP020-selectDpReqList',
+} as const;
+
+// ⭐ CRITICAL: API function with proper typing
+export async function fetchSelectDpReqStatSum(
+  params: PMDP020SearchParams
+): Promise<PMDP020SelectStatSumResponse> {
+  try {
+    const response = await api.post<ApiResponse<PMDP020SelectStatSumResponse>>(
+      Api.selectDpReqStatSum,
+      params
+    );
+
+    if (response.data.header.responseCode !== 'S0000') {
+      throw new Error(
+        formatErrorMessage(response, 'Failed to get DpReqStatSum')
+      );
+    }
+
+    return response.data.payload;  // ← payload 반환
+  } catch (error: any) {
+    throw new Error(formatErrorMessage(error, 'Failed to get DpReqStatSum'));
+  }
+}
+```
+
+**중요**:
+- ❌ `const { api } = useHtomssApi()` 사용하지 말 것
+- ✅ `import api from '@/plugins/axios'` 직접 import
+- ❌ Types: `pages/[module]/[category]/[screenId]/types.ts` (잘못됨)
+- ✅ Types: `api/pages/[module]/[category]/types.ts` (올바름)
+- ❌ API import: `from '@/pages/.../types'` (잘못됨)
+- ✅ API import: `from './types'` (같은 디렉토리)
+- ✅ Component import: `from '@/api/pages/.../types'` (화면 컴포넌트에서)
+- ❌ URL: `/PMDP020-selectDpReqList` (잘못됨)
+- ✅ URL: `/online/mvcJson/PMDP020-selectDpReqList` (올바름)
+- ✅ `return response.data.payload` (올바름 - SPOV010 패턴)
+
+#### 1.1. **백엔드 응답 구조 패턴** (CRITICAL!)
+
+**⚠️ CRITICAL: 백엔드 응답 구조에 따라 처리 방식이 다릅니다!**
+
+백엔드 서비스는 두 가지 패턴으로 응답을 반환합니다:
+
+**패턴 1: 단일 객체 반환** (PMDP020, SPOV010)
+```java
+// 백엔드 서비스
+@Override
+public Pm020SelectStatSumResDto selectDpReqStatSum(Pm020SelectStatSumReqDto request) {
+    return pmdp020Dao.selectDpReqStatSum(request);  // 단일 객체 반환
+}
+```
+
+```typescript
+// 프론트엔드 API
+export async function fetchSelectDpReqStatSum(
+  params: PMDP020SearchParams
+): Promise<PMDP020SelectStatSumResponse> {
+  const response = await api.post<ApiResponse<PMDP020SelectStatSumResponse>>(
+    Api.selectDpReqStatSum,
+    params
+  );
+  
+  return response.data.payload;  // ← 단일 객체 직접 반환
+}
+
+// 화면 컴포넌트에서 사용
+const response = await fetchSelectDpReqStatSum(requestParams);
+fetchedSumData.value = response;  // ← 직접 할당
+```
+
+**패턴 2: List 반환** (PMDP100)
+```java
+// 백엔드 서비스
+@Override
+public List<Pm100SelectProgressSumResDto> selectDpProgressSum(Pm100SelectProgressSumReqDto request) {
+    return pmdp100Dao.selectDpProgressSum(request);  // List 반환
+}
+```
+
+```typescript
+// 프론트엔드 API
+export const selectDpProgressSum = async (
+  params: SearchParams
+): Promise<SumData[]> {  // ← List 타입으로 반환
+  const response = await api.post<ApiResponse<SumData[]>>(
+    API_ENDPOINTS.selectDpProgressSum,
+    params
+  );
+  
+  return response.data.payload;  // ← List 직접 반환
+}
+
+// 화면 컴포넌트에서 사용
+const response = await selectDpProgressSum(requestParams);
+// 집계 데이터는 첫 번째 항목 사용
+fetchedSumData.value = response && response.length > 0 ? response[0] : null;
+// 목록 데이터는 전체 List 사용
+fetchedMainData.value = response || [];
+```
+
+**판단 기준**:
+1. 백엔드 서비스 메서드 반환 타입 확인
+   - `Pm020SelectStatSumResDto` → 단일 객체
+   - `List<Pm100SelectProgressSumResDto>` → List
+2. 프론트엔드 타입 정의
+   - 단일 객체: `PMDP020SelectStatSumResponse`
+   - List: `PMDP100SumData[]`
+3. 화면 컴포넌트에서 데이터 접근
+   - 단일 객체: `fetchedSumData.value` 직접 사용
+   - List (집계): `fetchedSumData.value[0]` 또는 첫 번째 항목
+   - List (목록): `fetchedMainData.value` 전체 배열
+
+#### 1.2. **필드명 불일치 처리** (CRITICAL!)
+
+**⚠️ CRITICAL: 백엔드 DTO 필드명과 프론트엔드 타입 정의가 다를 수 있습니다!**
+
+**문제 상황**:
+- 백엔드 DTO: camelCase (`busnSc`, `sumtot`, `suma`)
+- 프론트엔드 타입: 대문자 (`BUSN_SC`, `SUMTOT`, `SUMA`)
+- DataTable 컬럼: 대문자 필드명 기대
+
+**해결 방법**:
+
+**1단계: 프론트엔드 타입을 백엔드 DTO와 일치시키기**
+```typescript
+// types.ts
+export interface PMDP100SumData {
+  busnSc: string;    // ← 백엔드 DTO와 일치 (camelCase)
+  sumtot: number;
+  suma: number;
+  a02: number;
+  b01: number;
+  // ...
+}
+```
+
+**2단계: DataTable utils에서 변환**
+```typescript
+// utils/index.ts
+/**
+ * camelCase를 UPPER_SNAKE_CASE로 변환
+ */
+function toUpperSnakeCase(str: string): string {
+  return str.replace(/([A-Z])/g, '_$1').toUpperCase();
+}
+
+/**
+ * 객체의 모든 키를 camelCase에서 UPPER_SNAKE_CASE로 변환
+ */
+function convertKeysToUpperSnakeCase(obj: any): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const upperKey = toUpperSnakeCase(key);
+    result[upperKey] = value;
+  }
+  return result;
+}
+
+/**
+ * API 응답 데이터를 DataTable 형식으로 변환
+ * 백엔드 DTO는 camelCase이지만 DataTable은 UPPER_SNAKE_CASE를 기대함
+ */
+export function getRows(data: any[]): any[] {
+  if (!data || !Array.isArray(data)) {
+    return [];
+  }
+
+  return data.map((row, index) => {
+    // camelCase를 UPPER_SNAKE_CASE로 변환
+    const convertedRow = convertKeysToUpperSnakeCase(row);
+    
+    return {
+      ...convertedRow,
+      rowIndex: index + 1,
+      // 날짜 필드 포맷팅
+      GOAL_YMD_FORMATTED: formatDate(convertedRow.GOAL_YMD),
+    };
+  });
+}
+```
+
+**3단계: SumGrid에서 필드명 변환**
+```typescript
+// PMDP100SumGrid.vue
+const sumData = computed(() => {
+  if (fetchedSumData.value) {
+    return fetchedSumData.value;  // camelCase 그대로 사용
+  }
+  return {
+    sumtot: 0,
+    suma: 0,
+    a02: 0,
+    // ...
+  };
+});
+
+// 템플릿에서 소문자로 접근
+<div class="progress-btn-count">
+  {{ sumData[item.field.toLowerCase()] || 0 }}
+</div>
+```
+
+**판단 기준**:
+1. 백엔드 DTO 필드명 확인
+   - `Pm100SelectProgressSumResDto.java`에서 필드명 확인
+   - camelCase면 프론트엔드도 camelCase로 정의
+2. DataTable 컬럼 정의 확인
+   - `getColumns()`에서 `field: 'CONT_NO'` (대문자) 사용
+   - `getRows()`에서 변환 필요
+3. SumGrid/ProgressList에서 필드 접근
+   - camelCase로 정의했으면 소문자로 접근
+   - 또는 변환 함수 사용
+
+#### 2. **Common Code Loading Pattern** (CRITICAL!)
+```typescript
+// ✅ ALWAYS use useCommonCodeStore
+import { useCommonCodeStore } from '@/stores/commonCodeStore';
+import { computed } from 'vue';
+
+const commonCodeStore = useCommonCodeStore();
+
+// ⚠️ Load all codes in onMounted
+onMounted(async () => {
+  const customParam = 'BUSN_SC_IN=A1 PROG_ID=PMDP020';
+  
+  await commonCodeStore.loadMulti([
+    { QueryId: 'BMCM010Query.ContCombo' },
+    { QueryId: 'MNPS010Query.StatComboIn', customParam },
+    { QueryId: 'COM_PBL_0005', whereClause: "P_CODE_CD='C'" },
+  ]);
+});
+
+// ⚠️ Use computed for options
+const prgStatOptions = computed(() => 
+  commonCodeStore.options('MNPS010Query.StatComboIn', true, '전체', '', undefined, customParam)
+);
+```
+
+#### 3. **Common Code Dynamic Loading** (CRITICAL!)
+```typescript
+// ✅ Load dependent codes on change
+const onContNoChange = (event: any) => {
+  const contNo = event.value;
+  if (contNo) {
+    loadStrCdOptions(contNo);
+  }
+};
+
+const loadStrCdOptions = async (contNo: string) => {
+  const param = `CONT_NO=${contNo}`;
+  
+  await commonCodeStore.loadMulti([
+    { QueryId: 'MNOD090Query.StrCombo', customParam: param }
+  ]);
+  
+  // ⭐ CRITICAL: Pass same customParam to options() for cache matching
+  strCdOptions.value = commonCodeStore.options(
+    'MNOD090Query.StrCombo', 
+    true, 
+    '전체', 
+    '', 
+    undefined, 
+    param  // ← Must match loadMulti customParam!
+  );
+};
+```
+
+#### 4. **searchParams Synchronization Pattern** (CRITICAL!)
+```typescript
+// ✅ ALWAYS use this watch pattern in SearchForm
+import { watch, inject, type Ref } from 'vue';
+
+const searchParams = inject<Ref<SearchParams>>('searchParams');
+const searchFormRef = ref();
+
+watch(
+  () => searchParams.value?.prg_stat,
+  (newVal) => {
+    // ⚠️ Use !== undefined, NOT if (newVal)
+    if (newVal !== undefined && searchFormRef.value?.form) {
+      searchFormRef.value.form.setFieldValue('prg_stat', newVal ?? '');
+    }
+  }
+);
+
+// ⚠️ Update searchParams directly, NOT form values
+const handleSearch = () => {
+  searchParams.value = {
+    ...searchParams.value,
+    prg_stat: form.value.prg_stat,  // ← Direct assignment
+  };
+};
+```
+
+#### 5. **Ref Access** (CRITICAL!)
+```typescript
+// ✅ CORRECT - Vue auto-unwraps refs
+searchFormRef.value.form.setFieldValue('prg_stat', 'S01');
+
+// ❌ WRONG - Don't use .value.value
+searchFormRef.value.form.value.setFieldValue('prg_stat', 'S01');
+```
+
+#### 6. **API Parameter Uppercase Conversion** (CRITICAL!)
+```typescript
+// Backend HQML expects UPPERCASE parameters
+// prg_stat → PRG_STAT
+// cont_no → CONT_NO
+
+// ✅ Convert to uppercase before API call
+const convertToUppercaseParams = (params: Record<string, any>) => {
+  return Object.entries(params)
+    .filter(([_, v]) => v !== null && v !== undefined && v !== '')
+    .reduce((acc, [k, v]) => {
+      acc[k.toUpperCase()] = v;
+      return acc;
+    }, {} as Record<string, any>);
+};
+
+// Usage
+const response = await api.post('/json/PMDP020-selectDpReqList', {
+  data: convertToUppercaseParams(searchParams.value),
+});
+```
+
+#### 7. **DataTable Performance Optimization** (CRITICAL!)
+```vue
+<!-- ✅ ALWAYS use virtual scrolling for tables with 100+ rows -->
+<DataTable
+  :value="tableData"
+  scrollable
+  scrollHeight="540px"
+  :virtualScrollerOptions="{ itemSize: 46 }"
+  tableStyle="min-width: 50rem"
+>
+  <Column field="cont_no" header="계약번호" style="width: 150px" />
+</DataTable>
+```
+
+```scss
+// ✅ CSS Performance Optimization
+tr {
+  will-change: background-color;
+  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+td {
+  contain: layout style;
+}
+
+.p-datatable-tbody {
+  contain: layout;
+}
+```
+
+#### 8. **tomms-lite-front Style Cloning** (CRITICAL!)
+```vue
+<!-- ❌ DON'T create similar-looking components -->
+<Button label="조회" />
+
+<!-- ✅ EXACTLY clone from tomms-lite-front -->
+<Button
+  class="total-btn"
+  rounded
+  variant="outlined"
+  @click="handleClick"
+>
+  <div class="total-btn-text">
+    총 조회 건수
+    <i class="pi pi-arrow-right"></i>
+  </div>
+</Button>
+```
+
+```scss
+// ✅ Copy exact SCSS from tomms-lite-front
+.total-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border-width: 1px;
+  border-radius: var(--border-radius);
+  
+  .total-btn-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+```
+
+#### 9. **Toast Usage** (CRITICAL!)
+```typescript
+// ⭐ CRITICAL: NEVER use alert(), confirm() - Always use Toast or ConfirmDialog
+
+// ❌ WRONG - Using alert()
+if (!selectedRows.length) {
+  alert('선택된 항목이 없습니다.');
+  return;
+}
+
+// ✅ CORRECT - Using Toast
+import { useToast } from 'primevue/usetoast';
+
+const toast = useToast();
+
+if (!selectedRows.length) {
+  toast.add({
+    severity: 'warn',
+    summary: '경고',
+    detail: '선택된 항목이 없습니다.',
+    life: 3000
+  });
+  return;
+}
+
+// ✅ Success message
+toast.add({
+  severity: 'success',
+  summary: '저장 완료',
+  detail: '데이터가 저장되었습니다.',
+  life: 3000
+});
+
+// ✅ Error message
+toast.add({
+  severity: 'error',
+  summary: '오류 발생',
+  detail: '처리 중 오류가 발생했습니다.',
+  life: 3000
+});
+
+// ✅ Info message
+toast.add({
+  severity: 'info',
+  summary: '안내',
+  detail: '추가 정보입니다.',
+  life: 3000
+});
+```
+
+**Toast Severity Types**:
+- `success` - 성공 메시지 (녹색)
+- `info` - 정보 메시지 (파란색)
+- `warn` - 경고 메시지 (노란색)
+- `error` - 오류 메시지 (빨간색)
+
+**When to use what**:
+- ✅ **Toast**: 단순 알림, 검증 메시지, 성공/실패 피드백
+- ✅ **ConfirmDialog**: 사용자 확인이 필요한 액션 (삭제, 저장 등)
+- ❌ **alert()/confirm()**: 절대 사용 금지!
+
+### ❌ NEVER DO
+
+#### 1. **DON'T use wrong import patterns**
+```typescript
+// ❌ WRONG - Importing from PrimeVue when custom exists
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import TreeTable from 'primevue/treetable';
+import InputText from 'primevue/inputtext';
+
+// ✅ CORRECT - Use customized wrappers
+import { Button } from '@/components/common/button';
+import { DatePicker } from '@/components/common/datePicker';
+import TreeTable from '@/components/common/treeTable/TreeTable.vue';
+import InputText from '@/components/common/inputText/InputText.vue';
+
+// ✅ CORRECT - PrimeVue direct import (ONLY for exceptions)
+import Column from 'primevue/column';
+import InputGroup from 'primevue/inputgroup';
+
+// ❌ WRONG - Wrong destructuring (component not in index.ts)
+import { SearchFormLabel } from '@/components/common/searchForm';
+import { InputText } from '@/components/common/inputText';
+import { TreeTable } from '@/components/common/treeTable';
+
+// ✅ CORRECT - Direct import for non-exported components
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+import InputText from '@/components/common/inputText/InputText.vue';
+import TreeTable from '@/components/common/treeTable/TreeTable.vue';
+
+// ❌ WRONG - Mixing patterns inconsistently
+import { Button } from '@/components/common/button';
+import DatePicker from '@/components/common/datePicker/DatePicker.vue';  // Should use destructuring
+
+// ✅ CORRECT - Consistent patterns
+import { Button } from '@/components/common/button';
+import { DatePicker } from '@/components/common/datePicker';
+
+// ❌ WRONG - Wrong path shortcut
+import { Button } from '@/components';
+
+// ✅ CORRECT - Full path required
+import { Button } from '@/components/common/button';
+```
+
+**Verification Checklist Before Import**:
+1. ✅ Does custom component exist? → `ls tomms-lite-front/src/components/common/[name]`
+2. ✅ Is it in PrimeVue exceptions list? → `Column`, `InputGroup`, `InputGroupAddon`
+3. ✅ Does it have index.ts? → Use destructuring `{ Component }`
+4. ✅ No index.ts? → Direct import `Component.vue`
+5. ✅ Always use full path → `@/components/common/[name]`
+
+**How to verify**:
+1. Check reference screen (spov010) for import patterns
+2. Look for `index.ts` in component folder
+3. If unsure, search existing codebase: `grep -r "import.*ComponentName.*from" tomms-lite-front/src/pages`
+
+#### 2. **DON'T ignore tomms-lite-front patterns**
+```typescript
+// ❌ WRONG - Creating your own pattern
+const handleSearch = () => {
+  form.value.prg_stat = searchParams.value.prg_stat;
+};
+
+// ✅ CORRECT - Follow tomms-lite-front spov010 pattern
+watch(
+  () => searchParams.value?.prg_stat,
+  (newVal) => {
+    if (newVal !== undefined) {
+      searchFormRef.value.form.setFieldValue('prg_stat', newVal ?? '');
+    }
+  }
+);
+```
+
+#### 3. **DON'T assume - Always verify import patterns**
+```bash
+# Step 1: Check if component has index.ts
+ls tomms-lite-front/src/components/common/[componentName]/index.ts
+
+# Step 2: If exists, check exports
+cat tomms-lite-front/src/components/common/[componentName]/index.ts
+
+# Step 3: Verify with reference screen
+grep "import.*ComponentName" tomms-lite-front/src/pages/sp/ov/spov010/**/*.vue
+```
+
+**Example verification**:
+```bash
+# Check Button component
+$ ls tomms-lite-front/src/components/common/button/index.ts
+# ✅ File exists
+
+$ cat tomms-lite-front/src/components/common/button/index.ts
+# export { Button, ToggleButton }
+# ✅ Use: import { Button } from '@/components/common/button'
+
+# Check SearchFormLabel
+$ ls tomms-lite-front/src/components/common/searchForm/index.ts
+# ✅ File exists
+
+$ cat tomms-lite-front/src/components/common/searchForm/index.ts
+# export { default as SearchFormLabel } from './SearchFormLabel.vue'
+# ❌ SearchFormLabel is exported as default, NOT named export
+# ✅ But spov010 uses: import SearchFormLabel from '@/.../SearchFormLabel.vue'
+# → Follow actual usage pattern, not index.ts structure
+```
+
+#### 4. **DON'T skip creating required files**
+```typescript
+// ❌ WRONG - Skipping files due to path errors
+// "Cannot find module '@/pages/pm/dp/spod010/spod010.scss'"
+// → Giving up and not creating the file
+
+// ✅ CORRECT - Create the missing file
+// 1. Create spod010.scss (lowercase folder)
+// 2. Update import: import './spod010.scss'
+// 3. Verify path matches folder structure
+```
+
+#### 5. **DON'T mix or guess import patterns**
+```typescript
+// ❌ WRONG - Inconsistent patterns in same file
+import { Button } from '@/components/common/button';  // Destructuring
+import DatePicker from '@/components/common/datePicker/DatePicker.vue';  // Direct
+
+// ✅ CORRECT - Check index.ts and use consistent pattern
+import { Button } from '@/components/common/button';  // Has index.ts
+import { DatePicker } from '@/components/common/datePicker';  // Has index.ts
+
+// ❌ WRONG - Guessing without verification
+import { SearchFormLabel } from '@/components/common/searchForm';  // Assumed it's exported
+
+// ✅ CORRECT - Verify in spov010 reference
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';  // Direct import
+```
+
+#### 6. **DON'T use wrong watch conditions**
+```typescript
+// ❌ WRONG - Filters out empty strings
+if (newVal) { ... }
+
+// ✅ CORRECT - Only filters undefined
+if (newVal !== undefined) { ... }
+```
+
+#### 7. **DON'T forget uppercase conversion**
+```typescript
+// ❌ WRONG - Lowercase parameters
+const response = await api.post('/selectPMDP010List', {
+  data: { prg_stat: 'S01', cont_no: '1234' },
+});
+
+// ✅ CORRECT - Uppercase conversion
+const response = await api.post('/selectPMDP010List', {
+  data: convertToUppercaseParams({ prg_stat: 'S01', cont_no: '1234' }),
+});
+```
+
+#### 8. **DON'T skip performance optimization**
+```vue
+<!-- ❌ WRONG - No virtual scrolling -->
+<DataTable :value="largeDataset" />
+
+<!-- ✅ CORRECT - Virtual scrolling enabled -->
+<DataTable
+  :value="largeDataset"
+  scrollHeight="540px"
+  :virtualScrollerOptions="{ itemSize: 46 }"
+/>
+```
+
+#### 9. **DON'T use wrong ref access**
+```typescript
+// ❌ WRONG - Double .value
+searchFormRef.value.form.value.setFieldValue()
+
+// ✅ CORRECT - Single .value (auto-unwrap)
+searchFormRef.value.form.setFieldValue()
+```
+
+#### 10. **DON'T use alert() or confirm()**
+```typescript
+// ❌ WRONG - Using alert()
+alert('저장되었습니다.');
+if (confirm('삭제하시겠습니까?')) {
+  handleDelete();
+}
+
+// ✅ CORRECT - Use Toast
+import { useToast } from 'primevue/usetoast';
+const toast = useToast();
+
+toast.add({
+  severity: 'success',
+  summary: '저장 완료',
+  detail: '저장되었습니다.',
+  life: 3000
+});
+
+// ✅ CORRECT - Use ConfirmDialog for user confirmation
+import { useConfirm } from 'primevue/useconfirm';
+const confirm = useConfirm();
+
+confirm.require({
+  message: '삭제하시겠습니까?',
+  acceptLabel: '삭제',
+  rejectLabel: '취소',
+  accept: () => {
+    handleDelete();
+  }
+});
+```
+
+#### 11. **DON'T create ProgressList by default - Only when requested**
+```vue
+<!-- ❌ WRONG - Creating ProgressList without user request -->
+<!-- Automatically creating ProgressList for all screens -->
+
+<!-- ✅ CORRECT - Create ProgressList only when user asks -->
+<!-- User: "SPOV010에 Spov010ProgressList 이거있지? 이 부분에 들어가는 거를 PMDP020의 '요청미확정', '취소요청', '취소승인' 이 세개를 Spov010ProgressList 처럼 나오게끔 해주고 싶어" -->
+<!-- Then create: -->
+<template>
+  <div class="summary-section">
+    <PMDP020SumGrid />
+    <PMDP020ProgressList />  <!-- Only after explicit request -->
+  </div>
+</template>
+```
+
+**ProgressList Creation Guidelines**:
+1. **Only create when user explicitly requests it**
+   - User mentions: "ProgressList 추가", "SPOV010처럼", "특정 상태 분리" 등
+   - User references SPOV010's ProgressList pattern
+   
+2. **What is ProgressList?**
+   - Separate component for special status items (e.g., cancellation-related)
+   - Vertical list with bullet points (::before circles)
+   - Red highlighting for counts with `.has-value` class
+   - Fixed width buttons (230px)
+   - Based on SPOV010 pattern
+
+3. **When to create**:
+   ```typescript
+   // User says:
+   "SPOV010에 Spov010ProgressList 패턴 적용해줘"
+   "취소 관련 상태를 분리해서 보여줘"
+   "요청미확정, 취소요청, 취소승인을 ProgressList로 만들어줘"
+   
+   // Then create: [screenId]ProgressList component
+   ```
+
+4. **Component structure when creating**:
+   ```
+   components/[screenId]ProgressList/
+     ├── [ScreenId]ProgressList.vue    ← Template-first structure
+     └── [ScreenId]ProgressList.scss   ← SPOV010 styling pattern
+   ```
+
+5. **Template pattern** (SPOV010 reference):
+   ```vue
+   <template>
+     <div class="progress-list-container">
+       <ul class="progress-list">
+         <li>
+           <button @click="handleProgress('Q01')">
+             <span class="progress-btn-text">취소요청</span>
+             <span class="progress-btn-count" :class="{ 'has-value': sumData.Q01 > 0 }">
+               {{ sumData.Q01 }}
+             </span>
+           </button>
+         </li>
+         <!-- More items... -->
+       </ul>
+     </div>
+   </template>
+   ```
+
+6. **Styling pattern** (SPOV010 reference):
+   ```scss
+   .progress-list-container {
+     background-color: var(--bg-2);
+     padding: 14px 24px;
+     height: 122px;  // Fixed height
+     border-radius: 8px;
+   }
+   
+   .progress-list > li::before {
+     content: '';
+     width: 8px;
+     height: 8px;
+     border-radius: 50%;
+     background-color: var(--button-outlined-color);
+   }
+   
+   .progress-btn {
+     width: 230px;  // Fixed width
+   }
+   
+   .progress-btn-count.has-value {
+     color: red;  // Red highlighting
+   }
+   ```
+
+7. **Layout integration**:
+   ```scss
+   // index.vue
+   <div class="summary-section">
+     <[ScreenId]SumGrid />
+     <[ScreenId]ProgressList />  // Side by side
+   </div>
+   
+   // [screenId].scss
+   .summary-section {
+     display: flex;
+     gap: 8px;  // 8px spacing
+   }
+   ```
+
+8. **What NOT to do**:
+   ```typescript
+   // ❌ Don't create ProgressList automatically
+   // ❌ Don't add ProgressList to component structure by default
+   // ❌ Don't ask "Do you want ProgressList?" - Wait for explicit request
+   // ❌ Don't create ProgressList for all status items - Only special ones
+   ```
+
+9. **Default behavior** (without ProgressList request):
+   - Create only: SearchForm, DataTable, SumGrid
+   - All status items stay in SumGrid
+   - No ProgressList component or folder
+
+10. **After creating ProgressList**:
+    - Remove separated items from SumGrid's progressItems array
+    - Update index.vue to include ProgressList component
+    - Add flex layout to summary-section in SCSS
+    - Verify side-by-side layout with 8px gap
+
+---
+
+## 📋 Development Workflow
+
+### 1. Screen Analysis
+```bash
+# 1. Analyze Nexacro XFDL
+htomss/htomss-ui/htomss/[MODULE]/[CATEGORY]/[SCREEN_ID].xfdl
+
+# 2. Check backend HQML
+tomms-lite-war/tomms-biz-[module]/src/main/resources/sqlmap/[module]/[SCREEN_ID]Query.hqml
+
+# 3. Study tomms-lite-front project reference (PRIMARY)
+tomms-lite-front/src/pages/pm/dp/pmdp020/
+
+# 4. Check tomms-lite-front for styling patterns (SECONDARY)
+tomms-lite-front/src/pages/sp/ov/spov010/
+```
+
+**Important**: 
+- Always use PMDP020 structure (components/ folder organization) as the primary reference
+- Use tomms-lite-front (spov010) for **import patterns and styling** if needed
+- If user specifies another reference screen, use that screen's pattern
+
+**Import Pattern Check** (CRITICAL before implementation):
+```bash
+# Step 1: Check reference screen imports
+grep -A 5 "^import" tomms-lite-front/src/pages/sp/ov/spov010/components/spov010SearchForm/Spov010SearchForm.vue
+
+# Step 2: Verify component has index.ts
+ls tomms-lite-front/src/components/common/button/index.ts
+ls tomms-lite-front/src/components/common/datePicker/index.ts
+ls tomms-lite-front/src/components/common/searchForm/index.ts
+
+# Step 3: Check index.ts exports
+cat tomms-lite-front/src/components/common/button/index.ts
+# export { Button, ToggleButton } → Use: import { Button } from '@/components/common/button'
+
+cat tomms-lite-front/src/components/common/searchForm/index.ts
+# export { default as SearchForm } from './SearchForm.vue'
+# export { default as SearchFormLabel } from './SearchFormLabel.vue'
+# BUT spov010 uses: import SearchFormLabel from '@/.../SearchFormLabel.vue'
+# → Follow actual usage pattern in spov010, NOT index.ts structure
+```
+
+### 2. Component Creation
+```bash
+# Create folder structure
+mkdir -p tomms-lite-front/src/pages/[module]/[category]/[screenId]
+cd tomms-lite-front/src/pages/[module]/[category]/[screenId]
+
+# Create component folders (CRITICAL - must follow PMDP010 pattern)
+mkdir -p components/[screenId]SearchForm
+mkdir -p components/[screenId]DataTable
+mkdir -p components/[screenId]SumGrid  # if needed
+# ⚠️ DON'T create [screenId]ProgressList by default - only when user requests!
+
+# Create files
+touch index.vue
+touch [screenId].scss
+touch types.ts
+touch components/[screenId]SearchForm/[ScreenId]SearchForm.vue
+touch components/[screenId]SearchForm/[ScreenId]SearchForm.scss
+touch components/[screenId]DataTable/[ScreenId]DataTable.vue
+touch components/[screenId]DataTable/[ScreenId]DataTable.scss
+# DataTable만 utils 폴더: 컴럼 정의(getColumns), 데이터 매핑(getRows) 헬퍼 함수 분리
+mkdir -p components/[screenId]DataTable/utils
+touch components/[screenId]DataTable/utils/index.ts
+touch components/[screenId]SumGrid/[ScreenId]SumGrid.vue  # SumGrid는 utils 없음
+touch components/[screenId]SumGrid/[ScreenId]SumGrid.scss
+```
+
+**Utils Convention**:
+- **DataTable 컴포넌트만 `utils/index.ts` 사용**
+  
+  **사용 이유**:
+  - DataTable은 컴럼 정의가 복잡하고 길어서 분리 필요
+  - `getColumns({ t, isAdmin })`: 컴럼 정의 (field, header, width, frozen 등)
+  - `getRows(data)`: API 응답 데이터를 DataTable 형식으로 변환
+  - 다국어 지원(t 함수), 권한별 컴럼 표시(isAdmin) 등 로직 분리
+  
+  ```typescript
+  // utils/index.ts 예시
+  export function getColumns({ t, isAdmin }: { t: (key: string) => string; isAdmin?: boolean }) {
+    return [
+      { field: 'rowIndex', header: 'No', width: '80px', frozen: true },
+      { field: 'cont_no', header: t('grdMain.cont_no'), width: '120px' },
+      // ... 25개 컴럼 정의
+    ];
+  }
+  
+  export function getRows(data: any[]) {
+    return data.map((row, index) => ({ ...row, rowIndex: index + 1 }));
+  }
+  ```
+  
+  ```
+  components/pmdp020DataTable/        ← DataTable만 utils 폴더!
+    ├── PMDP020DataTable.vue
+    ├── PMDP020DataTable.scss
+    └── utils/
+        └── index.ts                  ← getColumns, getRows 함수
+  
+  components/pmdp020SearchForm/       ← SearchForm은 utils 없음!
+    ├── PMDP020SearchForm.vue         (컴럼 정의 불필요, 폼 필드만 있음)
+    └── PMDP020SearchForm.scss
+  
+  components/pmdp020SumGrid/          ← SumGrid도 utils 없음!
+    ├── PMDP020SumGrid.vue            (고정된 4개 컴럼, 분리 불필요)
+    └── PMDP020SumGrid.scss
+  ```
+
+- **중요**: SearchForm, SumGrid, ProgressBar, ProgressList 등은 utils 폴더 만들지 말 것!
+  - SearchForm: 폼 필드 5~10개, 복잡한 로직 없음
+  - SumGrid: 고정된 4~7개 컴럼(진행상태별), 동적 생성 불필요
+  - ProgressBar: 단순 진행률 표시, 헬퍼 함수 불필요
+  - ProgressList: 2~3개 특수 상태 아이템, 헬퍼 함수 불필요
+
+**Example for PMDP020**:
+```bash
+mkdir -p tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SearchForm
+mkdir -p tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020DataTable
+mkdir -p tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SumGrid
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/index.vue
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/pmdp020.scss
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/types.ts
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SearchForm/PMDP020SearchForm.vue
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SearchForm/PMDP020SearchForm.scss
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020DataTable/PMDP020DataTable.vue
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020DataTable/PMDP020DataTable.scss
+mkdir -p tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020DataTable/utils
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020DataTable/utils/index.ts
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SumGrid/PMDP020SumGrid.vue
+touch tomms-lite-front/src/pages/pm/dp/pmdp020/components/pmdp020SumGrid/PMDP020SumGrid.scss
+```
+
+### 3. Implementation Order
+1. **types.ts** - Define interfaces
+2. **SearchForm** - Implement search form with watch
+3. **DataTable** - Implement grid with virtual scrolling
+4. **Custom Components** - SumGrid, ProgressBar, etc. (NOT ProgressList by default!)
+5. **index.vue** - Main page with ContentHeader and component imports
+6. **Styling Files** - Create `[screenId].scss` with proper structure
+7. **API Integration** - Create API file and connect backend with uppercase conversion
+8. **Testing** - Performance, functionality, responsiveness
+9. **ProgressList (Optional)** - Only create when user explicitly requests it
+
+**⚠️ ProgressList Creation Rule**:
+- DO NOT create ProgressList unless user explicitly asks
+- Wait for user to say: "ProgressList 추가", "SPOV010처럼", "특정 상태 분리" 등
+- If requested, follow SPOV010 pattern:
+  1. Create `components/[screenId]ProgressList/` folder
+  2. Create `[ScreenId]ProgressList.vue` and `[ScreenId]ProgressList.scss`
+  3. Remove separated items from SumGrid's progressItems
+  4. Update index.vue to include ProgressList component
+  5. Add flex layout to summary-section in SCSS
+
+**CRITICAL**: Always create `index.vue` with ContentHeader:
+```vue
+<template>
+  <div class="main-content-container">
+    <ContentHeader menuId="[SCREEN_ID]" />
+    <[ScreenId]SearchForm />
+    <[ScreenId]SumGrid />
+    <[ScreenId]DataTable />
+  </div>
+</template>
+
+<script lang="ts" setup>
+import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue';
+import [ScreenId]SearchForm from './components/[screenId]SearchForm/[ScreenId]SearchForm.vue';
+// ... other imports
+</script>
+
+<style scoped lang="scss" src="./[screenId].scss"></style>
+```
+
+### 4. Critical File Structure Requirements
+When implementing a new screen, you MUST create ALL these files:
+
+```
+pages/[module]/[category]/[screenId]/
+  ├── index.vue                                    ← Main page (REQUIRED)
+  ├── [screenId].scss                              ← Screen-specific styles (REQUIRED)
+  ├── types.ts                                     ← TypeScript interfaces (REQUIRED)
+  └── components/                                  ← Component folder (REQUIRED)
+      ├── [screenId]SearchForm/
+      │   ├── [ScreenId]SearchForm.vue             ← Search form (REQUIRED if screen has search)
+      │   └── [ScreenId]SearchForm.scss            ← Search form styles (REQUIRED)
+      ├── [screenId]DataTable/                     ← DataTable만 utils 폴더!
+      │   ├── [ScreenId]DataTable.vue
+      │   ├── [ScreenId]DataTable.scss
+      │   └── utils/
+      │       └── index.ts                         ← Column/row mapping helpers
+      └── [screenId]SumGrid/                       ← SumGrid는 utils 없음!
+          ├── [ScreenId]SumGrid.vue                ← Summary grid (if needed)
+          └── [ScreenId]SumGrid.scss                ← Summary grid styles (REQUIRED)
+
+api/pages/[module]/[category]/[screenId].ts       ← API functions (REQUIRED if backend exists)
+```
+
+**Example for PMDP020**:
+```
+pages/pm/dp/pmdp020/
+  ├── index.vue
+  ├── pmdp020.scss
+  ├── types.ts
+  └── components/
+      ├── pmdp020SearchForm/
+      │   ├── PMDP020SearchForm.vue
+      │   └── PMDP020SearchForm.scss
+      ├── pmdp020DataTable/
+      │   ├── PMDP020DataTable.vue
+      │   ├── PMDP020DataTable.scss
+      │   └── utils/
+      │       └── index.ts                ← Column mapping helpers
+      ├── pmdp020SumGrid/
+      │   ├── PMDP020SumGrid.vue
+      │   └── PMDP020SumGrid.scss
+      └── pmdp020ProgressList/          ← Only created when user requests
+          ├── PMDP020ProgressList.vue
+          └── PMDP020ProgressList.scss
+
+api/pages/pm/dp/pmdp020.ts
+```
+
+**Path Resolution Rules**:
+- If you encounter path errors (e.g., "Cannot find module"), verify:
+  1. File actually exists at the path you're importing from
+  2. Path uses `@/` alias for src folder: `@/pages/pm/dp/pmdp020/`
+  3. File extension matches: `.vue` for components, `.ts` for types, `.scss` for styles
+  4. Folder names are lowercase: `pmdp020` not `PMDP020`
+  5. Component folder structure: `components/pmdp020SearchForm/` not just `pmdp020SearchForm/`
+  6. Component names are PascalCase: `PMDP020SearchForm.vue`
+
+- If path error persists:
+  1. Check if file was created in correct location
+  2. Verify `components/` subdirectory structure matches PMDP010 pattern
+  3. Create missing file with proper template
+  4. Update import path to match actual file location
+  5. Never skip creating required files due to path errors
+
+---
+
+## 🎨 Styling Guidelines
+
+### CSS Variables (Use SCSS variables from tomms-lite-front)
+```scss
+// ✅ Use design tokens
+.container {
+  padding: var(--content-padding);
+  background-color: var(--surface-ground);
+  border-radius: var(--border-radius);
+}
+
+// ✅ Responsive spacing
+.section {
+  margin-bottom: 1rem;  // Mobile
+  
+  @media (min-width: 768px) {
+    margin-bottom: 1.5rem;  // Desktop
+  }
+}
+```
+
+### Component Styling
+```scss
+// ✅ Use :deep() for PrimeVue overrides
+:deep(.p-datatable-thead > tr > th) {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+// ✅ Performance optimization
+.data-row {
+  will-change: background-color;
+  contain: layout style;
+}
+```
+
+---
+
+## 🔌 API Integration
+
+### API Call Pattern
+```typescript
+// ⭐ CRITICAL: Direct axios import (NOT useHtomssApi)
+import api from '@/plugins/axios';
+
+// ✅ POST with uppercase conversion
+const fetchData = async (params: SearchParams) => {
+  const response = await api.post<ApiResponse>('/json/selectPMDP010List', {
+    data: convertToUppercaseParams(params),
+  });
+  
+  return response.data;
+};
+
+// ✅ Error handling
+const handleSearch = async () => {
+  try {
+    loading.value = true;
+    const data = await fetchData(searchParams.value);
+    tableData.value = data;
+  } catch (error) {
+    console.error('Search failed:', error);
+    // Show toast notification
+  } finally {
+    loading.value = false;
+  }
+};
+```
+
+### Backend Service Registration (CRITICAL!)
+
+**⚠️ CRITICAL: 백엔드 서비스 등록 확인 필수!**
+
+새로운 모듈의 서비스가 등록되지 않는 경우 다음을 확인하세요:
+
+#### 1. Maven Dependency 확인
+```xml
+<!-- tomms-boot/pom.xml -->
+<dependencies>
+  <!-- ✅ 모든 업무 모듈이 dependency로 포함되어야 함 -->
+  <dependency>
+    <groupId>tomms</groupId>
+    <artifactId>tomms-biz-spareparts</artifactId>
+    <version>5.3.3-SNAPSHOT</version>
+  </dependency>
+  
+  <dependency>
+    <groupId>tomms</groupId>
+    <artifactId>tomms-biz-purchasemgmt</artifactId>  <!-- ← 누락 시 서비스 등록 안 됨! -->
+    <version>5.3.3-SNAPSHOT</version>
+  </dependency>
+  
+  <!-- ... 다른 모듈들 -->
+</dependencies>
+```
+
+**문제점**:
+- `tomms-boot/pom.xml`에 모듈이 dependency로 포함되지 않으면 서비스가 스캔되지 않음
+- `DispatchException: TxCode[PMDP020/selectDpReqStatSum] is not registered` 오류 발생
+
+**해결**:
+1. `tomms-boot/pom.xml`에 해당 모듈 dependency 추가
+2. Maven 프로젝트 재빌드: `mvn clean install`
+3. 백엔드 서버 재시작
+
+#### 2. @Service 어노테이션 확인
+```java
+// ✅ CORRECT - 빈 이름 지정하지 않음
+@Service
+public class PMDP020ServiceImpl implements PMDP020Service {
+    // ...
+}
+
+// ❌ WRONG - 빈 이름 지정 시 등록 실패 가능
+@Service("PMDP020Service-일반보급요청")
+public class PMDP020ServiceImpl implements PMDP020Service {
+    // ...
+}
+```
+
+**문제점**:
+- `@Service("beanName")` 형식으로 빈 이름을 지정하면 Spring의 컴포넌트 스캔과 충돌 가능
+- SPOV010과 동일한 패턴 사용 필요
+
+#### 3. @Transactional 어노테이션 확인
+```java
+// ✅ CORRECT - SPOV010과 동일한 패턴
+@Override
+@Transactional(readOnly = true)  // ← 조회 메서드는 readOnly = true
+@ServiceId("PMDP020/selectDpReqStatSum")
+@ServiceName("요청 합계 조회")
+public PmSelectStatSumResDto selectDpReqStatSum(PmSelectStatSumReqDto request) {
+    // ...
+}
+
+// ✅ CORRECT - 저장/수정 메서드는 readOnly 없음
+@Override
+@Transactional  // ← 저장/수정은 readOnly 없음
+@ServiceId("PMDP020/processDpReqCnfm")
+@ServiceName("일반보급 요청 확정")
+public PmProcessResDto processDpReqCnfm(List<PmProcessReqCnfmReqDto> requestList) {
+    // ...
+}
+```
+
+**SPOV010 참고 패턴**:
+- 조회 메서드: `@Transactional(readOnly = true)`
+- 저장/수정 메서드: `@Transactional`
+- 모든 메서드에 `@ServiceId`, `@ServiceName` 필수
+
+#### 4. 프록시 설정 확인 (vite.config.ts)
+```typescript
+// ✅ CORRECT - baseURL 기본값 설정
+export default defineConfig((configEnv: ConfigEnv) => {
+  const { mode } = configEnv;
+  const env = loadEnv(mode, process.cwd());
+
+  const isMock = env.VITE_USE_MOCK === 'true';
+  const baseURL = isMock
+    ? env.VITE_MOCK_BASE_URL || 'http://localhost:8081'
+    : env.VITE_API_BASE_URL || 'http://localhost:8888';  // ← 기본값 필수!
+
+  return {
+    server: {
+      port: 8081,
+      open: true,
+      proxy: {
+        '/online/api': {
+          target: baseURL,
+          changeOrigin: true,
+        },
+        '/online/mvcJson': {
+          target: baseURL,
+          changeOrigin: true,
+        },
+      },
+    },
+  };
+});
+```
+
+**문제점**:
+- `baseURL`이 `undefined`이면 프록시가 작동하지 않음
+- `ERR_CONNECTION_REFUSED` 오류 발생
+
+**해결**:
+- `baseURL`에 기본값(`http://localhost:8888`) 설정 필수
+
+---
+
+## 🧪 Testing Checklist
+
+### Functionality
+- [ ] Search form updates searchParams correctly
+- [ ] SelectBox options load from common codes
+- [ ] DataTable displays data correctly
+- [ ] Row selection works
+- [ ] Pagination works (if applicable)
+- [ ] API calls use uppercase parameters
+
+### Performance
+- [ ] Virtual scrolling enabled for tables
+- [ ] CSS contains layout/style
+- [ ] GPU acceleration (will-change) applied
+- [ ] No unnecessary re-renders
+- [ ] Smooth scrolling (60 FPS)
+
+### Styling
+- [ ] Matches tomms-lite-front exactly
+- [ ] Responsive on mobile/desktop
+- [ ] Hover effects work
+- [ ] Loading states show correctly
+- [ ] Error messages display properly
+
+---
+
+## 📚 Reference Documents
+
+### Full Documentation
+See `FrontendGuide/` folder for comprehensive guides:
+1. `00_시작하기.md` - Project setup
+2. `01_화면_분석_단계.md` - Screen analysis
+3. `02_컴포넌트_구조_설계.md` - Component design
+4. `03_SearchForm_구현.md` - SearchForm implementation
+5. `04_DataTable_구현.md` - DataTable with virtual scrolling
+6. `05_SumGrid_ProgressBar_구현.md` - Custom components
+7. `06_API_백엔드_연동.md` - API integration
+8. `07_CSS_스타일링.md` - CSS styling guide
+9. `08_상태관리_패턴.md` - State management patterns
+10. `09_체크리스트.md` - 135-item checklist
+11. `11_공통코드_로딩.md` - Common code loading patterns
+12. **`12_커스텀_컴포넌트_가이드.md`** - Complete custom component reference ⭐
+
+### Quick Reference
+- `자주_발생하는_에러.md` - Common errors & solutions
+- `성능_최적화_가이드.md` - Performance optimization (97% improvement)
+- `컴포넌트_매핑_표.md` - Nexacro ↔ Vue component mapping
+
+---
+
+## 🚨 Common Errors & Solutions
+
+### 1. SelectBox not updating
+**Problem**: SelectBox doesn't reflect searchParams changes
+
+**Solution**:
+```typescript
+// ✅ Add watch in SearchForm
+watch(
+  () => searchParams.value?.prg_stat,
+  (newVal) => {
+    if (newVal !== undefined && searchFormRef.value?.form) {
+      searchFormRef.value.form.setFieldValue('prg_stat', newVal ?? '');
+    }
+  }
+);
+```
+
+### 2. API returns empty data
+**Problem**: Backend doesn't receive parameters
+
+**Solution**:
+```typescript
+// ✅ Convert to uppercase before API call
+const data = convertToUppercaseParams(searchParams.value);
+const response = await api.post('/json/PMDP020-selectDpReqList', { data });
+```
+
+### 3. Performance lag with large tables
+**Problem**: Scrolling is slow with 1000+ rows
+
+**Solution**:
+```vue
+<!-- ✅ Enable virtual scrolling -->
+<DataTable
+  scrollHeight="540px"
+  :virtualScrollerOptions="{ itemSize: 46 }"
+/>
+```
+
+```scss
+/* ✅ Add CSS optimizations */
+tr { will-change: background-color; }
+td { contain: layout style; }
+```
+
+### 4. Router 404 error
+**Problem**: Screen not found after registration
+
+**Solution**:
+```typescript
+// ❌ WRONG - Leading slash in children
+{
+  path: '/pm/dp/pmdp020',  // ← Remove /
+  name: 'PMDP020',
+  component: () => import('@/pages/pm/dp/pmdp020/index.vue'),
+}
+
+// ✅ CORRECT - No leading slash
+{
+  path: 'pm/dp/pmdp020',  // ← No /
+  name: 'PMDP020',
+  component: () => import('@/pages/pm/dp/pmdp020/index.vue'),
+}
+```
+
+### 5. Ref access error
+**Problem**: Cannot read properties of undefined
+
+**Solution**:
+```typescript
+// ❌ WRONG - Double .value
+searchFormRef.value.form.value.setFieldValue()
+
+// ✅ CORRECT - Single .value
+searchFormRef.value.form.setFieldValue()
+```
+
+### 6. Wrong import patterns
+**Problem**: Import errors or using PrimeVue directly
+
+**Solution**:
+```typescript
+// ❌ WRONG - Importing from PrimeVue
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+
+// ✅ CORRECT - Use customized wrappers
+import { Button } from '@/components/common/button';
+import { DatePicker } from '@/components/common/datePicker';
+
+// ❌ WRONG - Wrong destructuring
+import { SearchFormLabel } from '@/components/common/searchForm';  // Not exported
+
+// ✅ CORRECT - Check spov010 reference
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+```
+
+**Verification Steps**:
+1. Check if `index.ts` exists in component folder
+2. Look at spov010 imports as reference
+3. Test import in IDE (auto-completion will show correct pattern)
+
+### 7. Using alert() or confirm()
+**Problem**: Using native JavaScript alert/confirm dialogs
+
+**Solution**:
+```typescript
+// ❌ WRONG - alert()
+alert('저장되었습니다.');
+
+// ✅ CORRECT - Toast for notifications
+import { useToast } from 'primevue/usetoast';
+const toast = useToast();
+
+toast.add({
+  severity: 'success',
+  summary: '저장 완료',
+  detail: '저장되었습니다.',
+  life: 3000
+});
+
+// ❌ WRONG - confirm()
+if (confirm('삭제하시겠습니까?')) {
+  handleDelete();
+}
+
+// ✅ CORRECT - ConfirmDialog for user confirmations
+import { useConfirm } from 'primevue/useconfirm';
+const confirm = useConfirm();
+
+confirm.require({
+  message: '삭제하시겠습니까?',
+  acceptLabel: '삭제',
+  rejectLabel: '취소',
+  accept: () => {
+    handleDelete();
+  }
+});
+```
+
+**Guidelines**:
+- Use Toast for: Success/error messages, validation warnings, info messages
+- Use ConfirmDialog for: Delete confirmations, save confirmations, irreversible actions
+- Never use: alert(), confirm(), prompt()
+
+---
+
+## 🎯 Quality Standards
+
+### Code Quality
+- **TypeScript**: Strict mode, no `any` types
+- **ESLint**: No warnings allowed
+- **Formatting**: Prettier rules applied
+- **Comments**: Korean for business logic, English for technical
+
+### Performance Benchmarks
+- **Initial Load**: < 500ms
+- **Search Response**: < 200ms (with 1000 rows)
+- **Scrolling**: 60 FPS
+- **Memory**: < 50MB for 1000 rows
+
+### Visual Accuracy
+- **Pixel-perfect**: Match tomms-lite-front exactly
+- **Responsive**: Works on mobile/tablet/desktop
+- **Animations**: Smooth transitions (0.15s cubic-bezier)
+- **Accessibility**: ARIA labels, keyboard navigation
+
+---
+
+## 💡 Pro Tips
+
+1. **Check spov010 import patterns FIRST** before writing any imports
+2. **Verify component has index.ts** before choosing import pattern
+3. **Never import from PrimeVue directly** - always use custom wrappers
+4. **Never use alert()/confirm()** - always use Toast or ConfirmDialog
+5. **Use watch for searchParams synchronization**, not manual updates
+6. **Virtual scrolling is mandatory** for tables with 100+ rows
+7. **Convert API parameters to uppercase** before sending
+8. **Test on actual screen size** (1920x1080 for desktop)
+9. **Use Vue DevTools** to debug ref access issues
+10. **Check HQML files** to understand backend parameter names
+11. **Add CSS performance optimizations** from the start, not as afterthought
+12. **Dynamic imports** for better code splitting
+13. **When in doubt about imports, grep spov010** for the pattern
+14. **Toast for notifications, ConfirmDialog for confirmations**
+
+---
+
+## 📝 Example: Complete SearchForm Implementation
+
+```vue
+<script setup lang="ts">
+import { ref, watch, inject, type Ref } from 'vue';
+import type { SearchParams } from './types';
+
+// Props & Emits
+interface Props {
+  loading?: boolean;
+}
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+});
+
+const emit = defineEmits<{
+  search: [params: SearchParams];
+}>();
+
+// Inject searchParams
+const searchParams = inject<Ref<SearchParams>>('searchParams');
+
+// Form ref
+const searchFormRef = ref();
+
+// Common codes
+const prgStatOptions = ref([
+  { label: '전체', value: '' },
+  { label: '의뢰', value: 'S01' },
+  { label: '진행중', value: 'S02' },
+  { label: '완료', value: 'S03' },
+]);
+
+// ⭐ CRITICAL: Watch searchParams for synchronization
+watch(
+  () => searchParams.value?.prg_stat,
+  (newVal) => {
+    if (newVal !== undefined && searchFormRef.value?.form) {
+      searchFormRef.value.form.setFieldValue('prg_stat', newVal ?? '');
+    }
+  }
+);
+
+// ⭐ CRITICAL: Update searchParams directly, not form
+const handleSearch = () => {
+  if (!searchFormRef.value?.form) return;
+  
+  const formValues = searchFormRef.value.form.getValues();
+  
+  searchParams.value = {
+    ...searchParams.value,
+    prg_stat: formValues.prg_stat,
+    cont_no: formValues.cont_no,
+  };
+  
+  emit('search', searchParams.value);
+};
+</script>
+
+<template>
+  <SearchForm
+    ref="searchFormRef"
+    :loading="loading"
+    @search="handleSearch"
+  >
+    <SearchFormItem label="진행상태" name="prg_stat">
+      <SelectBox
+        name="prg_stat"
+        :options="prgStatOptions"
+        placeholder="전체"
+      />
+    </SearchFormItem>
+    
+    <SearchFormItem label="계약번호" name="cont_no">
+      <InputText
+        name="cont_no"
+        placeholder="계약번호를 입력하세요"
+      />
+    </SearchFormItem>
+  </SearchForm>
+</template>
+```
+
+---
+
+## 🔍 Quick Import Pattern Reference
+
+**Before implementing, ALWAYS check:**
+
+```bash
+# 1. Check spov010 imports (primary reference)
+grep "^import" tomms-lite-front/src/pages/sp/ov/spov010/components/spov010SearchForm/Spov010SearchForm.vue
+
+# 2. Verify component structure
+ls tomms-lite-front/src/components/common/*/index.ts
+
+# 3. Check specific component
+cat tomms-lite-front/src/components/common/button/index.ts
+```
+
+**Pattern Rules:**
+- ✅ Has `index.ts` + exported → Destructuring: `import { Button } from '@/components/common/button'`
+- ✅ No `index.ts` OR not exported in index → Direct: `import Button from '@/.../Button.vue'`
+- ❌ NEVER import from PrimeVue directly: `import Button from 'primevue/button'`
+
+---
+
+## 📦 Commonly Used Components Quick Reference
+
+### Form Input Components
+```typescript
+// ✅ WITH index.ts (Destructuring)
+import { Button, ToggleButton } from '@/components/common/button';
+import { DatePicker, RangeDatePicker, SingleDatePicker } from '@/components/common/datePicker';
+import { Checkbox, CheckboxGroup } from '@/components/common/checkbox';
+
+// ✅ WITHOUT index.ts (Direct import)
+import InputText from '@/components/common/inputText/InputText.vue';
+import InputNumber from '@/components/common/inputNumber/InputNumber.vue';
+import Select from '@/components/common/select/Select.vue';
+import MultiSelect from '@/components/common/multiSelect/MultiSelect.vue';
+import RadioButton from '@/components/common/radioButton/RadioButton.vue';
+import ToggleSwitch from '@/components/common/toggleSwitch/ToggleSwitch.vue';
+import Textarea from '@/components/common/textarea/Textarea.vue';
+import Password from '@/components/common/password/Password.vue';
+```
+
+### Display Components
+```typescript
+// ✅ WITH index.ts
+import { Badge } from '@/components/common/badge';
+import { Chip } from '@/components/common/chip';
+import { DotStatusText } from '@/components/common/dotStatusText';
+
+// ✅ WITHOUT index.ts
+import Tag from '@/components/common/tag/Tag.vue';
+import Message from '@/components/common/message/Message.vue';
+```
+
+### Layout & Navigation
+```typescript
+// ✅ WITHOUT index.ts
+import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue';
+import Splitter from '@/components/common/splitter/Splitter.vue';
+import SplitterPanel from '@/components/common/splitter/SplitterPanel.vue';
+import TabView from '@/components/common/tabView/TabView.vue';
+import TabPanel from '@/components/common/tabView/TabPanel.vue';
+```
+
+### Feedback Components
+```typescript
+// ✅ WITH index.ts
+import { Dialog } from '@/components/common/dialog';
+
+// ✅ WITHOUT index.ts
+import ConfirmDialog from '@/components/common/confirmDialog/ConfirmDialog.vue';
+
+// ✅ Toast (use hook)
+import { useToast } from 'primevue/usetoast';
+const toast = useToast();
+```
+
+### Data Display
+```typescript
+// ✅ WITH index.ts
+import { DataTable } from '@/components/common/dataTable2';
+import { Chart } from '@/components/common/chart';
+
+// ✅ PrimeVue (Column은 예외)
+import Column from 'primevue/column';
+
+// ✅ WITHOUT index.ts
+import TreeTable from '@/components/common/treeTable/TreeTable.vue';
+import Paginator from '@/components/common/paginator/Paginator.vue';
+```
+
+### SearchForm Components
+```typescript
+// ✅ WITH index.ts (일부만)
+import { 
+  SearchForm, 
+  SearchFormContent, 
+  SearchFormField, 
+  SearchFormFieldGroup, 
+  SearchFormRow 
+} from '@/components/common/searchForm';
+
+// ✅ WITHOUT index.ts (index.ts에 있어도 직접 import)
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+
+// ✅ WITH index.ts
+import { SearchInput } from '@/components/common/searchInput';
+```
+
+### Special Components
+```typescript
+// ✅ WITH index.ts
+import { Editor } from '@/components/common/editor';
+
+// ✅ WITHOUT index.ts
+import AttachmentList from '@/components/common/AttachmentList/AttachmentList.vue';
+```
+
+**📚 Full Details**: See `FrontendGuide/12_커스텀_컴포넌트_가이드.md` for:
+- Complete props/events documentation
+- Usage examples & scenarios
+- Performance optimization
+- Troubleshooting
+
+---
+
+*When in doubt, always refer to:*
+1. **Structure**: `tomms-lite-front/src/pages/pm/dp/pmdp020/` (folder organization)
+2. **Imports & Styling**: `tomms-lite-front/src/pages/sp/ov/spov010/` (import patterns, CSS)
+3. **Verification**: Grep spov010 for actual usage patterns
+
+*If user specifies another reference screen, use that screen's pattern instead.*

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import chat as chat_router
+from app.routers import codegen as codegen_router
 from app.routers import export as export_router
 from app.routers import input as input_router
 from app.routers import session as session_router
@@ -42,6 +43,7 @@ app.include_router(spec_router.router, prefix="/api")
 app.include_router(chat_router.router, prefix="/api")
 app.include_router(validate_router.router, prefix="/api")
 app.include_router(export_router.router, prefix="/api")
+app.include_router(codegen_router.router, prefix="/api")
 
 
 @app.get("/health")

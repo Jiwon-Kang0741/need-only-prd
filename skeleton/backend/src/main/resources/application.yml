@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3306/tomms}
+    username: ${SPRING_DATASOURCE_USERNAME:tomms_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:tomms_pass}
+    driver-class-name: org.mariadb.jdbc.Driver
+
+mybatis:
+  mapper-locations: classpath*:hsc/tomms/web/**/mybatis/mappers/*.xml
+  type-aliases-package: hsc.tomms.web
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    hsc.tomms: DEBUG
+    hone.bom: DEBUG

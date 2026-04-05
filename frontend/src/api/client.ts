@@ -67,7 +67,7 @@ async function consumeSSE(url: string, onEvent: (event: SSEEvent) => void, body?
 }
 
 export function generateSpec(onEvent: (event: SSEEvent) => void): void {
-  consumeSSE('/api/generate', onEvent)
+  consumeSSE('/api/spec/generate', onEvent, {})
 }
 
 export function sendChat(message: string, onEvent: (event: SSEEvent) => void): void {
@@ -75,7 +75,7 @@ export function sendChat(message: string, onEvent: (event: SSEEvent) => void): v
 }
 
 export async function validate(): Promise<ValidationResult> {
-  const res = await fetch('/api/validate', { headers: apiHeaders() })
+  const res = await fetch('/api/validate', { method: 'POST', headers: apiHeaders() })
   return res.json()
 }
 
@@ -100,4 +100,40 @@ export async function restoreSession(state: object): Promise<void> {
     headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(state),
   })
+}
+
+// --- Code Generation API ---
+
+export function generateCode(onEvent: (event: SSEEvent) => void): void {
+  consumeSSE('/api/codegen/generate', onEvent, {})
+}
+
+export function deployAndRun(onEvent: (event: SSEEvent) => void): void {
+  consumeSSE('/api/codegen/deploy', onEvent, {})
+}
+
+export async function stopContainers(): Promise<void> {
+  await fetch('/api/codegen/stop', { method: 'POST', headers: apiHeaders() })
+}
+
+export function downloadCode(): void {
+  const sessionId = getSessionId()
+  const a = document.createElement('a')
+  a.href = `/api/codegen/download?session_id=${sessionId}`
+  a.download = 'code.zip'
+  // Need to add session header via fetch for download
+  fetch('/api/codegen/download', { headers: apiHeaders() })
+    .then(res => res.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob)
+      a.href = url
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+}
+
+export async function getGeneratedFiles(layer?: string): Promise<{ files: import('../types').GeneratedFile[] }> {
+  const url = layer ? `/api/codegen/files?layer=${layer}` : '/api/codegen/files'
+  const res = await fetch(url, { headers: apiHeaders() })
+  return res.json()
 }

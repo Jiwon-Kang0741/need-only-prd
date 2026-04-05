@@ -1,0 +1,44 @@
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: tomms
+      MARIADB_USER: tomms_user
+      MARIADB_PASSWORD: tomms_pass
+      MARIADB_ROOT_PASSWORD: root_pass
+    ports:
+      - "${DB_PORT:-18000}:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mariadb://db:3306/tomms
+      SPRING_DATASOURCE_USERNAME: tomms_user
+      SPRING_DATASOURCE_PASSWORD: tomms_pass
+    ports:
+      - "${BACKEND_PORT:-18001}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-18002}:3000"
+
+volumes:
+  dbdata:

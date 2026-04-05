@@ -7,19 +7,17 @@ interface LayoutProps {
 
 export default function Layout({ children, onNewSession }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-4 shadow-sm flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Need Only PRD</h1>
-          <p className="text-sm text-gray-500">
-            Transform unstructured text into AI-ready technical specifications
-          </p>
-        </div>
+    <div className="min-h-screen bg-surface">
+      <header className="bg-surface sticky top-0 z-50 flex items-center justify-between px-6 py-4">
+        <h1 className="text-xl font-bold tracking-tight font-headline text-on-surface">
+          Need Only PRD
+        </h1>
         {onNewSession && (
           <button
             onClick={onNewSession}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            className="gradient-button text-on-primary px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all"
           >
+            <span className="material-symbols-outlined text-sm">add</span>
             New Session
           </button>
         )}

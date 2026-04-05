@@ -15,5 +15,6 @@ def get_session(session_id: str = Depends(get_session_id)):
 def restore_session(body: SessionRestoreRequest, request: Request):
     session_id = get_session_id(request)
     session = SessionState(**body.session_state)
-    session_store._store[session_id] = session
+    session_store._cache[session_id] = session
+    session_store.save(session_id)
     return session

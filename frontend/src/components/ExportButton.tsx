@@ -9,14 +9,10 @@ export default function ExportButton() {
     <button
       onClick={exportSpec}
       disabled={disabled}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-        disabled
-          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          : 'bg-green-600 text-white hover:bg-green-700'
-      }`}
+      className="bg-secondary-container text-on-secondary-container px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <span>⬇</span>
-      Download spec.md
+      <span className="material-symbols-outlined text-[18px]">download</span>
+      download.md
     </button>
   )
 }

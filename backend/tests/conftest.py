@@ -13,6 +13,6 @@ def session_id():
 
 @pytest.fixture(autouse=True)
 def clear_sessions():
-    session_store._store.clear()
+    session_store._cache.clear()
     yield
-    session_store._store.clear()
+    session_store._cache.clear()

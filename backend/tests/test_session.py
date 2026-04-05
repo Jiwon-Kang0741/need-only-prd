@@ -6,8 +6,8 @@ from app.session import SessionStore
 
 
 @pytest.fixture
-def store():
-    s = SessionStore()
+def store(tmp_path):
+    s = SessionStore(session_dir=tmp_path)
     return s
 
 
@@ -75,3 +75,16 @@ def test_rate_limit(store):
     with pytest.raises(HTTPException) as exc_info:
         store.increment_llm_calls("rate-sid")
     assert exc_info.value.status_code == 429
+
+
+def test_persistence(store, tmp_path):
+    """Test that sessions survive store re-creation."""
+    store.create("persist-test")
+    store.get("persist-test").llm_call_count = 5
+    store.save("persist-test")
+
+    # Create new store from same directory
+    store2 = SessionStore(session_dir=tmp_path)
+    session = store2.get("persist-test")
+    assert session is not None
+    assert session.llm_call_count == 5

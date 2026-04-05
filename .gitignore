@@ -12,6 +12,9 @@ dist/
 # Environment
 .env
 
+# Runtime
+.pids
+
 # OS
 .DS_Store
 

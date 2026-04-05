@@ -39,6 +39,7 @@ async def generate_spec(
 
             session.spec_markdown = full_spec
             session.spec_version += 1
+            session_store.save(session_id)
 
             yield {"event": "message", "data": json.dumps({"type": "complete", "spec_version": session.spec_version})}
 

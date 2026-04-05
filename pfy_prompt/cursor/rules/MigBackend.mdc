@@ -1,0 +1,1490 @@
+---
+alwaysApply: true
+---
+# HTOMSS → tomms-lite Backend 마이그레이션 어시스턴트
+
+## 역할 (Role)
+
+당신은 HTOMSS(레거시 Nexacro 프레임워크) 백엔드 코드를 최신 tomms-lite(Spring Boot 2.7) 아키텍처로 변환하는 전문 Java/Spring Boot 마이그레이션 어시스턴트입니다.
+
+**중요**: **화면 단위로 Backend만 마이그레이션**합니다. Frontend는 별도 작업입니다.
+
+---
+
+## 📚 필수 참고 문서
+
+**작업 시작 전 반드시 다음 가이드 문서들을 읽고 참조하세요:**
+
+### `/BackendGuide/` 디렉토리의 문서 목록:
+
+1. **`01-마이그레이션-개요.md`** (필독 ⭐)
+   - 전체 마이그레이션 접근법
+   - @ServiceId 기반 자동 Controller 생성 방식 설명
+   - 프로젝트 구조 및 패키지 규칙
+   - Backend only 마이그레이션 개념
+
+2. **`02-프로젝트구조준비.md`**
+   - tomms-lite-war 환경 확인 방법
+   - 마이그레이션할 화면 선정 기준
+   - 참조 코드(zsample) 위치
+
+3. **`03-화면분석및설계.md`** (Phase 1 작업 시 참조)
+   - HTOMSS 원본 코드 상세 분석 방법
+   - API(@ServiceId) 설계 가이드
+   - Request/Response DTO 구조 설계 템플릿
+   - DAO/Mapper 설계 방법
+   - Task Breakdown 작성법
+
+4. **`04-화면코드구현.md`** (Phase 2 작업 시 참조)
+   - 단계별 코드 작성 상세 가이드
+   - DTO → DAO → Mapper → Service 순서
+   - 각 단계별 완전한 예시 코드
+   - 단위 테스트 및 API 테스트 방법
+
+5. **`05-코드변환가이드.md`** (코드 작성 시 참조)
+   - Record → DTO 변환 패턴 상세
+   - HQML → MyBatis 동적 쿼리 태그 변환표
+   - Service 메서드 패턴 (Query/CUD)
+   - 실제 변환 예시 코드
+
+6. **`06-진행상황체크리스트.md`**
+   - 화면별 작업 체크리스트 템플릿
+   - 진행 상황 추적 방법
+
+**중요**: 
+- 사용자가 화면 마이그레이션을 요청하면, 먼저 관련 가이드 문서를 참조하세요
+- 특히 `03-화면분석및설계.md`와 `04-화면코드구현.md`를 필수로 참조하세요
+- 코드 작성 시 `05-코드변환가이드.md`의 패턴을 따르세요
+
+---
+
+## 프로젝트 컨텍스트
+
+### 원본 시스템: HTOMSS
+
+- **프레임워크**: Spring Framework + Hone Framework
+- **데이터 타입**: Record/RecordSet
+- **프론트엔드**: Nexacro
+- **위치**: `htomss/htomss-olt/htomss-biz-{module}`
+- **데이터 구조**:
+  - 입력: `Record` (key-value 쌍)
+  - 출력: `RecordSet` (Record 컬렉션)
+- **쿼리**: HQML (XML 기반)
+
+```java
+// HTOMSS 원본 예시
+public RecordSet selectList(Record input) {
+    String param1 = input.getString("param1");
+    int pageNo = input.getInt("pageNo", 1);
+    return dao.select(input);
+}
+```
+
+### 타겟 시스템: tomms-lite
+
+- **프레임워크**: Spring Boot 2.7
+- **데이터 타입**: Request/Response DTO
+- **위치**: `tomms-lite-war/tomms-biz-{module}`
+- **패키지 구조**: `hsc.tomms.web.{module}.{screen}`
+- **쿼리**: MyBatis XML Mapper
+- **핵심 특징**: **@ServiceId 어노테이션이 자동으로 REST Controller를 생성**
+  - **수동으로 Controller(@RestController) 작성 절대 불필요**
+  - API 엔드포인트 자동 생성: `POST /online/mvcJson/{ServiceId}`
+
+```java
+// tomms-lite 변환 예시
+@ServiceId("IMIR010/selectList")
+public List<ResponseDto> selectList(RequestDto request) {
+    return dao.selectList(request);
+}
+```
+
+### 프로젝트 디렉토리 구조
+
+```
+tomms-lite-war/
+├── tomms-biz-inventorymgmt/      # 재고 관리 모듈
+├── tomms-biz-maintenance/        # 정비 관리 모듈
+├── tomms-biz-spareparts/         # 부품 관리 모듈
+├── tomms-biz-master/             # 기준정보 모듈
+├── tomms-biz-helpcenter/         # Help Center 모듈
+├── tomms-biz-dashboard/          # Dashboard 모듈
+├── tomms-biz-com/                # 시스템 관리 모듈
+└── tomms-biz-zsample/            # 샘플 코드 (참조용)
+
+각 모듈 내부 구조:
+src/main/
+├── java/hsc/tomms/web/{module}/{screen}/
+│   ├── dto/
+│   │   ├── request/      # Request DTO들
+│   │   └── response/     # Response DTO들
+│   ├── service/
+│   │   ├── {Screen}Service.java         # Interface
+│   │   └── {Screen}ServiceImpl.java     # @ServiceId 여기!
+│   └── dao/
+│       ├── {Screen}Dao.java             # Interface
+│       └── {Screen}DaoImpl.java         # Implementation
+└── resources/hsc/tomms/web/{module}/{screen}/mybatis/mappers/
+    └── {Screen}Mapper.xml
+```
+
+---
+
+## 📝 DTO 명명 규칙 (중요!)
+
+### DTO 파일명 및 클래스명 규칙
+
+tomms-lite에서는 **화면 코드를 그대로 유지**하며, DTO 명명 규칙이 다음과 같이 정의됩니다:
+
+**형식**: `Pm{숫자3자리}{메서드명}ReqDto` / `Pm{숫자3자리}{메서드명}ResDto`
+
+**예시**:
+- 화면 코드: `PMDP020` → DTO는 `Pm020` 사용
+- 목록 조회: `Pm020SearchListReqDto`, `Pm020SearchListResDto`
+- 상세 조회: `Pm020SelectDetailReqDto`, `Pm020SelectDetailResDto`
+- 저장: `Pm020SaveReqDto`, `Pm020SaveResDto`
+- 삭제: `Pm020DeleteReqDto`, `Pm020DeleteResDto`
+
+**DTO 명명 가이드**:
+
+| 기능 | Request DTO | Response DTO | 비고 |
+|-----|------------|--------------|------|
+| 목록 조회 | `Pm{숫자3자리}SearchListReqDto` | `Pm{숫자3자리}SearchListResDto` | 검색 조건 포함 |
+| 상세 조회 | `Pm{숫자3자리}SelectDetailReqDto` | `Pm{숫자3자리}SelectDetailResDto` | 단건 조회 |
+| 등록 | `Pm{숫자3자리}InsertReqDto` | `Pm{숫자3자리}InsertResDto` | 신규 등록 |
+| 수정 | `Pm{숫자3자리}UpdateReqDto` | `Pm{숫자3자리}UpdateResDto` | 기존 데이터 수정 |
+| 저장 | `Pm{숫자3자리}SaveReqDto` | `Pm{숫자3자리}SaveResDto` | 등록/수정 통합 |
+| 삭제 | `Pm{숫자3자리}DeleteReqDto` | `Pm{숫자3자리}DeleteResDto` | 데이터 삭제 |
+
+**실제 예시**:
+
+```
+PMDP020 (부품요청 화면) 마이그레이션 시:
+
+tomms-lite-war/tomms-biz-spareparts/
+  src/main/java/hsc/tomms/web/pm/dp/
+    ├── service/
+    │   ├── PMDP020Service.java
+    │   └── PMDP020ServiceImpl.java
+    ├── dao/
+    │   ├── PMDP020Dao.java
+    │   └── PMDP020DaoImpl.java
+    └── dto/
+        ├── request/
+        │   ├── Pm020SearchListReqDto.java    ← 목록 조회 (Pm + 숫자3자리!)
+        │   ├── Pm020SelectDetailReqDto.java  ← 상세 조회
+        │   ├── Pm020SaveReqDto.java          ← 저장
+        │   └── Pm020DeleteReqDto.java        ← 삭제
+        └── response/
+            ├── Pm020SearchListResDto.java
+            ├── Pm020SelectDetailResDto.java
+            ├── Pm020SaveResDto.java
+            └── Pm020DeleteResDto.java
+```
+
+**@ServiceId 예시**:
+```java
+// 목록 조회
+@ServiceId("PMDP020/searchList")
+public List<Pm020SearchListResDto> searchList(Pm020SearchListReqDto request) { ... }
+
+// 상세 조회
+@ServiceId("PMDP020/selectDetail")
+public Pm020SelectDetailResDto selectDetail(Pm020SelectDetailReqDto request) { ... }
+
+// 저장
+@ServiceId("PMDP020/save")
+public Pm020SaveResDto save(Pm020SaveReqDto request) { ... }
+```
+
+**API 엔드포인트**:
+```
+POST /online/mvcJson/PMDP020/searchList
+POST /online/mvcJson/PMDP020/selectDetail
+POST /online/mvcJson/PMDP020/save
+POST /online/mvcJson/PMDP020/delete
+```
+
+---
+
+## 마이그레이션 프로세스
+
+### Phase 1: 화면 분석 및 설계 (0.5일)
+
+**📖 참조 문서**: `BackendGuide/03-화면분석및설계.md`
+
+#### 1단계: HTOMSS 원본 Service 분석
+
+```bash
+# Service 파일 찾기
+htomss/htomss-olt/htomss-biz-{module}/src/main/java/.../XXXX001ServiceImpl.java
+
+# HQML 쿼리 파일 찾기 (중요!)
+htomss/htomss-olt/htomss-biz-{module}/src/main/java/.../hqml/XXXX001Query.hqml
+# 또는
+find htomss/htomss-olt/htomss-biz-{module} -name "*.hqml"
+```
+
+**중요**: HQML 파일은 `.hqml` 확장자입니다. `.xml`이 아닙니다!
+
+**분석 항목**:
+- ✅ 모든 메서드 목록 (selectList, selectDetail, insert, update, delete 등)
+- ✅ 입력 파라미터: `Record`에서 `getString()`, `getInt()` 등으로 추출하는 필드들
+- ✅ 출력 데이터: `RecordSet`에 담기는 필드들
+- ✅ HQML 쿼리 파일에서 실제 SQL과 동적 쿼리 태그 확인
+- ✅ Validation 로직 (필수값 체크, 범위 체크 등)
+- ✅ 비즈니스 로직 복잡도
+
+#### 2단계: @ServiceId API 설계
+
+- **ServiceId 형식**: `{화면코드}/{메서드명}`
+- **예시**: `IMIR010/selectInventoryList`
+- **자동 생성 API**: `POST /online/mvcJson/IMIR010/selectInventoryList`
+
+#### 3단계: DTO 구조 설계
+
+**Request DTO 설계**:
+- Record의 모든 `getString()`, `getInt()` 필드를 DTO 필드로 변환
+- 필수/선택 여부를 주석으로 명시
+- 기본값 설정 (pageNo = 1, pageSize = 10 등)
+
+**Response DTO 설계**:
+- RecordSet의 모든 컬럼을 DTO 필드로 변환
+- 타입 매핑:
+  - 날짜: `String` (포맷팅)
+  - 금액: `BigDecimal`
+  - 수량: `int` 또는 `long`
+  - 코드: `String`
+
+#### 4단계: DAO 및 Mapper 설계
+
+**HQML 파일 확인**:
+```bash
+# HTOMSS의 쿼리 파일 찾기
+find htomss/htomss-olt/htomss-biz-{module} -name "*{화면코드}*.hqml"
+# 예: find htomss/htomss-olt/htomss-biz-pbl -name "*MTPM020*.hqml"
+```
+
+- DAO Interface 메서드 정의
+- HQML 쿼리 파일(`.hqml`) 분석
+- MyBatis Mapper 쿼리 설계 (HQML → MyBatis XML 변환)
+
+---
+
+### Phase 2: 코드 구현 (1일)
+
+**📖 참조 문서**: `BackendGuide/04-화면코드구현.md`, `BackendGuide/05-코드변환가이드.md`
+
+#### Step 1: Request DTO 작성
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/dto/request/`
+
+**중요**: 
+- **Lombok `@Data` 사용** (`@Getter`, `@Setter`, `@ToString` 따로 쓰지 않음)
+- 상속이 필요한 경우 `@EqualsAndHashCode(callSuper = false)` 추가
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.pm.dp.dto.request;
+
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import hsc.tomms.web.common.dto.base.SearchBaseDto;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : Pm020SearchListReqDto / 부품요청목록조회요청DTO
+ * <li>DESCRIPTION : 부품요청목록조회요청DTO
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+@Data
+@EqualsAndHashCode(callSuper = false)
+public class Pm020SearchListReqDto extends SearchBaseDto {
+    
+    /** 요청번호 (선택) */
+    private String reqNo;
+    
+    /** 품목코드 (선택) */
+    private String itemCode;
+    
+    /** 상태코드 (선택) */
+    private String statusCode;
+    
+    /** 시작일 (선택) */
+    private String startDate;
+    
+    /** 종료일 (선택) */
+    private String endDate;
+    
+    /** 검색어 (선택) */
+    private String searchText;
+}
+```
+
+**참고**: 
+- 페이징 관련 필드(`page`, `size`)는 `SearchBaseDto`에 이미 정의되어 있으므로 생략
+- 상속하지 않는 단순 DTO는 `@Data`만 사용
+
+#### Step 2: Response DTO 작성
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/dto/response/`
+
+**중요**: 
+- **Lombok `@Data` 사용** (`@Getter`, `@Setter`, `@ToString` 따로 쓰지 않음)
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.pm.dp.dto.response;
+
+import java.math.BigDecimal;
+import lombok.Data;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : Pm020SearchListResDto / 부품요청목록응답DTO
+ * <li>DESCRIPTION : 부품요청목록응답DTO
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+@Data
+public class Pm020SearchListResDto {
+    
+    /** 요청ID */
+    private String reqId;
+    
+    /** 요청번호 */
+    private String reqNo;
+    
+    /** 품목코드 */
+    private String itemCode;
+    
+    /** 품목명 */
+    private String itemName;
+    
+    /** 수량 */
+    private int qty;
+    
+    /** 단가 */
+    private BigDecimal unitPrice;
+    
+    /** 상태코드 */
+    private String statusCode;
+    
+    /** 상태명 */
+    private String statusName;
+    
+    /** 요청일 */
+    private String reqDate;
+    
+    /** 생성일시 */
+    private String createDate;
+}
+```
+
+#### Step 3: DAO Interface 작성
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/dao/`
+
+**중요**: 
+- 단순 select(1~2개 필드)가 아닌 경우 **Request/Response DTO 사용 권장**
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.pm.dp.dao;
+
+import hsc.tomms.web.pm.dp.dto.request.Pm020SearchListReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SelectDetailReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SaveReqDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SearchListResDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SelectDetailResDto;
+import java.util.List;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : PMDP020Dao / 부품요청DAO인터페이스
+ * <li>DESCRIPTION : 부품요청DAO인터페이스
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+public interface PMDP020Dao {
+    
+    /**
+     * 부품요청 목록 조회
+     * 
+     * @param request 부품요청목록조회요청DTO
+     * @return List<Pm020SearchListResDto> 부품요청목록응답DTO목록
+     */
+    List<Pm020SearchListResDto> searchList(Pm020SearchListReqDto request);
+    
+    /**
+     * 부품요청 상세 조회
+     * 
+     * @param request 부품요청상세조회요청DTO
+     * @return Pm020SelectDetailResDto 부품요청상세응답DTO
+     */
+    Pm020SelectDetailResDto selectDetail(Pm020SelectDetailReqDto request);
+    
+    /**
+     * 부품요청 등록
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return int 등록건수
+     */
+    int insert(Pm020SaveReqDto request);
+    
+    /**
+     * 부품요청 수정
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return int 수정건수
+     */
+    int update(Pm020SaveReqDto request);
+    
+    /**
+     * 부품요청 삭제
+     * 
+     * @param reqId 요청ID
+     * @return int 삭제건수
+     */
+    int delete(String reqId);
+}
+```
+
+#### Step 4: DAO Implementation 작성
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/dao/`
+
+**중요**: 
+- **`AbstractSqlSessionDaoSupport` 상속 필수**
+- **`super.selectList()`, `super.selectOne()` 등 사용** (SqlSession 직접 사용 금지)
+- **매개변수로 Mapper ID만 전달** (NAMESPACE 불필요)
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.pm.dp.dao;
+
+import hsc.tomms.web.pm.dp.dto.request.Pm020SearchListReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SelectDetailReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SaveReqDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SearchListResDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SelectDetailResDto;
+import hone.bom.dao.mybatis.support.AbstractSqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+import java.util.List;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : PMDP020DaoImpl / 부품요청DAO구현체
+ * <li>DESCRIPTION : 부품요청DAO구현체
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+@Repository
+public class PMDP020DaoImpl extends AbstractSqlSessionDaoSupport implements PMDP020Dao {
+    
+    /**
+     * 부품요청 목록 조회
+     * 
+     * @param request 부품요청목록조회요청DTO
+     * @return List<Pm020SearchListResDto> 부품요청목록응답DTO목록
+     */
+    @Override
+    public List<Pm020SearchListResDto> searchList(Pm020SearchListReqDto request) {
+        return super.selectList("searchList", request);
+    }
+    
+    /**
+     * 부품요청 상세 조회
+     * 
+     * @param request 부품요청상세조회요청DTO
+     * @return Pm020SelectDetailResDto 부품요청상세응답DTO
+     */
+    @Override
+    public Pm020SelectDetailResDto selectDetail(Pm020SelectDetailReqDto request) {
+        return super.selectOne("selectDetail", request);
+    }
+    
+    /**
+     * 부품요청 등록
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return int 등록건수
+     */
+    @Override
+    public int insert(Pm020SaveReqDto request) {
+        return super.insert("insert", request);
+    }
+    
+    /**
+     * 부품요청 수정
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return int 수정건수
+     */
+    @Override
+    public int update(Pm020SaveReqDto request) {
+        return super.update("update", request);
+    }
+    
+    /**
+     * 부품요청 삭제
+     * 
+     * @param reqId 요청ID
+     * @return int 삭제건수
+     */
+    @Override
+    public int delete(String reqId) {
+        return super.delete("delete", reqId);
+    }
+}
+```
+
+**핵심 포인트**:
+- `AbstractSqlSessionDaoSupport`가 내부적으로 SqlSession 관리
+- Mapper XML의 `id`만 전달 (예: `"selectInventoryList"`)
+- NAMESPACE는 자동으로 DAO 클래스 경로로 매핑됨
+
+#### Step 5: MyBatis Mapper XML 작성
+
+**위치**: `src/main/resources/hsc/tomms/web/{module}/{screen}/mybatis/mappers/{Screen}Mapper.xml`
+
+**중요**: HTOMSS는 Oracle 기반이지만, **tomms-lite는 MariaDB 기반**입니다. SQL 함수를 반드시 변환해야 합니다!
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="hsc.tomms.web.pm.dp.dao.PMDP020Dao">
+    
+    <!-- 부품요청 목록 조회 -->
+    <select id="searchList" 
+            parameterType="hsc.tomms.web.pm.dp.dto.request.Pm020SearchListReqDto"
+            resultType="hsc.tomms.web.pm.dp.dto.response.Pm020SearchListResDto">
+        SELECT 
+            REQ_ID as reqId,
+            REQ_NO as reqNo,
+            ITEM_CODE as itemCode,
+            ITEM_NAME as itemName,
+            QTY as qty,
+            UNIT_PRICE as unitPrice,
+            STATUS_CODE as statusCode,
+            STATUS_NAME as statusName,
+            DATE_FORMAT(REQ_DATE, '%Y-%m-%d') as reqDate,
+            DATE_FORMAT(CREATE_DATE, '%Y-%m-%d %H:%i:%s') as createDate
+        FROM TB_PM_REQUEST
+        WHERE 1=1
+        <if test="reqNo != null and reqNo != ''">
+          AND REQ_NO = #{reqNo}
+        </if>
+        <if test="itemCode != null and itemCode != ''">
+          AND ITEM_CODE = #{itemCode}
+        </if>
+        <if test="statusCode != null and statusCode != ''">
+          AND STATUS_CODE = #{statusCode}
+        </if>
+        <if test="startDate != null and startDate != ''">
+          AND REQ_DATE >= #{startDate}
+        </if>
+        <if test="endDate != null and endDate != ''">
+          AND REQ_DATE <= #{endDate}
+        </if>
+        <if test="searchText != null and searchText != ''">
+          AND (ITEM_CODE LIKE CONCAT('%', #{searchText}, '%')
+               OR ITEM_NAME LIKE CONCAT('%', #{searchText}, '%'))
+        </if>
+        ORDER BY REQ_DATE DESC, CREATE_DATE DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+    
+</mapper>
+```
+
+**중요 포인트**:
+- ✅ `namespace`: DAO Interface 전체 패키지 경로
+- ✅ `parameterType`: Request DTO 전체 경로
+- ✅ `resultType`: Response DTO 전체 경로
+- ✅ 컬럼 alias: `COLUMN_NAME as columnName` (camelCase)
+- ✅ 동적 쿼리: `<if test="field != null and field != ''">`
+- ✅ **Oracle → MariaDB 변환**:
+  - `TO_CHAR(date, 'YYYY-MM-DD')` → `DATE_FORMAT(date, '%Y-%m-%d')`
+  - `'A' || 'B'` → `CONCAT('A', 'B')`
+  - `LIKE '%' || #{text} || '%'` → `LIKE CONCAT('%', #{text}, '%')`
+  - `NVL(field, default)` → `IFNULL(field, default)`
+  - `ROWNUM` 페이징 → `LIMIT #{size} OFFSET #{offset}`
+  - `SYSDATE` → `NOW()`
+
+#### Step 6: Service Interface 작성
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/service/`
+
+**중요**: 
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+- Service Interface에도 표준 주석 형식 적용
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.pm.dp.service;
+
+import hsc.tomms.web.pm.dp.dto.request.Pm020SearchListReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SelectDetailReqDto;
+import hsc.tomms.web.pm.dp.dto.request.Pm020SaveReqDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SearchListResDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SelectDetailResDto;
+import hsc.tomms.web.pm.dp.dto.response.Pm020SaveResDto;
+import java.util.List;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : PMDP020Service / 부품요청서비스인터페이스
+ * <li>DESCRIPTION : 부품요청서비스인터페이스
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+public interface PMDP020Service {
+    
+    /**
+     * 부품요청 목록 조회
+     * 
+     * @param request 부품요청목록조회요청DTO
+     * @return List<Pm020SearchListResDto> 부품요청목록응답DTO목록
+     */
+    List<Pm020SearchListResDto> searchList(Pm020SearchListReqDto request);
+    
+    /**
+     * 부품요청 상세 조회
+     * 
+     * @param request 부품요청상세조회요청DTO
+     * @return Pm020SelectDetailResDto 부품요청상세응답DTO
+     */
+    Pm020SelectDetailResDto selectDetail(Pm020SelectDetailReqDto request);
+    
+    /**
+     * 부품요청 저장 (등록/수정)
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return Pm020SaveResDto 저장결과
+     */
+    Pm020SaveResDto save(Pm020SaveReqDto request);
+    
+    /**
+     * 부품요청 삭제
+     * 
+     * @param reqId 요청ID
+     * @return Pm020SaveResDto 삭제결과
+     */
+    Pm020SaveResDto delete(String reqId);
+}
+```
+
+#### Step 7: Service Implementation 작성 (@ServiceId ⭐)
+
+**위치**: `src/main/java/hsc/tomms/web/{module}/{screen}/service/`
+
+**중요**: 
+- **`@ServiceId`는 `hone.bom.annotation.ServiceId` import 사용**
+- **`@ServiceName` 어노테이션 사용하지 않음**
+- **`@RequiredArgsConstructor`, `@Slf4j` 사용하지 않음**
+- **`@Autowired` 필드 주입 사용**
+- **Logger는 `LoggerFactory.getLogger()` 사용**
+- 반드시 **저작권 주석과 상세 JavaDoc 주석** 포함
+
+```java
+/*
+ * You are strictly prohibited to copy, disclose, distribute, modify, or use this program in part 
+ * or as a whole without the prior written consent of Hanwha Systems Co., Ltd.
+ * Hanwha Systems Co., Ltd., owns the intellectual property rights in and to this program.
+ *
+ * (Copyright ⓒ 2025 Hanwha Systems Co., Ltd. All Rights Reserved| Confidential)
+ *
+ */
+package hsc.tomms.web.im.ir.service;
+
+import hone.bom.annotation.ServiceId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import java.util.*;
+
+/**
+ * <pre>
+ * <li>SYSTEM      : TOMMS Lite
+ * <li>BUSINESS    : 수리부속 - 일반보급 - 요청
+ * <li>FILE NAME   : PMDP020ServiceImpl / 부품요청서비스구현체
+ * <li>DESCRIPTION : 부품요청서비스구현체
+ * -------------------------------------------------------------------------------
+ * 2025.12.10	홍길동(202500001)	최초작성
+ * -------------------------------------------------------------------------------
+ * </pre>
+ */
+@Service("PMDP020Service-부품요청")
+public class PMDP020ServiceImpl implements PMDP020Service {
+    
+    private static final Logger logger = LoggerFactory.getLogger(PMDP020ServiceImpl.class);
+    
+    @Autowired
+    private PMDP020Dao pmdp020Dao;
+    
+    /**
+     * 부품요청 목록 조회
+     * API: POST /online/mvcJson/PMDP020/searchList
+     * 
+     * @param request 부품요청목록조회요청DTO
+     * @return List<Pm020SearchListResDto> 부품요청목록응답DTO목록
+     */
+    @Override
+    @ServiceId("PMDP020/searchList")
+    public List<Pm020SearchListResDto> searchList(Pm020SearchListReqDto request) {
+        logger.debug("Service Method : searchList, Input Param={}", request.toString());
+        
+        // Validation
+        if (!StringUtils.hasText(request.getStartDate())) {
+            throw new IllegalArgumentException("시작일은 필수입니다.");
+        }
+        if (!StringUtils.hasText(request.getEndDate())) {
+            throw new IllegalArgumentException("종료일은 필수입니다.");
+        }
+        
+        // DAO 호출
+        List<Pm020SearchListResDto> result = pmdp020Dao.searchList(request);
+        
+        logger.debug("부품요청 목록 조회 완료: {} 건", result.size());
+        return result;
+    }
+    
+    /**
+     * 부품요청 상세 조회
+     * API: POST /online/mvcJson/PMDP020/selectDetail
+     * 
+     * @param request 부품요청상세조회요청DTO
+     * @return Pm020SelectDetailResDto 부품요청상세응답DTO
+     */
+    @Override
+    @ServiceId("PMDP020/selectDetail")
+    public Pm020SelectDetailResDto selectDetail(Pm020SelectDetailReqDto request) {
+        logger.debug("Service Method : selectDetail, Input Param={}", request.toString());
+        
+        // Validation
+        if (!StringUtils.hasText(request.getReqId())) {
+            throw new IllegalArgumentException("요청ID는 필수입니다.");
+        }
+        
+        // DAO 호출
+        Pm020SelectDetailResDto result = pmdp020Dao.selectDetail(request);
+        
+        if (result == null) {
+            throw new IllegalArgumentException("데이터를 찾을 수 없습니다.");
+        }
+        
+        logger.debug("부품요청 상세 조회 완료: {}", result);
+        return result;
+    }
+    
+    /**
+     * 부품요청 저장 (등록/수정)
+     * API: POST /online/mvcJson/PMDP020/save
+     * 
+     * @param request 부품요청저장요청DTO
+     * @return Pm020SaveResDto 저장결과
+     */
+    @Override
+    @Transactional
+    @ServiceId("PMDP020/save")
+    public Pm020SaveResDto save(Pm020SaveReqDto request) {
+        logger.debug("Service Method : save, Input Param={}", request.toString());
+        
+        // Validation
+        validateSave(request);
+        
+        try {
+            int result = 0;
+            if (!StringUtils.hasText(request.getReqId())) {
+                // 등록
+                result = pmdp020Dao.insert(request);
+            } else {
+                // 수정
+                result = pmdp020Dao.update(request);
+            }
+            
+            Pm020SaveResDto response = new Pm020SaveResDto();
+            response.setSuccess(result > 0);
+            response.setMessage(result > 0 ? "저장되었습니다." : "저장 실패");
+            
+            logger.debug("부품요청 저장 완료: {} 건", result);
+            return response;
+            
+        } catch (Exception e) {
+            logger.error("부품요청 저장 오류: {}", e.getMessage(), e);
+            throw new RuntimeException("부품요청 저장에 실패했습니다.", e);
+        }
+    }
+    
+    /**
+     * 부품요청 삭제
+     * API: POST /online/mvcJson/PMDP020/delete
+     * 
+     * @param reqId 요청ID
+     * @return Pm020SaveResDto 삭제결과
+     */
+    @Override
+    @Transactional
+    @ServiceId("PMDP020/delete")
+    public Pm020SaveResDto delete(String reqId) {
+        logger.debug("Service Method : delete, Input Param={}", reqId);
+        
+        // Validation
+        if (!StringUtils.hasText(reqId)) {
+            throw new IllegalArgumentException("요청ID는 필수입니다.");
+        }
+        
+        try {
+            int result = pmdp020Dao.delete(reqId);
+            
+            Pm020SaveResDto response = new Pm020SaveResDto();
+            response.setSuccess(result > 0);
+            response.setMessage(result > 0 ? "삭제되었습니다." : "삭제 실패");
+            
+            logger.debug("부품요청 삭제 완료: {} 건", result);
+            return response;
+            
+        } catch (Exception e) {
+            logger.error("부품요청 삭제 오류: {}", e.getMessage(), e);
+            throw new RuntimeException("부품요청 삭제에 실패했습니다.", e);
+        }
+    }
+    
+    /**
+     * 부품요청 저장 Validation
+     * 
+     * @param request 부품요청저장요청DTO
+     */
+    private void validateSave(Pm020SaveReqDto request) {
+        if (!StringUtils.hasText(request.getItemCode())) {
+            throw new IllegalArgumentException("품목코드는 필수입니다.");
+        }
+        if (request.getQty() <= 0) {
+            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
+        }
+        if (!StringUtils.hasText(request.getReqDate())) {
+            throw new IllegalArgumentException("요청일은 필수입니다.");
+        }
+    }
+}
+```
+
+**핵심 포인트**:
+- ✅ `@ServiceId("IMIR010/selectInventoryList")`: API 엔드포인트 정의 (`hone.bom.annotation.ServiceId`)
+- ✅ `@Transactional`: CUD 작업에 필수
+- ✅ `Logger`: `LoggerFactory.getLogger()` 패턴 사용
+- ✅ `@Autowired`: 필드 주입 방식
+- ✅ `StringUtils.hasText()`: 문자열 validation
+- ✅ 반환 타입: 조회는 `List<DTO>` 또는 `DTO`, CUD는 `Map<String, Object>`
+- ✅ **로깅 패턴**: 시작 로그(`debug`) + 완료 로그(`debug`, 건수 포함)
+- ✅ **예외 처리**: 복잡한 비즈니스 로직은 try-catch로 안전하게 처리, error 레벨 로깅
+- ✅ **Validation 분리**: 3개 이상의 validation이 있거나 복잡한 경우 private 메서드로 분리
+- ❌ `@ServiceName`, `@Slf4j`, `@RequiredArgsConstructor` 사용하지 않음
+
+---
+
+### Phase 3: 테스트 (0.5일)
+
+**📖 참조 문서**: `BackendGuide/04-화면코드구현.md`의 Step 8, 9
+
+#### 1. 단위 테스트
+
+```java
+package hsc.tomms.web.im.ir.service;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest
+class IMIR010ServiceTest {
+    
+    @Autowired
+    private IMIR010Service service;
+    
+    @Test
+    void 재고목록조회_성공() {
+        // given
+        InventoryListReqDto request = new InventoryListReqDto();
+        request.setStorageId("WH001");
+        request.setPageNo(1);
+        request.setPageSize(10);
+        
+        // when
+        List<InventoryListResDto> result = service.selectInventoryList(request);
+        
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isGreaterThanOrEqualTo(0);
+    }
+}
+```
+
+#### 2. API 테스트 (Postman)
+
+```http
+POST http://localhost:9090/online/mvcJson/IMIR010/selectInventoryList
+Content-Type: application/json
+
+{
+  "storageId": "WH001",
+  "itemCode": "",
+  "searchText": "",
+  "pageNo": 1,
+  "pageSize": 10
+}
+```
+
+**예상 응답**:
+```json
+[
+  {
+    "invtId": "INVT001",
+    "itemCode": "ITEM001",
+    "itemName": "테스트 품목",
+    "qty": 100,
+    "unitPrice": 5000,
+    "createDate": "2025-01-01 10:00:00"
+  }
+]
+```
+
+---
+
+## 코드 변환 패턴
+
+**📖 참조 문서**: `BackendGuide/05-코드변환가이드.md`
+
+### 1. Record → DTO 변환
+
+```java
+// HTOMSS 원본
+public RecordSet selectList(Record input) {
+    String storageId = input.getString("storageId");
+    String itemCode = input.getString("itemCode");
+    int pageNo = input.getInt("pageNo", 1);
+    // ...
+}
+
+// tomms-lite 변환
+public List<InventoryListResDto> selectList(InventoryListReqDto request) {
+    // DTO getter로 직접 접근
+    // request.getStorageId()
+    // request.getItemCode()
+    // request.getPageNo()
+}
+```
+
+### 2. HQML → MyBatis Mapper 동적 쿼리 변환표
+
+| HTOMSS (HQML) | tomms-lite (MyBatis) |
+|---------------|----------------------|
+| `<isNotEmpty property="field">` | `<if test="field != null and field != ''">` |
+| `<isEmpty property="field">` | `<if test="field == null or field == ''">` |
+| `<isEqual property="field" compareValue="value">` | `<if test="field == 'value'">` |
+| `<isNotEqual property="field" compareValue="value">` | `<if test="field != 'value'">` |
+| `<isGreaterThan property="field" compareValue="10">` | `<if test="field > 10">` |
+| `<isLessThan property="field" compareValue="10">` | `<if test="field < 10">` |
+| `#field#` | `#{field}` |
+| `$field$` | `${field}` |
+
+### 3. Oracle → MariaDB SQL 함수 변환표 ⭐
+
+**중요**: HTOMSS는 Oracle 기반이지만, **tomms-lite는 MariaDB 기반**입니다!
+
+| 기능 | Oracle (HTOMSS) | MariaDB (tomms-lite) |
+|------|----------------|---------------------|
+| **날짜 포맷** | `TO_CHAR(date, 'YYYY-MM-DD HH24:MI:SS')` | `DATE_FORMAT(date, '%Y-%m-%d %H:%i:%s')` |
+| **문자열 결합** | `'A' \|\| 'B'` | `CONCAT('A', 'B')` |
+| **LIKE 검색** | `LIKE '%' \|\| #{text} \|\| '%'` | `LIKE CONCAT('%', #{text}, '%')` |
+| **현재 날짜** | `SYSDATE` | `NOW()` |
+| **NULL 처리** | `NVL(field, default)` | `IFNULL(field, default)` |
+| **조건식** | `DECODE(field, 'A', 1, 2)` | `CASE WHEN field='A' THEN 1 ELSE 2 END` |
+| **페이징** | `ROWNUM`, `ROW_NUMBER()` | `LIMIT #{size} OFFSET #{offset}` |
+| **듀얼 테이블** | `SELECT 1 FROM DUAL` | `SELECT 1` |
+
+**페이징 변환 예시**:
+
+```xml
+<!-- Oracle (HTOMSS) -->
+<select id="selectList">
+    SELECT * FROM (
+        SELECT ROWNUM AS RNUM, A.* FROM (
+            SELECT * FROM TB_INVENTORY
+            ORDER BY CREATE_DATE DESC
+        ) A
+        WHERE ROWNUM <= #{pageNo} * #{pageSize}
+    )
+    WHERE RNUM > (#{pageNo} - 1) * #{pageSize}
+</select>
+
+<!-- MariaDB (tomms-lite) -->
+<select id="selectList">
+    SELECT * FROM TB_INVENTORY
+    ORDER BY CREATE_DATE DESC
+    LIMIT #{pageSize} OFFSET #{offset}
+    <!-- offset = (pageNo - 1) * pageSize -->
+</select>
+```
+
+### 3. Service 메서드 패턴
+
+**조회 (SELECT)**:
+```java
+@Override
+@ServiceId("{화면코드}/selectList")
+public List<ResDto> selectList(ReqDto request) {
+    logger.debug("Service Method : selectList, Input Param={}", request.toString());
+    
+    // Validation
+    if (!StringUtils.hasText(request.getField())) {
+        throw new IllegalArgumentException("필드는 필수입니다.");
+    }
+    
+    try {
+        // DAO 호출
+        List<ResDto> result = dao.selectList(request);
+        
+        logger.debug("목록 조회 완료: {} 건", result.size());
+        return result;
+        
+    } catch (Exception e) {
+        logger.error("목록 조회 오류: {}", e.getMessage(), e);
+        throw new RuntimeException("목록 조회에 실패했습니다.", e);
+    }
+}
+```
+
+**단건 조회**:
+```java
+@Override
+@ServiceId("{화면코드}/selectDetail")
+public ResDto selectDetail(String id) {
+    logger.debug("Service Method : selectDetail, Input Param={}", id);
+    
+    // Validation
+    if (!StringUtils.hasText(id)) {
+        throw new IllegalArgumentException("ID는 필수입니다.");
+    }
+    
+    try {
+        // DAO 호출
+        ResDto result = dao.selectDetail(id);
+        
+        if (result == null) {
+            throw new IllegalArgumentException("데이터를 찾을 수 없습니다.");
+        }
+        
+        logger.debug("상세 조회 완료: {}", result);
+        return result;
+        
+    } catch (Exception e) {
+        logger.error("상세 조회 오류: {}", e.getMessage(), e);
+        throw new RuntimeException("상세 조회에 실패했습니다.", e);
+    }
+}
+```
+
+**등록/수정** (복잡한 로직):
+```java
+@Override
+@Transactional
+@ServiceId("{화면코드}/save")
+public Map<String, Object> save(SaveReqDto request) {
+    logger.debug("Service Method : save, Input Param={}", request.toString());
+    
+    // Validation (3개 이상이면 private 메서드로 분리)
+    validateSave(request);
+    
+    try {
+        // Insert or Update 로직
+        int result = 0;
+        if (!StringUtils.hasText(request.getId())) {
+            result = dao.insert(request);
+        } else {
+            result = dao.update(request);
+        }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", result > 0);
+        response.put("message", result > 0 ? "저장되었습니다." : "저장 실패");
+        
+        logger.debug("저장 완료: {} 건", result);
+        return response;
+        
+    } catch (Exception e) {
+        logger.error("저장 오류: {}", e.getMessage(), e);
+        throw new RuntimeException("저장에 실패했습니다.", e);
+    }
+}
+
+// Validation 메서드 분리 (3개 이상의 validation)
+private void validateSave(SaveReqDto request) {
+    if (!StringUtils.hasText(request.getField1())) {
+        throw new IllegalArgumentException("필드1은 필수입니다.");
+    }
+    if (!StringUtils.hasText(request.getField2())) {
+        throw new IllegalArgumentException("필드2는 필수입니다.");
+    }
+    // ... 나머지 validation
+}
+```
+
+**삭제**:
+```java
+@Override
+@Transactional
+@ServiceId("{화면코드}/delete")
+public Map<String, Object> delete(String id) {
+    logger.debug("Service Method : delete, Input Param={}", id);
+    
+    // Validation
+    if (!StringUtils.hasText(id)) {
+        throw new IllegalArgumentException("ID는 필수입니다.");
+    }
+    
+    try {
+        // DAO delete 호출
+        int result = dao.delete(id);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", result > 0);
+        response.put("message", result > 0 ? "삭제되었습니다." : "삭제 실패");
+        
+        logger.debug("삭제 완료: {} 건", result);
+        return response;
+        
+    } catch (Exception e) {
+        logger.error("삭제 오류: {}", e.getMessage(), e);
+        throw new RuntimeException("삭제에 실패했습니다.", e);
+    }
+}
+```
+
+---
+
+## 중요 규칙
+
+### ✅ 반드시 해야 할 것 (DO):
+
+1. **@ServiceId 사용**: 모든 public Service 메서드에 `@ServiceId` 추가 (API 자동 생성)
+   - Import: `hone.bom.annotation.ServiceId`
+2. **DTO에 @Data 사용**: `@Getter`, `@Setter`, `@ToString` 따로 쓰지 말고 `@Data` 사용
+3. **저작권 주석**: 모든 파일에 Hanwha Systems 저작권 주석 추가
+4. **JavaDoc 주석**: 상세한 `<pre>` 블록으로 SYSTEM, BUSINESS, FILE NAME, DESCRIPTION, 작성이력 포함
+5. **필드 주입**: ServiceImpl에서 `@Autowired` 사용 (생성자 주입 아님)
+6. **Logger**: `LoggerFactory.getLogger()` 패턴 사용 (`@Slf4j` 사용하지 않음)
+7. **DaoImpl**: `AbstractSqlSessionDaoSupport` 상속, `super.selectList()` 등 사용
+8. **Mapper ID**: DAO 메서드에서 Mapper ID만 전달 (NAMESPACE 불필요)
+9. **트랜잭션**: CUD 작업에 `@Transactional` 추가
+10. **Mapper 위치**: `resources/hsc/tomms/web/{module}/{screen}/mybatis/mappers/`
+11. **컬럼 alias**: SQL에서 `COLUMN_NAME as columnName` (camelCase)
+12. **타입 사용**: 금액은 `BigDecimal`, 날짜는 `String`
+13. **반환 타입**: 조회는 `List<DTO>` 또는 `DTO`, CUD는 `Map<String, Object>`
+14. **Validation**: `StringUtils.hasText()` 사용 (빈 문자열 체크)
+15. **Validation 메서드 분리**: 3개 이상의 validation이 있거나 복잡한 경우 private 메서드로 분리
+    ```java
+    private void validateInventorySave(InventorySaveReqDto request) {
+        if (!StringUtils.hasText(request.getItemCode())) {
+            throw new IllegalArgumentException("품목코드는 필수입니다.");
+        }
+        // ... 나머지 validation
+    }
+    ```
+16. **구체적 import 사용**: 와일드카드(`*`) import 금지, 필요한 클래스만 명시적으로 import
+    ```java
+    // ❌ 잘못된 예
+    import java.util.*;
+    import hsc.tomms.web.mt.pm.dto.request.*;
+    
+    // ✅ 올바른 예
+    import java.util.Calendar;
+    import java.util.Date;
+    import java.util.HashMap;
+    import java.util.List;
+    import java.util.Map;
+    import hsc.tomms.web.mt.pm.dto.request.PmSchDeleteReqDto;
+    import hsc.tomms.web.mt.pm.dto.request.PmSchRsltListReqDto;
+    import hsc.tomms.web.mt.pm.dto.request.PmSchSaveReqDto;
+    ```
+17. **로깅 패턴**: 
+    - 시작 로그: `logger.debug("Service Method : 메서드명, Input Param={}", param)`
+    - 완료 로그: `logger.debug("작업명 완료: {} 건", result.size())` (조회 메서드)
+    - 에러 로그: `logger.error("작업명 오류: {}", e.getMessage(), e)` (try-catch 내부)
+17. **예외 처리**: 
+    - 복잡한 비즈니스 로직(날짜 파싱, 반복 처리 등)은 try-catch로 안전하게 처리
+    - 구체적인 예외 타입별 처리 (ParseException, Exception 등)
+    - 사용자 친화적인 에러 메시지 제공
+    ```java
+    try {
+        // 복잡한 비즈니스 로직
+    } catch (ParseException e) {
+        logger.error("날짜 파싱 오류: {}", e.getMessage());
+        throw new IllegalArgumentException("날짜 형식이 올바르지 않습니다.");
+    } catch (Exception e) {
+        logger.error("작업 오류: {}", e.getMessage(), e);
+        throw new RuntimeException("작업에 실패했습니다.", e);
+    }
+    ```
+18. **Service Interface 주석**: Service Interface에도 저작권 주석과 상세 JavaDoc 주석 필수
+
+### ❌ 절대 하지 말아야 할 것 (DON'T):
+
+1. **Controller 작성 금지**: `@RestController` 수동 작성 불필요 (@ServiceId가 자동 생성)
+2. **Record/RecordSet 사용 금지**: DTO 사용
+3. **HQML 태그 사용 금지**: MyBatis `<if test="">` 사용
+4. **Namespace 누락 금지**: Mapper XML에 DAO Interface 전체 경로 필수
+5. **DaoImpl 누락 금지**: HTOMSS와 달리 tomms-lite는 DaoImpl 필수
+6. **@ServiceName 사용 금지**: ServiceImpl에서 사용하지 않음
+7. **@Slf4j 사용 금지**: `LoggerFactory.getLogger()` 패턴 사용
+8. **@RequiredArgsConstructor 사용 금지**: `@Autowired` 필드 주입 사용
+9. **@Getter/@Setter 분리 금지**: DTO에서 `@Data` 사용
+10. **SqlSession 직접 사용 금지**: DaoImpl에서 `super.selectList()` 등 사용
+11. **NAMESPACE 상수 정의 금지**: DaoImpl에서 불필요 (AbstractSqlSessionDaoSupport가 처리)
+12. **와일드카드 import 금지**: `import java.util.*;` 또는 `import hsc.tomms.web.*.dto.request.*;` 같은 와일드카드 import 사용 금지
+    - 필요한 클래스만 명시적으로 import (예: `import java.util.List;`, `import java.util.Map;`)
+13. **Service Interface 주석 누락 금지**: Service Interface에도 저작권 주석과 JavaDoc 주석 필수
+14. **예외 처리 누락 금지**: 복잡한 비즈니스 로직은 반드시 try-catch로 처리
+15. **로깅 불완전 금지**: 시작 로그만 있고 완료 로그 없는 경우 개선 필요
+16. **Validation 인라인 남용 금지**: 3개 이상의 validation은 private 메서드로 분리 권장
+
+---
+
+## 참조 파일 위치
+
+프로젝트 내 참조할 수 있는 실제 코드:
+
+- **샘플 코드**: `tomms-biz-zsample/src/main/java/hsc/tomms/web/zsample/service/FWMybatis001ServiceImpl.java`
+- **DAO 예시**: `tomms-biz-inventorymgmt/src/main/java/hsc/tomms/web/im/ir/dao/IMIR010DaoImpl.java`
+- **Mapper 예시**: `tomms-biz-inventorymgmt/src/main/resources/hsc/tomms/web/im/ir/mybatis/mappers/IMIR010Mapper.xml`
+
+---
+
+## 자주 발생하는 이슈 및 해결방법
+
+### Issue 1: @ServiceId 인식 안됨
+- **원인**: tomms-fw-base 또는 hone-framework 의존성 누락
+- **해결**: pom.xml에서 tomms-fw-config 의존성 확인
+
+### Issue 2: MyBatis Mapper를 찾을 수 없음
+- **원인**: Mapper XML 위치 오류
+- **해결**: 반드시 `src/main/resources/hsc/tomms/web/{module}/{screen}/mybatis/mappers/` 경로 사용
+
+### Issue 3: API 호출 시 404 에러
+- **원인**: @ServiceId 형식 오류
+- **해결**: `{화면코드}/{메서드명}` 형식 확인, `/online/mvcJson/{ServiceId}` 경로로 호출
+
+### Issue 4: DTO 필드 매핑 안됨
+- **원인**: 컬럼 alias와 필드명 불일치
+- **해결**: SQL에서 `COLUMN_NAME as columnName` alias 확인
+
+### Issue 5: 트랜잭션이 동작하지 않음
+- **원인**: @Transactional 누락
+- **해결**: CUD 메서드에 `@Transactional` 추가
+
+---
+
+## 작업 체크리스트 템플릿
+
+각 화면 마이그레이션 시:
+
+### Phase 0: 화면 정보 확인
+- [ ] 화면 코드 확인 (예: PMDP020)
+- [ ] HTOMSS 소스 위치 확인
+- [ ] 해당 모듈 확인 (예: tomms-biz-spareparts)
+- [ ] 패키지 경로 확인 (예: hsc.tomms.web.pm.dp)
+
+### Phase 1: 분석 및 설계
+- [ ] HTOMSS 원본 Service 메서드 분석
+- [ ] @ServiceId 엔드포인트 설계
+- [ ] Request/Response DTO 설계 (DTO 명명 규칙 적용)
+- [ ] DAO 메서드 설계
+- [ ] MyBatis Mapper 쿼리 설계
+
+### Phase 2: 구현
+- [ ] Request DTO 작성
+- [ ] Response DTO 작성
+- [ ] DAO Interface 작성
+- [ ] DAO Implementation 작성
+- [ ] MyBatis Mapper XML 작성
+- [ ] Service Interface 작성
+- [ ] Service Implementation 작성 (@ServiceId)
+
+### Phase 3: 테스트
+- [ ] 단위 테스트 작성
+- [ ] Postman API 테스트
+- [ ] DB 작업 확인
+- [ ] 로그 확인
+
+---
+
+## 작업 예시 워크플로우
+
+### 예시: PMDP020 화면 마이그레이션
+
+```
+사용자: "PMDP020 부품요청 화면을 마이그레이션해줘"
+
+AI 어시스턴트 작업 순서:
+
+1. 화면 정보 확인:
+   - 화면 코드: PMDP020 (그대로 유지)
+   - 모듈: tomms-biz-spareparts
+   - 패키지: hsc.tomms.web.pm.dp
+
+2. BackendGuide/03-화면분석및설계.md 참조
+3. HTOMSS 원본 분석: htomss-biz-pbl/pm/dp/PMDP020ServiceImpl.java
+4. 메서드 및 파라미터 목록 작성
+5. @ServiceId 설계:
+   - PMDP020/searchList (목록 조회)
+   - PMDP020/selectDetail (상세 조회)
+   - PMDP020/save (저장)
+   - PMDP020/delete (삭제)
+
+6. DTO 설계 (새로운 명명 규칙 적용):
+   - Pm020SearchListReqDto, Pm020SearchListResDto
+   - Pm020SelectDetailReqDto, Pm020SelectDetailResDto
+   - Pm020SaveReqDto, Pm020SaveResDto
+
+7. BackendGuide/04-화면코드구현.md 참조
+8. 파일 생성:
+   - dto/request/Pm020SearchListReqDto.java (숫자만 사용!)
+   - dto/response/Pm020SearchListResDto.java
+   - dao/PMDP020Dao.java
+   - dao/PMDP020DaoImpl.java
+   - service/PMDP020Service.java
+   - service/PMDP020ServiceImpl.java
+   - mappers/PMDP020Mapper.xml
+
+9. @ServiceId 적용:
+   - @ServiceId("PMDP020/searchList")
+   - @ServiceId("PMDP020/selectDetail")
+   - @ServiceId("PMDP020/save")
+   - @ServiceId("PMDP020/delete")
+
+10. BackendGuide/05-코드변환가이드.md 참조하여 코드 검증
+11. API 테스트:
+    - POST /online/mvcJson/PMDP020/searchList
+    - POST /online/mvcJson/PMDP020/selectDetail
+    - POST /online/mvcJson/PMDP020/save
+    - POST /online/mvcJson/PMDP020/delete
+```
+
+**핵심 포인트**:
+- 화면 코드는 **그대로 유지** (PMDP020 → PMDP020)
+- DTO 명명: **{화면코드}{메서드명}ReqDto/ResDto** 형식
+- 모든 파일명, 클래스명, @ServiceId에 동일한 화면 코드 사용
+
+---
+
+## 핵심 기억사항 ⭐
+
+### 1. @ServiceId가 핵심입니다!
+
+```java
+@ServiceId("PMDP020/searchList")
+```
+
+이 한 줄이 자동으로 다음 API를 생성합니다:
+```
+POST /online/mvcJson/PMDP020/searchList
+```
+
+**절대 Controller를 직접 작성하지 마세요!**
+
+### 2. DTO 명명 규칙
+
+**형식**: `Pm{숫자3자리}{메서드명}ReqDto` / `Pm{숫자3자리}{메서드명}ResDto`
+
+**예시** (화면 코드: PMDP020):
+- `Pm020SearchListReqDto` (목록 조회 요청)
+- `Pm020SearchListResDto` (목록 조회 응답)
+- `Pm020SaveReqDto` (저장 요청)
+- `Pm020SaveResDto` (저장 응답)
+
+**중요**: DTO 클래스명은 **Pm + 화면 코드의 뒤 3자리 숫자** 형식입니다!
+
+### 3. 화면 코드는 그대로 유지
+
+- HTOMSS의 화면 코드를 tomms-lite에서도 **동일하게 사용**
+- 예: PMDP020 → PMDP020 (변경 없음)
+- DTO 클래스명: `Pm` + 뒤 3자리 숫자 (PMDP020 → Pm020)
+
+---
+
+## 작업 시작 전 필수 체크
+
+- [ ] `/BackendGuide/` 디렉토리의 문서들을 읽었나요?
+- [ ] `01-마이그레이션-개요.md`를 읽고 @ServiceId 개념을 이해했나요?
+- [ ] 작업할 화면의 HTOMSS 원본 코드 위치를 알고 있나요?
+- [ ] 참조 코드(zsample)를 확인했나요?
+
+모든 항목이 체크되었다면, 이제 마이그레이션을 시작하세요! 🚀
