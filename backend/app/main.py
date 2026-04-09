@@ -11,7 +11,10 @@ from app.routers import input as input_router
 from app.routers import session as session_router
 from app.routers import spec as spec_router
 from app.routers import validate as validate_router
+from app.llm.codegen_context import get_workspace_class_map
 from app.session import session_store
+
+logger = logging.getLogger(__name__)
 
 
 async def _cleanup_loop() -> None:
@@ -22,6 +25,16 @@ async def _cleanup_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Pre-warm workspace class map at startup so the first code generation
+    # doesn't block on a full source tree scan.
+    import asyncio as _asyncio
+    loop = _asyncio.get_event_loop()
+    try:
+        class_map = await loop.run_in_executor(None, get_workspace_class_map)
+        logger.info("[STARTUP] Workspace class map loaded: %d classes indexed", len(class_map))
+    except Exception as e:
+        logger.warning("[STARTUP] Workspace class map scan failed (import healing disabled): %s", e)
+
     task = asyncio.create_task(_cleanup_loop())
     yield
     task.cancel()

@@ -7,6 +7,7 @@ import {
   generateCode as apiGenerateCode,
   deployAndRun as apiDeployAndRun,
   stopContainers as apiStopContainers,
+  deleteSource as apiDeleteSource,
 } from '../api/client'
 
 const initialCodeGen: CodeGenState = {
@@ -47,6 +48,7 @@ interface SessionStore {
   generateCode: () => void
   deployAndRun: () => void
   stopContainers: () => Promise<void>
+  deleteSource: () => Promise<void>
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -243,6 +245,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set((state) => ({
         codeGen: { ...state.codeGen, status: 'generated', ports: null },
       }))
+    } catch { /* ignore */ }
+  },
+
+  deleteSource: async () => {
+    try {
+      if (get().codeGen.status === 'running') {
+        await apiStopContainers()
+      }
+      await apiDeleteSource()
+      set({ codeGen: { ...initialCodeGen } })
     } catch { /* ignore */ }
   },
 

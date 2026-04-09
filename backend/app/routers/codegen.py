@@ -4,20 +4,33 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 
+from app.config import settings
 from app.docker_manager import docker_manager
 from app.llm.codegen_pipeline import codegen_pipeline
 from app.llm.orchestrator import orchestrator
-from app.llm.agents import QAEngineerAgent
-from app.models import CodeGenState, GeneratedFile
+from app.llm.agents import QAEngineerAgent, _ensure_slf4j_service_impl, organize_imports
+from app.models import CodeGenState
+from app.pfy_local import (
+    get_pfy_status,
+    maven_compile_iter,
+    parse_maven_build_errors,
+    start_pfy_dev_servers,
+    stop_pfy_processes,
+    update_pfy_file_from_generated,
+    write_generated_files_to_pfy,
+)
 from app.session import get_session_id, session_store
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/codegen", tags=["codegen"])
 
 
@@ -81,6 +94,13 @@ async def generate_code(session_id: str = Depends(get_session_id)):
             if hasattr(orchestrator, '_last_agents'):
                 codegen_state.agents = orchestrator._last_agents
 
+            if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:
+                try:
+                    n = len(write_generated_files_to_pfy(codegen_state.generated_files))
+                    logger.info("PFY: synced %d files after codegen", n)
+                except OSError as exc:
+                    logger.warning("PFY sync after codegen failed: %s", exc)
+
             # Persist session to disk
             session_store.save(session.session_id)
 
@@ -90,7 +110,7 @@ async def generate_code(session_id: str = Depends(get_session_id)):
             session_store.save(session.session_id)
             yield _sse(type="error", message=str(e))
 
-    return EventSourceResponse(event_stream())
+    return EventSourceResponse(event_stream(), ping=10)
 
 
 # --------------------------------------------------------------- files
@@ -154,21 +174,166 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
         raise HTTPException(400, "No generated files. Run /codegen/generate first.")
 
     async def event_stream():
-        from app.config import settings as cfg
-
         codegen_state = session.codegen
         codegen_state.status = "building"
         codegen_state.error = None
 
+        logger.info("deploy event_stream started — mode=%s, files=%d",
+                     settings.CODEGEN_DEPLOY_MODE, len(codegen_state.generated_files))
+
         try:
-            # Write skeleton + generated files to workspace
+            if settings.CODEGEN_DEPLOY_MODE == "pfy":
+                yield _sse("status", message="Writing generated files to PFY workspace...")
+                try:
+                    n = len(write_generated_files_to_pfy(codegen_state.generated_files))
+                    yield _sse("log", line=f"[INFO] Wrote {n} file(s) to PFY backend/front.")
+                except OSError as e:
+                    codegen_state.status = "error"
+                    codegen_state.error = str(e)
+                    yield _sse("error", message=f"Failed to write PFY files: {e}")
+                    return
+
+                backend = Path(settings.PFY_BACKEND_DIR)
+                max_retries = settings.DOCKER_MAX_FIX_RETRIES
+                for attempt in range(1, max_retries + 2):
+                    label = f" (attempt {attempt})" if attempt > 1 else ""
+                    yield _sse("status", message=f"Maven compile{label}...")
+
+                    build_logs: list[str] = []
+                    rc: int | None = None
+                    async for item in maven_compile_iter(backend):
+                        if isinstance(item, int):
+                            rc = item
+                        else:
+                            build_logs.append(item)
+                            yield _sse("log", line=item)
+
+                    if rc == 0:
+                        break
+
+                    if attempt > max_retries:
+                        err_lines = [ln for ln in build_logs if "[ERROR]" in ln]
+                        codegen_state.status = "error"
+                        codegen_state.error = "\n".join(err_lines[-5:]) if err_lines else f"mvn compile failed ({rc})"
+                        yield _sse("error", message=f"Build failed after {max_retries} auto-fix attempts.")
+                        return
+
+                    parsed_errors = parse_maven_build_errors(build_logs)
+                    if not parsed_errors:
+                        codegen_state.status = "error"
+                        codegen_state.error = "Maven compile failed with unparseable errors"
+                        yield _sse("error", message="Build failed. Check logs.")
+                        return
+
+                    yield _sse("status", message=f"Auto-fixing {len(parsed_errors)} file(s)...")
+                    for err_info in parsed_errors:
+                        err_file_path = err_info["file_path"]
+                        err_text = err_info["errors"]
+                        err_filename = err_file_path.replace("\\", "/").split("/")[-1]
+                        matching = [
+                            gf
+                            for gf in codegen_state.generated_files
+                            if gf.file_path.replace("\\", "/").endswith(err_filename)
+                        ]
+                        if not matching:
+                            yield _sse("log", line=f"[WARN] Cannot find source for {err_file_path}")
+                            continue
+
+                        target = matching[0]
+                        yield _sse("log", line=f"[FIX] Fixing {target.file_path}...")
+
+                        session_store.increment_llm_calls(session.session_id)
+                        qa = QAEngineerAgent()
+                        fixed_content = await qa.fix_file(
+                            error_log=err_text,
+                            file_path=target.file_path,
+                            file_content=target.content,
+                            all_files=codegen_state.generated_files,
+                        )
+
+                        if target.file_type == "service_impl":
+                            fixed_content = _ensure_slf4j_service_impl(fixed_content)
+                        if target.file_path.endswith(".java"):
+                            fixed_content = organize_imports(fixed_content)
+                        target.content = fixed_content
+                        update_pfy_file_from_generated(
+                            codegen_state.generated_files,
+                            err_file_path,
+                            fixed_content,
+                        )
+                        yield _sse("log", line=f"[FIX] Fixed {target.file_path}")
+
+                # Start dev servers (fire-and-forget in background task so we can
+                # immediately signal the UI that the build succeeded)
+                yield _sse("status", message="Build OK — starting dev servers in background...")
+                from app.pfy_local import stop_pfy_processes as _stop, register_pfy_processes as _reg, _find_cmd as _fc, _popen_stream_thread as _pst, _maven_env as _menv
+                import queue as _tq, threading as _threading, os as _os
+
+                _stop(session.session_id)
+                _front = Path(settings.PFY_FRONT_DIR)
+
+                _fe_q: _tq.Queue = _tq.Queue()
+                _npm_proc = _pst([_fc("npm"), "run", "dev"], str(_front), _os.environ.copy(), _fe_q)
+
+                _be_q: _tq.Queue = _tq.Queue()
+                _mvn_proc = _pst(
+                    [_fc("mvn"), "spring-boot:run", "-Dspring-boot.run.arguments=--spring.profiles.active=local"],
+                    str(backend), _menv(), _be_q,
+                )
+                _reg(session.session_id, _npm_proc, _mvn_proc)
+
+                # Drain both queues in a background thread so logs flow without blocking
+                def _drain_startup():
+                    fe_done = be_done = False
+                    while not (fe_done and be_done):
+                        for _q, _name in ((_fe_q, "npm"), (_be_q, "mvn")):
+                            try:
+                                ln = _q.get_nowait()
+                                if ln is None:
+                                    if _name == "npm":
+                                        fe_done = True
+                                    else:
+                                        be_done = True
+                                else:
+                                    logger.info("[PFY-START][%s] %s", _name, ln)
+                            except _tq.Empty:
+                                pass
+                        import time
+                        time.sleep(0.1)
+
+                _threading.Thread(target=_drain_startup, daemon=True).start()
+
+                # Immediately transition UI to running — don't wait for Spring Boot to be ready
+                ports = {
+                    "db": None,
+                    "backend": settings.PFY_BACKEND_DEV_PORT,
+                    "frontend": settings.PFY_FRONT_DEV_PORT,
+                }
+                codegen_state.status = "running"
+                yield _sse("log", line=f"[INFO] npm run dev starting in {_front}")
+                yield _sse("log", line=f"[INFO] mvn spring-boot:run starting in {backend}")
+                yield _sse("log", line=f"[INFO] Frontend: http://localhost:{settings.PFY_FRONT_DEV_PORT}/")
+                yield _sse("log", line=f"[INFO] Backend:  http://localhost:{settings.PFY_BACKEND_DEV_PORT}/")
+                yield _sse("complete", message="Build OK — dev servers are starting",
+                           status="running", containers=[], ports=ports, deploy_mode="pfy")
+                return
+
+            # --- Docker (CPMS skeleton) ---
+            yield _sse("status", message="Checking Docker availability...")
+            docker_ok, docker_msg = await docker_manager.check_docker_available()
+            if not docker_ok:
+                codegen_state.status = "error"
+                codegen_state.error = docker_msg
+                yield _sse("error", message=docker_msg)
+                return
+
             yield _sse("status", message="Preparing CPMS skeleton project...")
             await docker_manager.write_workspace(
                 session_id=session.session_id,
                 files=codegen_state.generated_files,
             )
 
-            max_retries = cfg.DOCKER_MAX_FIX_RETRIES
+            max_retries = settings.DOCKER_MAX_FIX_RETRIES
             for attempt in range(1, max_retries + 2):
                 label = f" (attempt {attempt})" if attempt > 1 else ""
                 yield _sse("status", message=f"Building & starting containers{label}...")
@@ -222,6 +387,10 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                         all_files=codegen_state.generated_files,
                     )
 
+                    if target.file_type == "service_impl":
+                        fixed_content = _ensure_slf4j_service_impl(fixed_content)
+                    if target.file_path.endswith(".java"):
+                        fixed_content = organize_imports(fixed_content)
                     target.content = fixed_content
                     docker_manager.update_file_in_workspace(
                         session.session_id, err_file_path, fixed_content
@@ -241,18 +410,22 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                 yield _sse("error", message="Containers failed to start. Check logs.")
 
         except Exception as e:
+            logger.exception("deploy event_stream error")
             codegen_state.status = "error"
             codegen_state.error = str(e)
-            yield _sse("error", message=str(e))
+            yield _sse("error", message=f"Deploy error: {type(e).__name__}: {e}")
 
-    return EventSourceResponse(event_stream())
+    return EventSourceResponse(event_stream(), ping=5)
 
 
 # --------------------------------------------------------------- stop
 @router.post("/stop")
 async def stop_containers(session_id: str = Depends(get_session_id)):
     session = _get_session(session_id)
-    result = await docker_manager.stop(session.session_id)
+    if settings.CODEGEN_DEPLOY_MODE == "pfy":
+        result = stop_pfy_processes(session.session_id)
+    else:
+        result = await docker_manager.stop(session.session_id)
     if session.codegen:
         session.codegen.status = "generated"
     return {"status": result}
@@ -262,5 +435,54 @@ async def stop_containers(session_id: str = Depends(get_session_id)):
 @router.get("/status")
 async def container_status(session_id: str = Depends(get_session_id)):
     session = _get_session(session_id)
-    status = await docker_manager.get_status(session.session_id)
-    return status
+    if settings.CODEGEN_DEPLOY_MODE == "pfy":
+        return get_pfy_status(session.session_id)
+    return await docker_manager.get_status(session.session_id)
+
+
+# ---------------------------------------------------- delete source
+@router.post("/delete-source")
+async def delete_source(session_id: str = Depends(get_session_id)):
+    """Delete all generated files from disk (PFY workspace or skeleton) and reset session state."""
+    session = _get_session(session_id)
+    codegen = session.codegen
+
+    deleted: list[str] = []
+    if codegen and codegen.generated_files:
+        if settings.CODEGEN_DEPLOY_MODE == "pfy":
+            from app.pfy_local import resolve_pfy_destination
+            for gf in codegen.generated_files:
+                dest = resolve_pfy_destination(gf)
+                if dest and dest.exists():
+                    try:
+                        dest.unlink()
+                        deleted.append(dest.as_posix())
+                        logger.info("[DELETE-SOURCE] Removed %s", dest)
+                    except Exception as exc:
+                        logger.warning("[DELETE-SOURCE] Could not remove %s: %s", dest, exc)
+        else:
+            # skeleton mode: remove the session workspace directory
+            import shutil
+            session_ws = docker_manager._workspace(session_id)
+            if session_ws.exists():
+                shutil.rmtree(session_ws, ignore_errors=True)
+                deleted.append(str(session_ws))
+
+        # Reset codegen state to idle
+        codegen.generated_files = []
+        codegen.status = "idle"
+        codegen.plan = None
+        codegen.error = None
+        codegen.build_logs = []
+
+    return {"deleted": len(deleted), "paths": deleted}
+
+
+# --------------------------------------------------------- docker check
+@router.get("/docker-check")
+async def docker_check():
+    """Check if Docker daemon is available and running."""
+    if settings.CODEGEN_DEPLOY_MODE == "pfy":
+        return {"available": True, "message": "PFY local deploy mode — Docker is not used."}
+    ok, message = await docker_manager.check_docker_available()
+    return {"available": ok, "message": message}

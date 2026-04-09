@@ -8,7 +8,9 @@ export default function CodeGenPanel() {
   const generateCode = useSessionStore((s) => s.generateCode)
   const deployAndRun = useSessionStore((s) => s.deployAndRun)
   const stopContainers = useSessionStore((s) => s.stopContainers)
+  const deleteSource = useSessionStore((s) => s.deleteSource)
   const statusMessage = useSessionStore((s) => s.statusMessage)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const { status, plan, generatedFiles, buildLogs, error, ports } = codeGen
 
@@ -120,6 +122,32 @@ export default function CodeGenPanel() {
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>refresh</span>
               Regenerate
             </button>
+            {deleteConfirm ? (
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-red-400">삭제?</span>
+                <button
+                  onClick={() => { deleteSource(); setDeleteConfirm(false) }}
+                  className="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-[10px] font-bold transition-colors"
+                >
+                  확인
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(false)}
+                  className="bg-white/10 hover:bg-white/20 text-white/70 px-2 py-1 rounded text-[10px] transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                className="text-red-400/70 hover:text-red-400 transition-colors text-xs flex items-center gap-1"
+                title="생성된 소스 파일 전체 삭제"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_sweep</span>
+                Delete Source
+              </button>
+            )}
           </div>
         </div>
 
@@ -233,7 +261,7 @@ export default function CodeGenPanel() {
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {hasFiles && (
             <>
               <button onClick={deployAndRun} className="gradient-button text-on-primary px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-all">
@@ -247,6 +275,31 @@ export default function CodeGenPanel() {
           <button onClick={generateCode} className="bg-white/10 text-white/80 px-4 py-2 rounded-xl text-sm font-bold hover:bg-white/15 transition-all">
             Regenerate Code
           </button>
+          {deleteConfirm ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-red-400">삭제?</span>
+              <button
+                onClick={() => { deleteSource(); setDeleteConfirm(false) }}
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-sm font-bold transition-colors"
+              >
+                확인
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(false)}
+                className="bg-white/10 text-white/60 px-3 py-1.5 rounded-xl text-sm transition-colors"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setDeleteConfirm(true)}
+              className="bg-red-900/40 hover:bg-red-800/60 text-red-400 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_sweep</span>
+              Delete Source
+            </button>
+          )}
         </div>
       </div>
     )
