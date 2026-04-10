@@ -40,12 +40,31 @@ function parseSSELine(line: string): SSEEvent | null {
   }
 }
 
-async function consumeSSE(url: string, onEvent: (event: SSEEvent) => void, body?: object): Promise<void> {
-  const response = await fetch(url, {
-    method: body ? 'POST' : 'GET',
-    headers: { ...apiHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
+async function consumeSSE(
+  url: string,
+  onEvent: (event: SSEEvent) => void,
+  body?: object,
+  signal?: AbortSignal,
+): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers: { ...apiHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal,
+    })
+  } catch (err) {
+    if (signal?.aborted) return
+    onEvent({ type: 'error', content: err instanceof Error ? err.message : 'Network error' })
+    return
+  }
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }))
+    onEvent({ type: 'error', content: errData.detail ?? `Request failed: ${response.status}` })
+    return
+  }
 
   if (!response.body) return
 
@@ -53,21 +72,47 @@ async function consumeSSE(url: string, onEvent: (event: SSEEvent) => void, body?
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      const event = parseSSELine(line.trim())
-      if (event) onEvent(event)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        const event = parseSSELine(line.trim())
+        if (event) onEvent(event)
+      }
     }
+  } catch (e) {
+    if (!signal?.aborted) throw e
   }
 }
 
 export function generateSpec(onEvent: (event: SSEEvent) => void): void {
   consumeSSE('/api/spec/generate', onEvent, {})
+}
+
+export async function loadSpecFile(): Promise<{ spec_markdown: string; spec_version: number }> {
+  const res = await fetch('/api/spec/load-file', {
+    method: 'POST',
+    headers: apiHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? 'Failed to load spec file')
+  }
+  return res.json()
+}
+
+export async function importSpec(specMarkdown: string): Promise<{ spec_version: number; length: number }> {
+  const res = await fetch('/api/spec/import', {
+    method: 'POST',
+    headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spec_markdown: specMarkdown }),
+  })
+  if (!res.ok) throw new Error(`Import failed: ${res.status}`)
+  return res.json()
 }
 
 export function sendChat(message: string, onEvent: (event: SSEEvent) => void): void {
@@ -104,8 +149,8 @@ export async function restoreSession(state: object): Promise<void> {
 
 // --- Code Generation API ---
 
-export function generateCode(onEvent: (event: SSEEvent) => void): void {
-  consumeSSE('/api/codegen/generate', onEvent, {})
+export function generateCode(onEvent: (event: SSEEvent) => void, signal?: AbortSignal): void {
+  consumeSSE('/api/codegen/generate', onEvent, {}, signal)
 }
 
 export function deployAndRun(onEvent: (event: SSEEvent) => void): void {
@@ -127,7 +172,6 @@ export function downloadCode(): void {
   const a = document.createElement('a')
   a.href = `/api/codegen/download?session_id=${sessionId}`
   a.download = 'code.zip'
-  // Need to add session header via fetch for download
   fetch('/api/codegen/download', { headers: apiHeaders() })
     .then(res => res.blob())
     .then(blob => {

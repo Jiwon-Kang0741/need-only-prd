@@ -1,23 +1,35 @@
+import httpx
 import anthropic
 import openai
 from collections.abc import AsyncIterator
 
 from app.config import settings
 
+# Corporate proxy environments often insert self-signed certs into the TLS chain.
+# Disable SSL verification globally for the LLM clients so the SDK can reach the API.
+_HTTP_CLIENT = httpx.AsyncClient(verify=False)
+
 
 class LLMClient:
     def __init__(self):
         if settings.LLM_PROVIDER == "anthropic":
-            self.anthropic = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            self.anthropic = anthropic.AsyncAnthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
+                http_client=_HTTP_CLIENT,
+            )
         elif settings.LLM_PROVIDER == "azure_openai":
             self.openai = openai.AsyncAzureOpenAI(
                 azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
                 api_version=settings.AZURE_OPENAI_API_VERSION,
                 api_key=settings.AZURE_OPENAI_API_KEY,
+                http_client=_HTTP_CLIENT,
             )
             self._model = settings.AZURE_OPENAI_MODEL_NAME
         else:
-            self.openai = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            self.openai = openai.AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                http_client=_HTTP_CLIENT,
+            )
             self._model = settings.LLM_MODEL
 
     async def complete(self, system: str, user: str, stream: bool = False, max_tokens: int = 8192) -> str | AsyncIterator[str]:
@@ -87,6 +99,7 @@ class CodexLLMClient:
                 azure_endpoint=settings.CODEX_AZURE_OPENAI_ENDPOINT,
                 api_version=settings.CODEX_AZURE_OPENAI_API_VERSION,
                 api_key=settings.CODEX_AZURE_OPENAI_API_KEY,
+                http_client=_HTTP_CLIENT,
             )
             self._model = settings.CODEX_AZURE_OPENAI_MODEL_NAME
             self._available = True

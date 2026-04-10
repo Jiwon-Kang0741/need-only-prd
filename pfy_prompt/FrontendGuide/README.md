@@ -11,27 +11,48 @@
 
 PMDP010과 SPOV010의 패턴을 참조하여 동일한 품질로 화면을 개발합니다.
 
+## 🚫 단일 Vue 파일 금지 (CRITICAL!)
+
+**모든 화면은 반드시 다중 파일 구조로 생성! 하나의 vue_page에 모든 기능을 넣지 마세요!**
+
+## 📛 파일 네이밍 규칙 (CRITICAL!)
+
+**screenId는 반드시 camelCase! 모두 소문자 금지!**
+
+```
+❌ cpmsedupondgedit  → 잘못됨 (모두 소문자)
+✅ cpmsEduPondgEdit  → 올바름 (camelCase)
+
+❌ cpmsedupondglst   → 잘못됨
+✅ cpmsEduPondgLst   → 올바름
+```
+
 ## 🎯 필수 파일 구조
 
 **⚠️ CRITICAL**: 새 화면을 만들 때 반드시 아래 파일을 모두 생성해야 합니다!
+- screenId는 **camelCase** (모두 소문자 금지!)
+- 타입은 `api/pages/[module]/[category]/types.ts`에 정의 (화면 폴더 안에 types.ts 넣지 않음!)
 
 ```
-pages/[module]/[category]/[screenId]/
-  ├── index.vue                                    ← 메인 페이지 (ContentHeader 포함)
-  ├── [screenId].scss                              ← 화면 스타일 (필수!)
-  ├── types.ts                                     ← 타입 정의
+pages/[module]/[category]/[screenId]/              ← camelCase! (예: cpmsEduPondgEdit/)
+  ├── index.vue                                    ← 메인 페이지 (오케스트레이터 역할만!)
+  ├── [screenId].scss                              ← 화면 스타일 (예: cpmsEduPondgEdit.scss)
   └── components/                                  ← components 폴더 (필수!)
-      ├── [screenId]SearchForm/
-      │   ├── [ScreenId]SearchForm.vue
+      ├── [screenId]SearchForm/                    ← 예: cpmsEduPondgEditSearchForm/
+      │   ├── [ScreenId]SearchForm.vue             ← 예: CpmsEduPondgEditSearchForm.vue
       │   └── [ScreenId]SearchForm.scss            ← 컴포넌트 스타일 (필수!)
-      ├── [screenId]DataTable/
-      │   ├── [ScreenId]DataTable.vue
+      ├── [screenId]DataTable/                     ← 예: cpmsEduPondgEditDataTable/
+      │   ├── [ScreenId]DataTable.vue              ← 예: CpmsEduPondgEditDataTable.vue
       │   ├── [ScreenId]DataTable.scss             ← 컴포넌트 스타일 (필수!)
       │   └── utils/                               ← DataTable만 utils 폴더!
       │       └── index.ts                         ← getColumns/getRows 함수
-      └── [screenId]SumGrid/                       ← SumGrid는 utils 없음 (고정 4개 컴럼)
+      └── [screenId]SumGrid/                       ← SumGrid는 utils 없음
           ├── [ScreenId]SumGrid.vue
           └── [ScreenId]SumGrid.scss               ← 컴포넌트 스타일 (필수!)
+
+api/pages/[module]/[category]/
+  ├── types.ts                                     ← 타입 정의 (공통 types.ts) ⭐
+  └── [screenId].ts                                ← API 함수 (예: cpmsEduPondgEdit.ts)
 ```
 
 **각 컴포넌트마다 SCSS 파일이 필요한 이유**:
@@ -140,23 +161,30 @@ pages/[module]/[category]/[screenId]/
 
 ## 🎯 핵심 원칙
 
-### 1. **PMDP020 구조 100% 준수** (최우선!)
-```typescript
-// ❌ 잘못된 방법 - 컴포넌트를 루트에 배치
-pages/sy/ds/pmdp020/
-  ├── PMDP020SearchForm.vue  ← 루트에 직접 위치 (잘못됨)
-  ├── PMDP020DataTable.vue
+### 1. **다중 파일 구조 100% 준수 + camelCase 네이밍** (최우선!)
+```
+❌ 잘못된 방법 1 - 단일 Vue 파일
+pages/edu/pondg/cpmsEduPondgLst/
+  └── index.vue  ← SearchForm, DataTable, API 모두 포함 (절대 금지!)
 
-// ✅ 올바른 방법 - PMDP020 패턴 따르기
-pages/sy/ds/pmdp020/
-  ├── index.vue
-  ├── pmdp020.scss
-  ├── types.ts
-  └── components/              ← components 폴더 필수!
-      ├── pmdp020SearchForm/
-      │   └── PMDP020SearchForm.vue
-      ├── pmdp020DataTable/
-      │   └── PMDP020DataTable.vue
+❌ 잘못된 방법 2 - 모두 소문자
+pages/edu/pondg/cpmsedupondglst/  ← 잘못됨!
+
+❌ 잘못된 방법 3 - 컴포넌트를 루트에 배치
+pages/edu/pondg/cpmsEduPondgLst/
+  ├── CpmsEduPondgLstSearchForm.vue  ← 루트에 직접 위치 (잘못됨!)
+
+✅ 올바른 방법 - 다중 파일 + camelCase
+pages/edu/pondg/cpmsEduPondgLst/
+  ├── index.vue                      ← 오케스트레이터 역할만
+  ├── cpmsEduPondgLst.scss
+  └── components/                    ← components 폴더 필수!
+      ├── cpmsEduPondgLstSearchForm/
+      │   ├── CpmsEduPondgLstSearchForm.vue
+      │   └── CpmsEduPondgLstSearchForm.scss
+      ├── cpmsEduPondgLstDataTable/
+      │   ├── CpmsEduPondgLstDataTable.vue
+      │   └── CpmsEduPondgLstDataTable.scss
 ```
 
 ### 2. **ContentHeader 필수 포함**
@@ -241,10 +269,18 @@ code src/pages/sy/ds/spov010/
 
 ### 절대 하지 말아야 할 것들
 
-1. **❌ PMDP020 구조 무시**
+1. **❌ 단일 Vue 파일로 모든 기능 포함 (CRITICAL!)**
+   - SearchForm, DataTable, SumGrid, API를 하나의 파일에 넣지 마세요
+   - 반드시 다중 파일 구조로 분리
+
+2. **❌ screenId를 모두 소문자로 작성 (CRITICAL!)**
+   - `cpmsedupondgedit` → 잘못됨!
+   - `cpmsEduPondgEdit` → 올바름! (camelCase 필수)
+
+3. **❌ 다중 파일 구조 무시**
    - 컴포넌트를 루트에 직접 배치하지 말고 **components/ 폴더 사용**
 
-2. **❌ ContentHeader 누락**
+4. **❌ ContentHeader 누락**
    - 모든 화면은 반드시 ContentHeader를 포함해야 함
 
 3. **❌ ref 접근 경로 혼동**

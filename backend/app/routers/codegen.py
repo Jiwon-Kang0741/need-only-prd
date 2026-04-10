@@ -82,27 +82,28 @@ async def generate_code(session_id: str = Depends(get_session_id)):
                         files=[CodeGenPlanFile(**f) for f in plan_data.get("files", [])],
                     )
 
-                # Store generated files when complete
+                # When complete: collect files, write to PFY, then notify client
                 if event.get("type") == "complete":
+                    # Collect final files from orchestrator
+                    if hasattr(orchestrator, '_last_files'):
+                        codegen_state.generated_files = orchestrator._last_files
+                    if hasattr(orchestrator, '_last_agents'):
+                        codegen_state.agents = orchestrator._last_agents
+
+                    # Write to PFY workspace BEFORE sending complete event
+                    if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:
+                        try:
+                            n = len(write_generated_files_to_pfy(codegen_state.generated_files))
+                            logger.info("PFY: synced %d files after codegen", n)
+                            yield _sse(type="log", line=f"[PFY] {n}개 파일을 워크스페이스에 저장했습니다.")
+                        except Exception as exc:
+                            logger.warning("PFY sync after codegen failed: %s", exc)
+                            yield _sse(type="log", line=f"[PFY] 파일 저장 실패: {exc}")
+
                     codegen_state.status = "generated"
+                    session_store.save(session.session_id)
 
                 yield _sse(**event)
-
-            # Collect final files from orchestrator
-            if hasattr(orchestrator, '_last_files'):
-                codegen_state.generated_files = orchestrator._last_files
-            if hasattr(orchestrator, '_last_agents'):
-                codegen_state.agents = orchestrator._last_agents
-
-            if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:
-                try:
-                    n = len(write_generated_files_to_pfy(codegen_state.generated_files))
-                    logger.info("PFY: synced %d files after codegen", n)
-                except OSError as exc:
-                    logger.warning("PFY sync after codegen failed: %s", exc)
-
-            # Persist session to disk
-            session_store.save(session.session_id)
 
         except Exception as e:
             codegen_state.status = "error"

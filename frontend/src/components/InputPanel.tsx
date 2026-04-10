@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { submitInput, generateSpec } from '../api/client'
+import { submitInput, generateSpec, loadSpecFile } from '../api/client'
 import { useSessionStore } from '../store/sessionStore'
 import type { SSEEvent } from '../types'
 
@@ -20,6 +20,20 @@ export default function InputPanel() {
   const charCount = text.length
   const isOverLimit = charCount > MAX_CHARS
   const isNearLimit = charCount >= WARN_THRESHOLD
+
+  async function handleLoadSpec() {
+    setGenerating(true)
+    setStatus('Loading spec.md from server...')
+    try {
+      const data = await loadSpecFile()
+      setSpecMarkdown(data.spec_markdown)
+      setStatus(null)
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to load spec')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   async function handleSubmit() {
     if (!text.trim() || isGenerating || isOverLimit) return
@@ -160,6 +174,17 @@ export default function InputPanel() {
             <span className="material-symbols-outlined">arrow_forward</span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={handleLoadSpec}
+          disabled={isGenerating}
+          className="bg-tertiary-container text-on-tertiary-container w-full md:w-auto min-w-[240px] px-8 py-3 rounded-xl font-bold font-headline text-sm transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined text-[20px]">skip_next</span>
+          Load spec.md & Skip to Code Gen
+        </button>
+
         <span className="text-xs text-secondary/60 flex items-center gap-1">
           <span className="material-symbols-outlined text-[14px]">lock</span>
           Your data stays private and is never stored

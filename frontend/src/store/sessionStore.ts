@@ -8,6 +8,7 @@ import {
   deployAndRun as apiDeployAndRun,
   stopContainers as apiStopContainers,
   deleteSource as apiDeleteSource,
+  importSpec as apiImportSpec,
 } from '../api/client'
 
 const initialCodeGen: CodeGenState = {
@@ -32,6 +33,7 @@ interface SessionStore {
   statusMessage: string | null
   showCompare: boolean
   codeGen: CodeGenState
+  _codegenAbort: AbortController | null
   setRawInput: (input: string | null) => void
   appendSpecChunk: (chunk: string) => void
   setSpecMarkdown: (markdown: string | null) => void
@@ -46,9 +48,11 @@ interface SessionStore {
   toggleCompare: () => void
   reset: () => void
   generateCode: () => void
+  stopGeneration: () => void
   deployAndRun: () => void
   stopContainers: () => Promise<void>
   deleteSource: () => Promise<void>
+  loadSpecFromText: (text: string) => Promise<void>
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -62,6 +66,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   statusMessage: null,
   showCompare: false,
   codeGen: { ...initialCodeGen },
+  _codegenAbort: null,
   setRawInput: (input) => set({ rawInput: input }),
   appendSpecChunk: (chunk) => set((state) => ({ specMarkdown: (state.specMarkdown ?? '') + chunk })),
   setSpecMarkdown: (markdown) => set({ specMarkdown: markdown }),
@@ -147,18 +152,21 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   // --- Code Generation Actions (Multi-Agent) ---
   generateCode: () => {
+    get()._codegenAbort?.abort()
+    const abort = new AbortController()
     set({
       codeGen: { ...initialCodeGen, status: 'generating' },
       statusMessage: 'Starting multi-agent code generation...',
+      _codegenAbort: abort,
     })
     apiGenerateCode((event) => {
+      if (abort.signal.aborted) return
       if (event.type === 'status') {
         set({ statusMessage: event.content ?? event.message ?? null })
       } else if (event.type === 'agent_start') {
-        // Agent started
         set({ statusMessage: `${event.display_name ?? event.agent} working...` })
       } else if (event.type === 'agent_complete') {
-        // Agent completed
+        // no-op
       } else if (event.type === 'plan' && event.plan) {
         set((state) => ({
           codeGen: { ...state.codeGen, plan: event.plan! },
@@ -202,14 +210,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         set((state) => ({
           codeGen: { ...state.codeGen, status: 'generated' },
           statusMessage: null,
+          _codegenAbort: null,
         }))
       } else if (event.type === 'error') {
         set((state) => ({
           codeGen: { ...state.codeGen, status: 'error', error: event.content ?? event.message ?? 'Generation failed' },
           statusMessage: null,
+          _codegenAbort: null,
         }))
       }
-    })
+    }, abort.signal)
+  },
+
+  stopGeneration: () => {
+    const abort = get()._codegenAbort
+    abort?.abort()
+    const hasFiles = get().codeGen.generatedFiles.length > 0
+    set((state) => ({
+      codeGen: {
+        ...state.codeGen,
+        status: hasFiles ? 'generated' : 'idle',
+      },
+      statusMessage: null,
+      _codegenAbort: null,
+    }))
   },
 
   deployAndRun: () => {
@@ -258,7 +282,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     } catch { /* ignore */ }
   },
 
+  loadSpecFromText: async (text: string) => {
+    const result = await apiImportSpec(text)
+    set({ specMarkdown: text.trim(), specVersion: result.spec_version })
+  },
+
   reset: () => {
+    get()._codegenAbort?.abort()
     const cg = get().codeGen
     if (cg.status === 'running') {
       apiStopContainers().catch(() => {})
@@ -275,6 +305,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       statusMessage: null,
       showCompare: false,
       codeGen: { ...initialCodeGen },
+      _codegenAbort: null,
     })
   },
 }))

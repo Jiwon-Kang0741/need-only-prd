@@ -27,5 +27,6 @@ async def submit_input(
         source_type=source_type,
         uploaded_at=datetime.now(timezone.utc),
     )
+    session_store.save(session_id)
 
     return {"status": "ok", "chars": len(content)}

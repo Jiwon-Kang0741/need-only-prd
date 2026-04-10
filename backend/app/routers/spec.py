@@ -1,14 +1,61 @@
 import json
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from app.config import settings
 from app.llm.pipeline import spec_pipeline
 from app.models import ExtractedRequirements
 from app.session import get_session_id, session_store
 
 router = APIRouter(prefix="/spec", tags=["spec"])
+
+_SPEC_CACHE_PATH = Path(settings.PROMPT_REFERENCE_DIR) / "spec.md"
+
+
+class ImportSpecRequest(BaseModel):
+    spec_markdown: str
+
+
+@router.post("/import")
+async def import_spec(
+    body: ImportSpecRequest,
+    session_id: str = Depends(get_session_id),
+):
+    """붙여넣은 spec.md를 세션에 저장하고 pfy_prompt/spec.md 캐시에도 보존한다."""
+    if not body.spec_markdown.strip():
+        raise HTTPException(status_code=400, detail="spec_markdown is empty")
+
+    content = body.spec_markdown.strip()
+    session = session_store.get_or_create(session_id)
+    session.spec_markdown = content
+    session.spec_version += 1
+    session_store.save(session_id)
+
+    _SPEC_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SPEC_CACHE_PATH.write_text(content, encoding="utf-8")
+
+    return {"spec_version": session.spec_version, "length": len(content)}
+
+
+@router.post("/load-file")
+async def load_spec_file(
+    session_id: str = Depends(get_session_id),
+):
+    """pfy_prompt/spec.md 를 읽어 LLM 없이 바로 코드 생성 단계로 이동한다."""
+    if not _SPEC_CACHE_PATH.exists():
+        raise HTTPException(404, f"spec.md not found at {_SPEC_CACHE_PATH}. Generate a spec first.")
+
+    content = _SPEC_CACHE_PATH.read_text(encoding="utf-8")
+    session = session_store.get_or_create(session_id)
+    session.spec_markdown = content
+    session.spec_version += 1
+    session_store.save(session_id)
+
+    return {"spec_markdown": content, "spec_version": session.spec_version}
 
 
 @router.post("/generate")
@@ -41,6 +88,9 @@ async def generate_spec(
             session.spec_version += 1
             session_store.save(session_id)
 
+            _SPEC_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _SPEC_CACHE_PATH.write_text(full_spec, encoding="utf-8")
+
             yield {"event": "message", "data": json.dumps({"type": "complete", "spec_version": session.spec_version})}
 
         except HTTPException as e:
@@ -48,7 +98,7 @@ async def generate_spec(
         except Exception as e:
             yield {"event": "message", "data": json.dumps({"type": "error", "content": str(e)})}
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(event_generator(), ping=10)
 
 
 @router.get("")

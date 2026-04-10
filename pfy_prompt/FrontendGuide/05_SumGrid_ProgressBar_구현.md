@@ -44,15 +44,24 @@ const handleProgress = (next: string) => {
 
 ### 2.1 파일 생성 (신규 시)
 
-**신규 화면**에서 SumGrid를 추가할 때: `pages/[module]/[category]/[screenId]/components/[screenId]SumGrid/` 폴더를 만들고, `.vue`와 `.scss`를 생성합니다. **수정 시**에는 해당 화면의 SumGrid 컴포넌트만 수정합니다.
+**⚠️ screenId는 반드시 camelCase! 모두 소문자 금지!**
+
+**신규 화면**에서 SumGrid를 추가할 때: `pages/[module]/[category]/[screenId]/components/[screenId]SumGrid/` 폴더를 만들고, `.vue`와 `.scss`를 생성합니다.
 
 ```bash
-# 예: pages/sy/ds/pmdp010/components/pmdp010SumGrid/
-# 폴더 생성 후
-# [ScreenId]SumGrid.vue, [ScreenId]SumGrid.scss (SCSS 필수)
+# 예시 1: 짧은 screenId
+# pages/sy/ds/pmdp010/components/pmdp010SumGrid/
+# PMDP010SumGrid.vue, PMDP010SumGrid.scss
+
+# 예시 2: camelCase screenId (cpmsEduPondgLst)
+# pages/edu/pondg/cpmsEduPondgLst/components/cpmsEduPondgLstSumGrid/
+# CpmsEduPondgLstSumGrid.vue, CpmsEduPondgLstSumGrid.scss
 ```
 
-**⚠️ 중요**: SCSS 파일은 필수입니다. SumGrid/ProgressBar 스타일을 포함합니다.
+**⚠️ 중요**:
+- SCSS 파일은 필수입니다. SumGrid/ProgressBar 스타일을 포함합니다.
+- 폴더명은 camelCase (예: `cpmsEduPondgLstSumGrid/`)
+- Vue/SCSS 파일명은 PascalCase (예: `CpmsEduPondgLstSumGrid.vue`)
 
 ### 2.2 기본 템플릿
 

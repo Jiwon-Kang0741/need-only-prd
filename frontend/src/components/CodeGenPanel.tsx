@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSessionStore } from '../store/sessionStore'
 import { downloadCode } from '../api/client'
 import FileViewer from './FileViewer'
@@ -6,6 +6,7 @@ import FileViewer from './FileViewer'
 export default function CodeGenPanel() {
   const codeGen = useSessionStore((s) => s.codeGen)
   const generateCode = useSessionStore((s) => s.generateCode)
+  const stopGeneration = useSessionStore((s) => s.stopGeneration)
   const deployAndRun = useSessionStore((s) => s.deployAndRun)
   const stopContainers = useSessionStore((s) => s.stopContainers)
   const deleteSource = useSessionStore((s) => s.deleteSource)
@@ -16,6 +17,13 @@ export default function CodeGenPanel() {
 
   const [showFiles, setShowFiles] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (status === 'building' || showLogs) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [buildLogs, status, showLogs])
 
   // Idle — start button
   if (status === 'idle') {
@@ -48,6 +56,13 @@ export default function CodeGenPanel() {
             <div className="h-4 w-px bg-white/10 mx-2" />
             <span className="text-xs font-mono text-white/60">Generating Code</span>
           </div>
+          <button
+            onClick={stopGeneration}
+            className="bg-error/90 hover:bg-error text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>stop_circle</span>
+            Stop
+          </button>
         </div>
 
         {/* Status */}
@@ -197,16 +212,30 @@ export default function CodeGenPanel() {
             </div>
           )}
 
-          {buildLogs.length > 0 && (
+          {status === 'building' && buildLogs.length > 0 && (
+            <div className="rounded-lg p-3 bg-black/40 max-h-96 overflow-auto border border-white/5">
+              {buildLogs.map((log, i) => (
+                <div key={i} className={`text-xs font-mono ${log.includes('[ERROR]') ? 'text-red-400' : log.includes('[INFO]') || log.includes('[FIX]') ? 'text-emerald-400/80' : log.includes('[WARN]') ? 'text-yellow-400/80' : 'text-white/50'}`}>
+                  {log}
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          )}
+
+          {status !== 'building' && buildLogs.length > 0 && (
             <div>
               <button onClick={() => setShowLogs(!showLogs)} className="text-xs text-white/40 hover:text-white/60 cursor-pointer mb-1">
                 {showLogs ? 'Hide' : 'Show'} Logs ({buildLogs.length})
               </button>
               {showLogs && (
-                <div className="rounded-lg p-3 bg-black/30 max-h-48 overflow-auto">
+                <div className="rounded-lg p-3 bg-black/30 max-h-64 overflow-auto">
                   {buildLogs.map((log, i) => (
-                    <div key={i} className="text-xs text-white/50 font-mono">{log}</div>
+                    <div key={i} className={`text-xs font-mono ${log.includes('[ERROR]') ? 'text-red-400' : log.includes('[INFO]') || log.includes('[FIX]') ? 'text-emerald-400/80' : log.includes('[WARN]') ? 'text-yellow-400/80' : 'text-white/50'}`}>
+                      {log}
+                    </div>
                   ))}
+                  <div ref={logEndRef} />
                 </div>
               )}
             </div>
@@ -255,9 +284,11 @@ export default function CodeGenPanel() {
         <h3 className="text-lg font-bold font-headline text-error mb-2">Error</h3>
         <p className="text-sm text-error/80 mb-4 whitespace-pre-wrap">{error}</p>
         {buildLogs.length > 0 && (
-          <div className="rounded-lg p-3 bg-black/30 max-h-32 overflow-auto mb-4">
+          <div className="rounded-lg p-3 bg-black/30 max-h-64 overflow-auto mb-4">
             {buildLogs.map((log, i) => (
-              <div key={i} className="text-xs text-white/50 font-mono">{log}</div>
+              <div key={i} className={`text-xs font-mono ${log.includes('[ERROR]') ? 'text-red-400' : log.includes('[INFO]') || log.includes('[FIX]') ? 'text-emerald-400/80' : log.includes('[WARN]') ? 'text-yellow-400/80' : 'text-white/50'}`}>
+                {log}
+              </div>
             ))}
           </div>
         )}

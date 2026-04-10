@@ -23,21 +23,33 @@
 
 ### 2.1 파일 생성
 
-```bash
-# 폴더 생성
-mkdir -p src/pages/sy/ds/pmdp010/components/pmdp010DataTable
+**⚠️ screenId는 반드시 camelCase! 모두 소문자 금지!**
 
-# 파일 생성 (SCSS 포함!)
-touch src/pages/sy/ds/pmdp010/components/pmdp010DataTable/PMDP010DataTable.vue
-touch src/pages/sy/ds/pmdp010/components/pmdp010DataTable/PMDP010DataTable.scss
+```bash
+# 예시 1: 짧은 screenId
+mkdir -p src/pages/sy/ds/pmdp010/components/pmdp010DataTable
+touch .../pmdp010DataTable/PMDP010DataTable.vue
+touch .../pmdp010DataTable/PMDP010DataTable.scss
+
+# 예시 2: camelCase screenId (cpmsEduPondgLst)
+mkdir -p src/pages/edu/pondg/cpmsEduPondgLst/components/cpmsEduPondgLstDataTable
+touch .../cpmsEduPondgLstDataTable/CpmsEduPondgLstDataTable.vue
+touch .../cpmsEduPondgLstDataTable/CpmsEduPondgLstDataTable.scss
+mkdir -p .../cpmsEduPondgLstDataTable/utils
+touch .../cpmsEduPondgLstDataTable/utils/index.ts
 ```
 
-**⚠️ 중요**: SCSS 파일은 필수입니다! 성능 최적화 CSS를 포함합니다.
+**⚠️ 중요**:
+- SCSS 파일은 필수입니다! 성능 최적화 CSS를 포함합니다.
+- 폴더명은 camelCase (예: `cpmsEduPondgLstDataTable/`)
+- Vue/SCSS 파일명은 PascalCase (예: `CpmsEduPondgLstDataTable.vue`)
 
 ### 2.2 기본 템플릿
 
+**⚠️ 주의**: DataTable은 반드시 별도 파일로 분리! index.vue에 인라인으로 넣지 마세요!
+
 ```vue
-<!-- PMDP010DataTable.vue -->
+<!-- CpmsEduPondgLstDataTable.vue (또는 PMDP010DataTable.vue) -->
 <template>
   <div class="datatable-container">
     <DataTable
@@ -47,7 +59,7 @@ touch src/pages/sy/ds/pmdp010/components/pmdp010DataTable/PMDP010DataTable.scss
       scrollHeight="540px"
       :virtualScrollerOptions="{ itemSize: 46 }"
       selectionMode="multiple"
-      dataKey="ASK_NO"
+      dataKey="eduPgmId"
       :loading="loading"
     >
       <!-- 컬럼들 -->
@@ -59,21 +71,20 @@ touch src/pages/sy/ds/pmdp010/components/pmdp010DataTable/PMDP010DataTable.scss
 import { ref, watch, nextTick } from 'vue';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
-import type { PMDP010MainData } from '@/api/pages/sy/ds/types';
+// ⭐ 타입은 api/pages/[module]/[category]/types.ts에서 import
+import type { CpmsEduPondgLstMainData } from '@/api/pages/edu/pondg/types';
 
-// Props
 interface Props {
-  fetchedMainData: PMDP010MainData[] | null;
+  fetchedMainData: CpmsEduPondgLstMainData[] | null;
   loading: boolean;
 }
 
 const props = defineProps<Props>();
-
-// 선택된 행
-const selectedRows = ref<PMDP010MainData[]>([]);
+const selectedRows = ref<CpmsEduPondgLstMainData[]>([]);
 </script>
 
-<style scoped lang="scss" src="./PMDP010DataTable.scss"></style>
+<!-- ⚠️ SCSS 파일 연결 필수! 파일명은 PascalCase -->
+<style scoped lang="scss" src="./CpmsEduPondgLstDataTable.scss"></style>
 ```
 
 **⚠️ 중요**: `<style>` 태그에 SCSS 파일을 연결해야 성능 최적화 CSS가 적용됩니다!

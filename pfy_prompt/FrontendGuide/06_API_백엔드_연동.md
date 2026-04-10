@@ -8,6 +8,13 @@ Vue 프론트엔드와 Spring Boot 백엔드를 연동하여 데이터를 주고
 
 ## 🔧 API 파일 생성 (CRITICAL!)
 
+**⚠️ API 파일명도 반드시 camelCase! 모두 소문자 금지!**
+
+```
+❌ api/pages/edu/pondg/cpmsedupondgedit.ts  ← 잘못됨 (모두 소문자)
+✅ api/pages/edu/pondg/cpmsEduPondgEdit.ts  ← 올바름 (camelCase)
+```
+
 ### Types.ts 위치 (CRITICAL!)
 
 **⚠️ CRITICAL: types.ts는 화면 폴더가 아닌 API 폴더에 위치해야 합니다!**
@@ -18,9 +25,8 @@ api/pages/[module]/[category]/types.ts  ← 공통 types.ts
 ```
 
 **예시**:
-- `api/pages/sy/ds/types.ts` - PMDP020, PMDP030, PMDP040 등 모든 PMDP 화면의 타입
-- `api/pages/sy/ds/spov_types.ts` - SPOV010의 타입
-- `api/pages/sy/ds/spod_types.ts` - SPOD010 등(장바구니 등 공유 타입)
+- `api/pages/sy/ds/types.ts` - PMDP020, PMDP030 등의 타입
+- `api/pages/edu/pondg/types.ts` - cpmsEduPondgEdit, cpmsEduPondgLst 등의 타입
 
 #### ❌ 잘못된 패턴
 ```
@@ -29,8 +35,7 @@ pages/[module]/[category]/[screenId]/types.ts  ← 각 화면 폴더 안 (잘못
 
 **잘못된 예시**:
 - `pages/sy/ds/pmdp030/types.ts` ❌
-- `pages/sy/ds/pmdp040/types.ts` ❌
-- `pages/sy/ds/pmdp100/types.ts` ❌
+- `pages/edu/pondg/cpmsEduPondgEdit/types.ts` ❌
 
 **이유**:
 - 같은 카테고리의 화면들은 타입을 공유하는 경우가 많음
@@ -39,10 +44,13 @@ pages/[module]/[category]/[screenId]/types.ts  ← 각 화면 폴더 안 (잘못
 
 ### 기본 구조
 
+**⚠️ API 파일명도 camelCase! (예: `cpmsEduPondgEdit.ts`, `cpmsEduPondgLst.ts`)**
+
 ```typescript
 /**
- * PMDP020 - 일반보급 요청
+ * cpmsEduPondgEdit - 교육과정 수정
  * API 함수
+ * 파일 위치: api/pages/edu/pondg/cpmsEduPondgEdit.ts (camelCase!)
  */
 
 // ⭐ CRITICAL: 직접 axios import (NOT useHtomssApi)
@@ -52,9 +60,9 @@ import { formatErrorMessage } from '@/utils/formatErrorMessage';
 
 // ⭐ CRITICAL: Types import from same directory
 import {
-  PMDP020SearchParams,
-  PMDP020SelectListResponse,
-  PMDP020SelectStatSumResponse,
+  CpmsEduPondgEditSearchParams,
+  CpmsEduPondgEditSelectListResponse,
+  CpmsEduPondgEditSelectStatSumResponse,
 } from './types';  // ← 같은 디렉토리의 types.ts
 
 // ⭐ CRITICAL: API 엔드포인트 URL 형식
@@ -198,15 +206,17 @@ export const selectDpReqList = async (params: Record<string, any>) => {
 ```bash
 # ✅ 올바른 위치
 touch src/api/pages/sy/ds/types.ts
+touch src/api/pages/edu/pondg/types.ts
 
 # ❌ 잘못된 위치 (하지 마세요!)
 # touch src/pages/sy/ds/pmdp020/types.ts
+# touch src/pages/edu/pondg/cpmsEduPondgEdit/types.ts
 ```
 
 **이유**:
 - 같은 카테고리의 화면들은 타입을 공유하는 경우가 많음
 - API 파일과 같은 위치에 있어 import 경로가 간단함
-- 프로젝트 전체에서 일관된 패턴 유지 (SPOV010, SPOD010 등 참고)
+- 프로젝트 전체에서 일관된 패턴 유지
 
 ### 2.2 SearchParams 인터페이스
 

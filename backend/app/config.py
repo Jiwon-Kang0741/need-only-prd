@@ -25,5 +25,14 @@ class Settings(BaseSettings):
     DOCKER_TIMEOUT_SECONDS: int = 300
     DOCKER_MAX_FIX_RETRIES: int = 3
 
+    # Deploy mode: "docker" (default) or "pfy" (local PFY workspace)
+    CODEGEN_DEPLOY_MODE: str = "docker"
+
+    # PFY local workspace paths (used only when CODEGEN_DEPLOY_MODE == "pfy")
+    PFY_BACKEND_DIR: str = "C:/workspace_pfy/PFY/pfy"
+    PFY_FRONT_DIR: str = "C:/workspace_pfy/PFY/pfy-front"
+    PFY_BACKEND_DEV_PORT: int = 8080
+    PFY_FRONT_DEV_PORT: int = 3000
+
 
 settings = Settings()

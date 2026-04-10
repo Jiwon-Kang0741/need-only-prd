@@ -54,12 +54,16 @@ def _load_guide_dir(dirname: str) -> dict[str, dict[str, str]]:
     return result
 
 
+_TABLE_INFO: str | None = None
+
+
 def invalidate_cache() -> None:
     """Force re-read of guide files on next access."""
-    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT
+    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO
     _BACKEND_SECTIONS = None
     _FRONTEND_SECTIONS = None
     _NAMING_CONTEXT = None
+    _TABLE_INFO = None
 
 
 def _ensure_loaded() -> None:
@@ -98,9 +102,10 @@ _BACKEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
 
 _FRONTEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
     "vue_page": [("00_", None), ("02_", None)],
-    "vue_search_form": [("02_", None), ("03_", None)],
-    "vue_data_table": [("02_", None), ("04_", None)],
-    "vue_sum_grid": [("02_", None), ("05_", None)],
+    "vue_search_form": [("02_", None), ("03_", None), ("07_", None)],
+    "vue_data_table": [("02_", None), ("04_", None), ("07_", None)],
+    "vue_data_table_utils": [("02_", None), ("04_", None)],
+    "vue_sum_grid": [("02_", None), ("05_", None), ("07_", None)],
     "vue_api": [("06_", None)],
     "vue_types": [("06_", None)],
     "vue_scss": [("07_", None)],
@@ -180,6 +185,26 @@ def get_all_frontend_guide() -> str:
         full = "\n".join(_FRONTEND_SECTIONS[fname].values())
         parts.append(f"=== {fname} ===\n{full}")
     return "\n\n".join(parts)
+
+
+def get_table_info() -> str:
+    """Return the PFY DB table schema reference (테이블정보.md).
+
+    This file lists all existing PFYDB tables with column definitions.
+    Agents that generate SQL (db_init_sql, mapper_xml) must check this
+    before creating new tables — if an identical or equivalent table
+    already exists, reuse it and write queries against the existing schema.
+    """
+    global _TABLE_INFO
+    if _TABLE_INFO is not None:
+        return _TABLE_INFO
+    base = Path(settings.PROMPT_REFERENCE_DIR) / "BackendGuide"
+    table_file = base / "테이블정보.md"
+    if table_file.exists():
+        _TABLE_INFO = table_file.read_text(encoding="utf-8")
+    else:
+        _TABLE_INFO = ""
+    return _TABLE_INFO
 
 
 # ---------------------------------------------------------------------------
