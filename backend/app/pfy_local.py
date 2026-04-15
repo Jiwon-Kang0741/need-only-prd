@@ -113,6 +113,96 @@ def resolve_pfy_destination(gf: GeneratedFile) -> Path | None:
     return None
 
 
+def _extract_module_names(generated_files: list[GeneratedFile]) -> set[str]:
+    """Extract unique module names from generated file paths.
+
+    Backend paths:  biz/{module}/dao/...  or  src/main/java/biz/{module}/...
+    Frontend paths: src/pages/{module}/... or src/api/pages/{module}/...
+    Returns a set of module name strings (e.g. {"edu", "sy"}).
+    """
+    import re
+    modules: set[str] = set()
+    # matches biz/{module}/ anywhere in the path
+    biz_re = re.compile(r'(?:^|/)biz/([^/]+)/')
+    # matches pages/{module}/ anywhere in the path
+    pages_re = re.compile(r'(?:^|/)pages/([^/]+)/')
+
+    for gf in generated_files:
+        fp = gf.file_path.replace("\\", "/")
+        for m in biz_re.finditer(fp):
+            modules.add(m.group(1))
+        for m in pages_re.finditer(fp):
+            modules.add(m.group(1))
+    return modules
+
+
+def _rmtree_dir(target: Path, deleted: list[str], failed: list[str]) -> None:
+    """Remove target directory tree, collecting results into deleted/failed lists."""
+    if not target.exists():
+        logger.debug("[DELETE-SOURCE] Dir not found, skipping: %s", target)
+        return
+    try:
+        shutil.rmtree(target)
+        deleted.append(target.as_posix())
+        logger.info("[DELETE-SOURCE] Removed dir %s", target)
+    except Exception as exc:
+        failed.append(target.as_posix())
+        logger.warning("[DELETE-SOURCE] Could not remove dir %s: %s", target, exc)
+
+
+def delete_pfy_generated_files(generated_files: list[GeneratedFile] | None = None) -> dict:
+    """Delete only the generated module directories from the PFY workspace.
+
+    Targets module-level directories, NOT the shared parent roots, so existing
+    business source in other modules is never touched.
+
+    Module names are resolved in this order:
+      1. From generated_files paths (session data) — most precise
+      2. From immediate subdirectories of biz/ on disk (fallback when session expired)
+
+    Deleted directories per module:
+      Backend Java:      PFY_BACKEND_DIR/src/main/java/biz/{module}/
+      Backend resources: PFY_BACKEND_DIR/src/main/resources/biz/{module}/
+      Frontend pages:    PFY_FRONT_DIR/src/pages/{module}/
+      Frontend api:      PFY_FRONT_DIR/src/api/pages/{module}/
+
+    Returns {"deleted": [...], "failed": [...]} with absolute posix paths.
+    """
+    deleted: list[str] = []
+    failed: list[str] = []
+
+    # --- Resolve module names ---
+    modules: set[str] = set()
+    if generated_files:
+        modules = _extract_module_names(generated_files)
+        logger.info("[DELETE-SOURCE] Modules from session: %s", modules)
+
+    if not modules:
+        # Fallback: scan immediate subdirectories of biz/ on disk
+        biz_java = Path(settings.PFY_BACKEND_DIR) / "src" / "main" / "java" / "biz"
+        if biz_java.exists():
+            modules = {d.name for d in biz_java.iterdir() if d.is_dir()}
+            logger.info("[DELETE-SOURCE] No session data — modules from disk scan: %s", modules)
+
+    if not modules:
+        logger.info("[DELETE-SOURCE] No generated modules found. Nothing to delete.")
+        return {"deleted": deleted, "failed": failed}
+
+    # --- Delete per-module directories ---
+    be_java_root = Path(settings.PFY_BACKEND_DIR) / "src" / "main" / "java" / "biz"
+    be_res_root  = Path(settings.PFY_BACKEND_DIR) / "src" / "main" / "resources" / "biz"
+    fe_pages_root = Path(settings.PFY_FRONT_DIR) / "src" / "pages"
+    fe_api_root   = Path(settings.PFY_FRONT_DIR) / "src" / "api" / "pages"
+
+    for module in sorted(modules):
+        _rmtree_dir(be_java_root / module,   deleted, failed)
+        _rmtree_dir(be_res_root  / module,   deleted, failed)
+        _rmtree_dir(fe_pages_root / module,  deleted, failed)
+        _rmtree_dir(fe_api_root   / module,  deleted, failed)
+
+    return {"deleted": deleted, "failed": failed}
+
+
 def write_generated_files_to_pfy(files: list[GeneratedFile]) -> list[Path]:
     """Write generated files to the PFY workspace. Returns list of written paths."""
     written: list[Path] = []

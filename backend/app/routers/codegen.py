@@ -444,39 +444,55 @@ async def container_status(session_id: str = Depends(get_session_id)):
 # ---------------------------------------------------- delete source
 @router.post("/delete-source")
 async def delete_source(session_id: str = Depends(get_session_id)):
-    """Delete all generated files from disk (PFY workspace or skeleton) and reset session state."""
+    """Delete all generated files from the PFY workspace (or skeleton) and reset session state.
+
+    pfy mode  — scans generated-code directories directly (no session dependency):
+                  backend: biz/ Java + resources, frontend: src/pages/ + src/api/pages/
+    docker mode — removes the session-scoped workspace directory.
+    Session codegen state is always reset to idle regardless of mode.
+    """
     session = _get_session(session_id)
     codegen = session.codegen
 
-    deleted: list[str] = []
-    if codegen and codegen.generated_files:
-        if settings.CODEGEN_DEPLOY_MODE == "pfy":
-            from app.pfy_local import resolve_pfy_destination
-            for gf in codegen.generated_files:
-                dest = resolve_pfy_destination(gf)
-                if dest and dest.exists():
-                    try:
-                        dest.unlink()
-                        deleted.append(dest.as_posix())
-                        logger.info("[DELETE-SOURCE] Removed %s", dest)
-                    except Exception as exc:
-                        logger.warning("[DELETE-SOURCE] Could not remove %s: %s", dest, exc)
-        else:
-            # skeleton mode: remove the session workspace directory
-            import shutil
-            session_ws = docker_manager._workspace(session_id)
-            if session_ws.exists():
-                shutil.rmtree(session_ws, ignore_errors=True)
-                deleted.append(str(session_ws))
+    logger.info("[DELETE-SOURCE] session=%s mode=%s", session_id, settings.CODEGEN_DEPLOY_MODE)
 
-        # Reset codegen state to idle
+    deleted: list[str] = []
+    failed: list[str] = []
+    not_found: list[str] = []  # kept for API compatibility
+
+    if settings.CODEGEN_DEPLOY_MODE == "pfy":
+        from app.pfy_local import delete_pfy_generated_files
+        # Pass session's generated_files so module names can be extracted precisely.
+        # delete_pfy_generated_files falls back to disk scan if the list is empty.
+        gf_list = codegen.generated_files if codegen else []
+        result = delete_pfy_generated_files(gf_list)
+        deleted = result["deleted"]
+        failed = result["failed"]
+    else:
+        # skeleton / docker mode: remove the session workspace directory
+        import shutil
+        session_ws = docker_manager._workspace(session_id)
+        if session_ws.exists():
+            shutil.rmtree(session_ws, ignore_errors=True)
+            deleted.append(str(session_ws))
+            logger.info("[DELETE-SOURCE] Removed workspace %s", session_ws)
+
+    # Always reset session codegen state to idle
+    if codegen:
         codegen.generated_files = []
         codegen.status = "idle"
         codegen.plan = None
         codegen.error = None
         codegen.build_logs = []
+    session_store.save(session_id)
 
-    return {"deleted": len(deleted), "paths": deleted}
+    logger.info("[DELETE-SOURCE] done. deleted=%d failed=%d", len(deleted), len(failed))
+    return {
+        "deleted": len(deleted),
+        "paths": deleted,
+        "not_found": not_found,
+        "failed": failed,
+    }
 
 
 # --------------------------------------------------------- docker check

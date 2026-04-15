@@ -161,9 +161,9 @@ export async function stopContainers(): Promise<void> {
   await fetch('/api/codegen/stop', { method: 'POST', headers: apiHeaders() })
 }
 
-export async function deleteSource(): Promise<{ deleted: number }> {
+export async function deleteSource(): Promise<{ deleted: number; not_found: string[]; failed: string[] }> {
   const res = await fetch('/api/codegen/delete-source', { method: 'POST', headers: apiHeaders() })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
   return res.json()
 }
 

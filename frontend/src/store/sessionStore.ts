@@ -194,10 +194,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
             content: event.content ?? state.codeGen.currentFileContent,
             layer: (event.layer ?? 'backend') as 'backend' | 'frontend',
           }
+          const existingIndex = state.codeGen.generatedFiles.findIndex(
+            (f) => f.file_path === newFile.file_path
+          )
+          const updatedFiles =
+            existingIndex >= 0
+              ? state.codeGen.generatedFiles.map((f, i) => (i === existingIndex ? newFile : f))
+              : [...state.codeGen.generatedFiles, newFile]
           return {
             codeGen: {
               ...state.codeGen,
-              generatedFiles: [...state.codeGen.generatedFiles, newFile],
+              generatedFiles: updatedFiles,
               currentFileContent: event.content ?? '',
             },
           }
@@ -277,9 +284,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       if (get().codeGen.status === 'running') {
         await apiStopContainers()
       }
-      await apiDeleteSource()
+      const result = await apiDeleteSource()
+      const total = result.deleted + result.not_found.length + result.failed.length
+      if (total === 0) {
+        alert('삭제할 파일이 없습니다. (세션에 생성된 파일 정보가 없습니다)')
+      } else if (result.failed.length > 0) {
+        alert(`파일 삭제 완료: ${result.deleted}개 삭제, ${result.not_found.length}개 없음, ${result.failed.length}개 실패\n실패: ${result.failed.join('\n')}`)
+      } else if (result.deleted === 0 && result.not_found.length > 0) {
+        alert(`파일이 이미 삭제되었거나 경로를 찾을 수 없습니다.\n대상 경로: ${result.not_found.slice(0, 3).join('\n')}${result.not_found.length > 3 ? '\n...' : ''}`)
+      }
       set({ codeGen: { ...initialCodeGen } })
-    } catch { /* ignore */ }
+    } catch (e) {
+      alert(`Delete Source 실패: ${e instanceof Error ? e.message : String(e)}`)
+    }
   },
 
   loadSpecFromText: async (text: string) => {

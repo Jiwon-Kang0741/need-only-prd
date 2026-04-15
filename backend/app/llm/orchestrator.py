@@ -18,6 +18,9 @@ from app.llm.agents import (
     PlannerAgent,
     QAEngineerAgent,
     SharedContext,
+    _post_fix_cross_check,
+    organize_imports_for_files,
+    postprocess_backend_files,
     static_check,
 )
 from app.models import AgentStatus, GeneratedFile
@@ -130,9 +133,44 @@ class CodeGenOrchestrator:
         yield {"type": "agent_complete", "agent": "frontend_engineer", "files_count": len(fe_results)}
 
         # ------------------------------------------------------------------
-        # Phase 3.5: Static Check (no LLM)
+        # Phase 3.5: Backend Cross-File Consistency Check (no LLM)
+        # ALWAYS runs after backend generation regardless of LLM output.
+        # Programmatically adds missing DAO methods and DTO fields so that
+        # ServiceImpl never references something that doesn't exist.
         # ------------------------------------------------------------------
-        static_issues = static_check(list(ctx.generated_files.values()))
+        yield {"type": "status", "message": "Cross-checking backend file consistency (DTO ↔ DAO ↔ Service)..."}
+        try:
+            pre_qa_repairs = _post_fix_cross_check(ctx)
+            if pre_qa_repairs:
+                for repair in pre_qa_repairs:
+                    fp = repair.get("file_path", "")
+                    fc = repair.get("content", "")
+                    if not fp or not fc:
+                        continue
+                    for path, gf in ctx.generated_files.items():
+                        if path == fp or fp.endswith(gf.file_path):
+                            gf.content = fc
+                            yield {"type": "log", "line": f"[CROSS-CHECK] Auto-repaired {gf.file_path}"}
+                            yield {"type": "file_complete", "agent": "backend_engineer",
+                                   "file_path": gf.file_path, "file_type": gf.file_type,
+                                   "layer": gf.layer, "content": gf.content}
+                            break
+                yield {"type": "log", "line": f"[CROSS-CHECK] {len(pre_qa_repairs)} file(s) auto-repaired before QA"}
+            else:
+                yield {"type": "log", "line": "[CROSS-CHECK] All backend files consistent — no repairs needed"}
+        except Exception as e:
+            logger.exception("[CROSS-CHECK] CRITICAL: pre-QA cross-check FAILED — %s", e)
+            yield {"type": "log", "line": f"[CROSS-CHECK] ERROR: cross-check failed: {e}"}
+
+        # ------------------------------------------------------------------
+        # Phase 3.6: Static Check (no LLM)
+        # ------------------------------------------------------------------
+        try:
+            static_issues = static_check(list(ctx.generated_files.values()))
+        except Exception as e:
+            logger.exception("[STATIC] CRITICAL: static_check FAILED — %s", e)
+            yield {"type": "log", "line": f"[STATIC] ERROR: static_check failed: {e}"}
+            static_issues = []
         if static_issues:
             for iss in static_issues:
                 yield {"type": "log", "line": f"[STATIC] {iss['file_path']}: {iss['issue']}"}
@@ -211,6 +249,63 @@ class CodeGenOrchestrator:
             yield {"type": "agent_complete", "agent": "fix_agent", "files_count": len(fixes)}
         else:
             yield {"type": "log", "line": "[QA] No issues found — skipping Fix Agent"}
+
+        # ------------------------------------------------------------------
+        # Phase 6: Final Backend Validation (no LLM)
+        # 1. Cross-check again (Fix Agent may have introduced new mismatches)
+        # 2. Postprocess + organize imports
+        # 3. Static check for any remaining issues
+        # ------------------------------------------------------------------
+        yield {"type": "status", "message": "Running final backend validation..."}
+
+        # 6a. Cross-file consistency check (catches Fix Agent regressions)
+        try:
+            final_repairs = _post_fix_cross_check(ctx)
+            if final_repairs:
+                for repair in final_repairs:
+                    fp = repair.get("file_path", "")
+                    fc = repair.get("content", "")
+                    if not fp or not fc:
+                        continue
+                    for path, gf in ctx.generated_files.items():
+                        if path == fp or fp.endswith(gf.file_path):
+                            gf.content = fc
+                            yield {"type": "log", "line": f"[FINAL REPAIR] Auto-repaired {gf.file_path}"}
+                            yield {"type": "file_complete", "agent": "fix_agent",
+                                   "file_path": gf.file_path, "file_type": gf.file_type,
+                                   "layer": gf.layer, "content": gf.content}
+                            break
+                yield {"type": "log", "line": f"[FINAL REPAIR] {len(final_repairs)} file(s) auto-repaired in final pass"}
+        except Exception as e:
+            logger.exception("[FINAL REPAIR] CRITICAL: post-fix cross-check FAILED — %s", e)
+            yield {"type": "log", "line": f"[FINAL REPAIR] ERROR: cross-check failed: {e}"}
+
+        # 6b. Postprocess + organize imports
+        try:
+            backend_files = [gf for gf in ctx.generated_files.values() if gf.layer == "backend"]
+            if backend_files:
+                postprocess_backend_files(backend_files)
+                organize_imports_for_files(backend_files)
+                for gf in backend_files:
+                    ctx.generated_files[gf.file_path] = gf
+        except Exception as e:
+            logger.exception("[FINAL] CRITICAL: postprocess/organize_imports FAILED — %s", e)
+            yield {"type": "log", "line": f"[FINAL] ERROR: postprocess failed: {e}"}
+
+        # 6c. Final static check
+        try:
+            final_issues = static_check(list(ctx.generated_files.values()))
+        except Exception as e:
+            logger.exception("[FINAL CHECK] CRITICAL: final static_check FAILED — %s", e)
+            yield {"type": "log", "line": f"[FINAL CHECK] ERROR: static_check failed: {e}"}
+            final_issues = []
+
+        if final_issues:
+            for iss in final_issues:
+                yield {"type": "log", "line": f"[FINAL CHECK] {iss.get('file_path', '')}: {iss.get('issue', '')}"}
+            yield {"type": "log", "line": f"[FINAL CHECK] {len(final_issues)} remaining issue(s) detected after fix"}
+        else:
+            yield {"type": "log", "line": "[FINAL CHECK] All backend files passed validation"}
 
         # ------------------------------------------------------------------
         # Complete

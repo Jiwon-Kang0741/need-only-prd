@@ -62,24 +62,77 @@ import Calendar from 'primevue/calendar';
 
 **⚠️ 주의**: SearchForm은 반드시 별도 파일로 분리! index.vue에 인라인으로 넣지 마세요!
 
+**⚠️ CRITICAL: SearchFormRow로 필드를 감싸야 가로 배치됩니다! SearchFormRow 없이 SearchFormField를 직접 나열하면 세로 1열로 쌓입니다!**
+
 ```vue
 <!-- CpmsEduPondgEditSearchForm.vue (또는 PMDP010SearchForm.vue) -->
 <template>
-  <SearchForm ref="searchFormRef" v-bind="searchFormConfig">
-    <template #additionalButtons>
-      <Button label="조회" icon="pi pi-search" @click="handleSearch" />
-    </template>
+  <SearchForm
+    ref="searchFormRef"
+    :initialValues="initialValues"
+    @submit="handleSubmit"
+    @reset="handleReset"
+  >
+    <!-- ⭐ CRITICAL: SearchFormRow로 감싸야 가로 배치! -->
+    <SearchFormRow>
+      <SearchFormField v-slot="{ props }" name="field1">
+        <SearchFormLabel>라벨1</SearchFormLabel>
+        <SearchFormContent>
+          <InputText v-bind="props" placeholder="입력" />
+        </SearchFormContent>
+      </SearchFormField>
+
+      <SearchFormField v-slot="{ props }" name="field2">
+        <SearchFormLabel>라벨2</SearchFormLabel>
+        <SearchFormContent>
+          <Select v-bind="props" :options="options" optionLabel="name" optionValue="value" />
+        </SearchFormContent>
+      </SearchFormField>
+
+      <SearchFormField v-slot="{ props }" name="field3">
+        <SearchFormLabel>라벨3</SearchFormLabel>
+        <SearchFormContent>
+          <InputText v-bind="props" placeholder="입력" />
+        </SearchFormContent>
+      </SearchFormField>
+    </SearchFormRow>
+
+    <!-- 두 번째 행 -->
+    <SearchFormRow>
+      <SearchFormField v-slot="{ props }" name="field4">
+        <SearchFormLabel>라벨4</SearchFormLabel>
+        <SearchFormContent>
+          <InputText v-bind="props" placeholder="입력" />
+        </SearchFormContent>
+      </SearchFormField>
+
+      <!-- ⭐ SearchFormFieldGroup: 관련 필드 묶기 (예: 날짜유형 + 날짜범위) -->
+      <SearchFormFieldGroup>
+        <SearchFormField v-slot="{ props }" name="dateType">
+          <SearchFormLabel>조회기간</SearchFormLabel>
+          <SearchFormContent>
+            <Select v-bind="props" :options="dateTypeOptions" optionLabel="name" optionValue="value" />
+          </SearchFormContent>
+        </SearchFormField>
+        <SearchFormField v-slot="{ props }" name="dateRange">
+          <SearchFormContent>
+            <DatePicker v-bind="props" selectionMode="range" showIcon style="min-width: 255px" />
+          </SearchFormContent>
+        </SearchFormField>
+      </SearchFormFieldGroup>
+    </SearchFormRow>
   </SearchForm>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, inject, watch } from 'vue';
+import { ref, computed, inject, watch, onMounted } from 'vue';
 import type { Ref } from 'vue';
 
 import { 
   SearchForm, 
   SearchFormContent, 
   SearchFormField, 
+  SearchFormFieldGroup,
   SearchFormRow 
 } from '@/components/common/searchForm';
 import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
@@ -88,7 +141,6 @@ import { DatePicker } from '@/components/common/datePicker';
 import InputText from '@/components/common/inputText/InputText.vue';
 import Select from '@/components/common/select/Select.vue';
 
-import type { SearchFormConfig } from '@/components/SearchForm/types';
 // ⭐ 타입은 api/pages/[module]/[category]/types.ts에서 import
 import type { CpmsEduPondgEditSearchParams } from '@/api/pages/edu/pondg/types';
 
@@ -100,12 +152,14 @@ const emit = defineEmits<Emits>();
 const searchParams = inject<Ref<CpmsEduPondgEditSearchParams>>('searchParams')!;
 const searchFormRef = ref();
 
-const searchFormConfig = computed<SearchFormConfig>(() => ({
-  // ...
-}));
+const initialValues = { /* 초기값 */ };
 
-const handleSearch = () => {
+const handleSubmit = () => {
   emit('search');
+};
+
+const handleReset = () => {
+  // 초기화 로직
 };
 
 defineExpose({
@@ -117,8 +171,34 @@ defineExpose({
 <style scoped lang="scss" src="./CpmsEduPondgEditSearchForm.scss"></style>
 ```
 
-**⚠️ 중요**: `<style>` 태그에 SCSS 파일을 연결해야 합니다!
+**⚠️ 중요**:
+- `<style>` 태그에 SCSS 파일을 연결해야 합니다!
 - SCSS 파일명은 Vue 파일명과 동일하게 PascalCase (예: `CpmsEduPondgEditSearchForm.scss`)
+
+### 1.4 레이아웃 규칙 (CRITICAL!)
+
+**⚠️ SearchFormRow를 사용하지 않으면 필드가 세로로 쌓입니다!**
+
+```
+❌ WRONG (세로 배치 — SearchFormRow 없음):
+┌──────────────────────────────────────────────┐
+│ 라벨1  [입력]                                 │
+│ 라벨2  [입력]                                 │
+│ 라벨3  [입력]                                 │
+│ 라벨4  [입력]                      [초기화][조회]│
+└──────────────────────────────────────────────┘
+
+✅ CORRECT (가로 배치 — SearchFormRow 사용):
+┌──────────────────────────────────────────────┐
+│ 라벨1  [입력]  라벨2  [입력]  라벨3  [입력]     │
+│ 라벨4  [입력]  라벨5  [입력]        [초기화][조회]│
+└──────────────────────────────────────────────┘
+```
+
+**규칙**:
+1. 한 `SearchFormRow`에 2~3개 `SearchFormField`를 배치 → 가로 배치
+2. 관련 필드(예: 날짜유형 + 날짜범위)는 `SearchFormFieldGroup`으로 묶기
+3. 전체 필드 수가 4개 이하면 `SearchFormRow` 1개, 5개 이상이면 2개 이상으로 분할
 
 ## 📝 Step 2: 공통코드 로딩
 
@@ -480,38 +560,118 @@ const handleSearch = async () => {
 
 ## 📝 Step 7: 완성 코드
 
+**⚠️ CRITICAL: SearchFormRow를 사용하여 필드를 가로 배치해야 합니다!**
+
 ```vue
 <template>
-  <SearchForm ref="searchFormRef" v-bind="searchFormConfig">
-    <template #additionalButtons>
-      <Button label="조회" icon="pi pi-search" @click="handleSearch" />
-    </template>
+  <SearchForm
+    ref="searchFormRef"
+    :initialValues="initialValues"
+    @submit="handleSubmit"
+    @reset="handleReset"
+  >
+    <!-- ⭐ CRITICAL: SearchFormRow로 감싸서 가로 배치 -->
+    <SearchFormRow>
+      <SearchFormField v-slot="{ props, invalid }" name="prg_stat">
+        <SearchFormLabel>진행상태</SearchFormLabel>
+        <SearchFormContent>
+          <Select
+            v-bind="props"
+            :invalid="invalid"
+            :options="prgStatOptions"
+            optionLabel="name"
+            optionValue="value"
+          />
+        </SearchFormContent>
+      </SearchFormField>
+
+      <SearchFormField v-slot="{ props, invalid }" name="canc_stat">
+        <SearchFormLabel>철회상태</SearchFormLabel>
+        <SearchFormContent>
+          <Select
+            v-bind="props"
+            :invalid="invalid"
+            :options="cancStatOptions"
+            optionLabel="name"
+            optionValue="value"
+          />
+        </SearchFormContent>
+      </SearchFormField>
+
+      <!-- ⭐ SearchFormFieldGroup: 날짜유형 + 날짜범위 묶기 -->
+      <SearchFormFieldGroup>
+        <SearchFormField v-slot="{ props }" name="searchDtType">
+          <SearchFormLabel>조회일자</SearchFormLabel>
+          <SearchFormContent>
+            <Select
+              v-bind="props"
+              :options="searchDtTypeOptions"
+              optionLabel="name"
+              optionValue="value"
+            />
+          </SearchFormContent>
+        </SearchFormField>
+        <SearchFormField v-slot="{ props }" name="searchDt">
+          <SearchFormContent>
+            <DatePicker
+              v-bind="props"
+              :numberOfMonths="2"
+              selectionMode="range"
+              showIcon
+              iconDisplay="input"
+              style="min-width: 255px"
+            />
+          </SearchFormContent>
+        </SearchFormField>
+      </SearchFormFieldGroup>
+    </SearchFormRow>
+
+    <SearchFormRow>
+      <SearchFormField v-slot="{ props, invalid }" name="cont_no">
+        <SearchFormLabel>계약번호</SearchFormLabel>
+        <SearchFormContent>
+          <InputText v-bind="props" :invalid="invalid" placeholder="계약번호 입력" />
+        </SearchFormContent>
+      </SearchFormField>
+    </SearchFormRow>
   </SearchForm>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed, inject, watch, onMounted } from 'vue';
 import type { Ref } from 'vue';
-import SearchForm from '@/components/SearchForm/SearchForm.vue';
-import Button from 'primevue/button';
-import type { SearchFormConfig } from '@/components/SearchForm/types';
+import {
+  SearchForm,
+  SearchFormContent,
+  SearchFormField,
+  SearchFormFieldGroup,
+  SearchFormRow,
+} from '@/components/common/searchForm';
+import SearchFormLabel from '@/components/common/searchForm/SearchFormLabel.vue';
+import { Button } from '@/components/common/button';
+import { DatePicker } from '@/components/common/datePicker';
+import InputText from '@/components/common/inputText/InputText.vue';
+import Select from '@/components/common/select/Select.vue';
 import type { PMDP010SearchParams } from '@/api/pages/sy/ds/types';
-import { useCommonCodeStore } from '@/stores/commonCode';
+import { useCommonCodeStore } from '@/stores/commonCodeStore';
 
-// Emits
 interface Emits {
   (e: 'search'): void;
 }
 const emit = defineEmits<Emits>();
 
-// Inject & Stores
 const searchParams = inject<Ref<PMDP010SearchParams>>('searchParams')!;
 const commonCodeStore = useCommonCodeStore();
-
-// Refs
 const searchFormRef = ref();
 
-// 공통코드 로딩
+const initialValues = {
+  prg_stat: '',
+  canc_stat: '',
+  cont_no: '',
+  searchDtType: 'askDt',
+  searchDt: null,
+};
+
 onMounted(async () => {
   await commonCodeStore.loadMulti([
     {
@@ -525,74 +685,16 @@ onMounted(async () => {
   ]);
 });
 
-// 공통코드 옵션
-const prgStatOptions = computed(() => 
+const prgStatOptions = computed(() =>
   commonCodeStore.options('MNPS010Query.StatComboIn', true, '전체', 'ALL')
 );
-
-const cancStatOptions = computed(() => 
+const cancStatOptions = computed(() =>
   commonCodeStore.options('COM_PBL_0005', true, '전체', 'ALL', "P_CODE_CD='C'")
 );
-
-// SearchForm 설정
-const searchFormConfig = computed<SearchFormConfig>(() => ({
-  groups: [
-    {
-      label: '검색조건',
-      fields: [
-        {
-          name: 'searchDtType',
-          label: '조회일자',
-          component: 'RadioButtonGroup',
-          props: {
-            options: [
-              { label: '의뢰일자', value: 'askDt' },
-              { label: '요청일자', value: 'reqDt' },
-            ],
-            defaultValue: 'askDt',
-          },
-        },
-        {
-          name: 'searchDt',
-          label: ' ',
-          component: 'Calendar',
-          props: {
-            selectionMode: 'range',
-            placeholder: '날짜 선택',
-          },
-        },
-        {
-          name: 'prg_stat',
-          label: '진행상태',
-          component: 'Select',
-          props: {
-            options: prgStatOptions.value,
-            placeholder: '전체',
-            showClear: true,
-          },
-        },
-        {
-          name: 'canc_stat',
-          label: '철회상태',
-          component: 'Select',
-          props: {
-            options: cancStatOptions.value,
-            placeholder: '전체',
-            showClear: true,
-          },
-        },
-        {
-          name: 'cont_no',
-          label: '계약번호',
-          component: 'InputText',
-          props: {
-            placeholder: '계약번호 입력',
-          },
-        },
-      ],
-    },
-  ],
-}));
+const searchDtTypeOptions = [
+  { name: '의뢰일자', value: 'askDt' },
+  { name: '요청일자', value: 'reqDt' },
+];
 
 // ⭐⭐⭐ CRITICAL: SelectBox 동기화 watch
 watch(
@@ -613,20 +715,20 @@ watch(
   }
 );
 
-// 조회 버튼 클릭
-const handleSearch = () => {
+const handleSubmit = () => {
   emit('search');
 };
 
-// Expose
+const handleReset = () => {
+  // 초기화 시 추가 로직
+};
+
 defineExpose({
   searchFormRef,
 });
 </script>
 
-<style scoped lang="scss">
-@import './pmdp010SearchForm.scss';
-</style>
+<style scoped lang="scss" src="./PMDP010SearchForm.scss"></style>
 ```
 
 ## ✅ 구현 완료 체크리스트
