@@ -114,6 +114,45 @@ _BACKEND_CHECKS = [
      "NEVER use a domain ResDto as a result container. "
      "Create a dedicated result DTO (e.g. XxxUploadResultDto) for batch operation results, "
      "or return a plain Map / int count from the service method."),
+    # Object parameter type in DaoImpl — forbidden, always use concrete DTO type
+    (re.compile(r'public\s+\S+\s+\w+\s*\(\s*Object\s+\w+\s*\)'),
+     "DaoImpl method has 'Object' as parameter type — NEVER use Object. "
+     "Replace with the ACTUAL generated DTO class name (e.g. CpmsEduRegLstReqDto or CpmsEduRegLstResDto). "
+     "For next-ID / sequence methods with no meaningful param, use empty params: public int selectXxxNextId() { ... null }"),
+    # Explicit well-known wrong type names (saveDto, reqDto, resDto, dto, etc.)
+    (re.compile(
+        r'public\s+\S+\s+\w+\s*\(\s*'
+        r'(?:saveDto|reqDto|resDto|dto|Dto|item|row|entity|record|data|obj|request|response|model|form|vo|bean|param)\s+\w+\s*\)',
+        re.IGNORECASE,
+     ),
+     "DaoImpl method has a FORBIDDEN parameter type name (saveDto/reqDto/dto/item/row/entity/etc.) — "
+     "these are NOT Java class names and cause compilation errors. "
+     "Replace with the ACTUAL generated DTO class name. "
+     "For select queries: use CpmsXxxReqDto. For CUD (insert/update/delete): use CpmsXxxResDto or List<CpmsXxxResDto>. "
+     "WRONG: selectDuplicateCount(saveDto param). "
+     "CORRECT: selectDuplicateCount(CpmsEduRegLstResDto param)."),
+    # Lowercase or non-DTO single-word type name in DaoImpl method parameter (catch-all)
+    # Allowed single-token types: concrete *ReqDto/*ResDto classes (CamelCase ending in Dto),
+    #   String, int, long, Integer, Long, boolean, Boolean, double, Double
+    (re.compile(
+        r'public\s+\S+\s+\w+\s*\(\s*'
+        r'(?!(?:String|int|long|Integer|Long|boolean|Boolean|double|Double|List)\b)'
+        r'([a-z][a-zA-Z0-9]*|[A-Z][a-zA-Z0-9]*(?<!Dto)(?<!ReqDto)(?<!ResDto))\s+\w+\s*\)',
+     ),
+     "DaoImpl method has an invalid parameter type — only ACTUAL generated DTO classes (ending in ReqDto/ResDto), "
+     "List<XxxResDto>, String/int/long/Integer/Long/boolean, or empty () are allowed. "
+     "Replace with the ACTUAL generated DTO class name — check what DTO classes exist in the Dependencies section. "
+     "WRONG: selectDuplicateCount(item param) / (row param) / (dto param) / (saveDto param). "
+     "CORRECT: selectDuplicateCount(CpmsXxxResDto param)."),
+    # delete-named DaoImpl method using super.update() — must use super.delete()
+    (re.compile(r'public\s+\S+\s+delete\w+\s*\([^)]*\)\s*\{[^}]*super\s*\.\s*update\s*\(', re.DOTALL),
+     "DaoImpl delete method uses super.update() — WRONG. "
+     "delete-named methods MUST use super.delete() or super.batchUpdateReturnSumAffectedRows() for lists. "
+     "CORRECT: return super.delete(\"deleteXxx\", param); or super.batchUpdateReturnSumAffectedRows(\"deleteXxx\", list)"),
+    # update-named DaoImpl method using super.delete() — must use super.update()
+    (re.compile(r'public\s+\S+\s+update\w+\s*\([^)]*\)\s*\{[^}]*super\s*\.\s*delete\s*\(', re.DOTALL),
+     "DaoImpl update method uses super.delete() — WRONG. "
+     "update-named methods MUST use super.update() or super.batchUpdateReturnSumAffectedRows() for lists."),
 ]
 
 _FRONTEND_CHECKS = [
@@ -172,6 +211,9 @@ _PAGINATION_CONTAINER_FIELDS: frozenset[str] = frozenset({
     "totalElements", "totalPages", "pageNumber", "numberOfElements", "last", "first",
     # Batch-upload result container fields
     "rowResults", "processedCount", "duplicateCount",
+    "uploadRowCount", "successCount", "failCount", "errorCount",
+    "totalCount", "insertCount", "updateCount", "deleteCount",
+    "skipCount", "resultList", "errorList", "successList",
 })
 
 
@@ -233,6 +275,8 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
         elif "ServiceImpl" in class_name:
             service_files.append(gf)
 
+    generated_dto_classes: set[str] = set(dto_fields.keys())
+
     # --- 1. DTO getter/setter field existence check ---
     # Matches:  CpmsEduResDto dto = ...    (assignment)
     #           CpmsEduResDto dto;         (declaration)
@@ -243,7 +287,8 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
         r'(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*(?:[=;,):])|\bfor\s*\(\s*(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*:'
     )
 
-    for gf in service_files:
+    for gf in service_files + dao_files:
+        is_dao = gf in dao_files
         var_to_dto: dict[str, str] = {}
         for m in var_type_re.finditer(gf.content):
             # Group 1+2: normal declaration/assignment/param
@@ -273,10 +318,8 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
             if prop_name not in fields:
                 dto_file = dto_file_paths.get(dto_name, gf.file_path)
                 if prop_name in _PAGINATION_CONTAINER_FIELDS:
-                    # Pagination/container fields must NEVER be added to a domain ResDto.
-                    # Fix ServiceImpl: remove the container pattern, return List<ResDto> directly.
                     issues.append({
-                        "file_path": gf.file_path,  # Fix ServiceImpl, NOT the DTO
+                        "file_path": gf.file_path,
                         "issue": (
                             f"[STATIC] {var_name}.{method_type}{prop_upper}() called in {gf.file_path} "
                             f"but '{prop_name}' is a pagination/batch-result container field that "
@@ -296,9 +339,25 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                             f"  3. Return the DAO result List<{dto_name}> directly."
                         ),
                     })
+                elif is_dao:
+                    issues.append({
+                        "file_path": gf.file_path,
+                        "issue": (
+                            f"[STATIC] {var_name}.{method_type}{prop_upper}() called in DaoImpl {gf.file_path} "
+                            f"but field '{prop_name}' does NOT exist in {dto_name}. "
+                            f"DaoImpl MUST NOT access non-existent DTO fields."
+                        ),
+                        "fix_instruction": (
+                            f"REMOVE the {var_name}.{method_type}{prop_upper}() call from {gf.file_path}. "
+                            f"DaoImpl methods should be simple one-liner delegations to super methods — "
+                            f"they MUST NOT manipulate DTO fields. "
+                            f"If the field is genuinely needed, ADD 'private String {prop_name};' to {dto_name} FIRST. "
+                            f"Currently declared fields in {dto_name}: {', '.join(sorted(fields)[:15])}"
+                        ),
+                    })
                 else:
                     issues.append({
-                        "file_path": dto_file,  # Fix Agent will modify the DTO file
+                        "file_path": dto_file,
                         "issue": (
                             f"[STATIC] {var_name}.{method_type}{prop_upper}() called in {gf.file_path} "
                             f"but field '{prop_name}' does NOT exist in {dto_name}"
@@ -402,6 +461,33 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                                 ),
                             })
 
+    # --- 2b. DaoImpl parameter type must be an ACTUAL generated DTO class ---
+    _dao_param_type_re = re.compile(
+        r'public\s+\S+\s+\w+\s*\(\s*(\w+)\s+\w+\s*\)'
+    )
+    _ALLOWED_PRIMITIVE_TYPES = {"String", "int", "long", "Integer", "Long", "boolean", "Boolean", "double", "Double"}
+    for gf in dao_files:
+        for m in _dao_param_type_re.finditer(gf.content):
+            param_type = m.group(1)
+            if param_type in _ALLOWED_PRIMITIVE_TYPES or param_type == "List":
+                continue
+            if param_type in generated_dto_classes:
+                continue
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": (
+                    f"[STATIC] DaoImpl method has parameter type '{param_type}' which is NOT "
+                    f"one of the generated DTO classes: {', '.join(sorted(generated_dto_classes))}. "
+                    f"This will cause a compilation error."
+                ),
+                "fix_instruction": (
+                    f"Replace '{param_type}' with one of the ACTUAL generated DTO classes: "
+                    f"{', '.join(sorted(generated_dto_classes))}. "
+                    f"For select queries use the ReqDto class. For CUD (insert/update/delete) use the ResDto class. "
+                    f"For sequence/next-ID methods with no meaningful param, use empty params and pass null."
+                ),
+            })
+
     # --- 3. Return type / Object assignment check ---
     _bad_object_re = re.compile(
         r'Object\s+\w+\s*=\s*\w+\.\w+\s*\(',
@@ -424,7 +510,65 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                 "fix_instruction": "Move file parsing logic to ServiceImpl; DAO should only handle DB operations via MyBatis",
             })
 
-    # --- 5. ServiceImpl public methods without @ServiceId ---
+    # --- 5. ServiceImpl imports a DTO class that was never generated ---
+    _biz_import_re = re.compile(r'import\s+biz\.\w+\.dto\.\w+\.(\w+)\s*;')
+    for gf in service_files:
+        for m in _biz_import_re.finditer(gf.content):
+            imported_class = m.group(1)
+            if imported_class not in generated_dto_classes:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": (
+                        f"[STATIC] ServiceImpl imports '{imported_class}' but this DTO class was NEVER generated. "
+                        f"Generated DTOs are: {', '.join(sorted(generated_dto_classes))}. "
+                        f"ServiceImpl MUST NOT import or use non-existent DTO classes."
+                    ),
+                    "fix_instruction": (
+                        f"REMOVE the import of '{imported_class}' and ALL usages of it in {gf.file_path}. "
+                        f"Only use DTO classes that were actually generated: "
+                        f"{', '.join(sorted(generated_dto_classes))}. "
+                        f"If this DTO was needed for ExcelUpload / complex param passing, "
+                        f"add the necessary fields to the existing ReqDto instead of inventing a new class."
+                    ),
+                })
+
+    # --- 6. Mapper XML <if test="fieldName"> references non-existent DTO field ---
+    _if_test_re = re.compile(r'<if\s+test\s*=\s*"(\w+)\s*!=\s*null', re.IGNORECASE)
+    _mapper_param_type_re = re.compile(r'parameterType\s*=\s*"[^"]*\.(\w+)"')
+    mapper_files = [gf for gf in files if gf.file_type == "mapper_xml"]
+    for gf in mapper_files:
+        param_types_used: set[str] = set()
+        for pm in _mapper_param_type_re.finditer(gf.content):
+            param_types_used.add(pm.group(1))
+        all_related_dto_fields: set[str] = set()
+        related_dto_name = ""
+        for pt in param_types_used:
+            if pt in dto_fields:
+                all_related_dto_fields.update(dto_fields[pt])
+                related_dto_name = pt
+        if not all_related_dto_fields:
+            for dn, df in dto_fields.items():
+                all_related_dto_fields.update(df)
+                if not related_dto_name:
+                    related_dto_name = dn
+        for m in _if_test_re.finditer(gf.content):
+            field_name = m.group(1)
+            if all_related_dto_fields and field_name not in all_related_dto_fields:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": (
+                        f"[STATIC] Mapper XML <if test=\"{field_name} != null\"> but field '{field_name}' "
+                        f"does NOT exist in {related_dto_name}. "
+                        f"This will cause a MyBatis reflection error at runtime."
+                    ),
+                    "fix_instruction": (
+                        f"REMOVE the <if test=\"{field_name} != null\"> condition from the Mapper XML, "
+                        f"or ADD 'private String {field_name};' to {related_dto_name}. "
+                        f"Currently declared fields: {', '.join(sorted(all_related_dto_fields)[:15])}"
+                    ),
+                })
+
+    # --- 7. ServiceImpl public methods without @ServiceId ---
     # Every public method in ServiceImpl MUST have @ServiceId immediately before it.
     # Methods without @ServiceId are either alias/wrapper methods (must be deleted) or forgot annotation.
     _pub_method_re = re.compile(
@@ -1658,17 +1802,59 @@ class BackendEngineerAgent:
             "    - insertXxx(ResDto)           → super.insert(\"insertXxx\", param)\n"
             "    - updateXxx(List<ResDto>)     → super.batchUpdateReturnSumAffectedRows(\"updateXxx\", param)\n"
             "    - deleteXxx(List<ResDto>)     → super.batchUpdateReturnSumAffectedRows(\"deleteXxx\", param)\n"
-            "  The first argument to super.selectList/selectOne/insert/update/delete MUST exactly match the Mapper XML statement id.\n"
-            "  Example: Mapper has <select id=\"selectDuplicateCount\"> → DAO needs:\n"
-            "    public int selectDuplicateCount(XxxResDto param) { return super.selectOne(\"selectDuplicateCount\", param); }\n"
-            "  If the spec requires duplicate check, count queries, specific lookups, etc. — DAO MUST have those methods.\n"
-            "  ServiceImpl will ONLY call methods that exist in DaoImpl, so DaoImpl must be complete.\n"
+                    "  The first argument to super.selectList/selectOne/insert/update/delete MUST exactly match the Mapper XML statement id.\n"
+                    "  Example: Mapper has <select id=\"selectDuplicateCount\"> → DAO needs:\n"
+                    "    public int selectDuplicateCount(XxxResDto param) { return super.selectOne(\"selectDuplicateCount\", param); }\n"
+                    "  If the spec requires duplicate check, count queries, specific lookups, etc. — DAO MUST have those methods.\n"
+                    "  ServiceImpl will ONLY call methods that exist in DaoImpl, so DaoImpl must be complete.\n"
+                    "\n"
+                    "★ DaoImpl PARAMETER TYPE RULES — ABSOLUTE (VIOLATION = COMPILATION ERROR) ★\n"
+                    "  The ONLY types allowed as DaoImpl method parameters are:\n"
+                    "    1. The ACTUAL generated ReqDto class — e.g. CpmsEduRegLstReqDto\n"
+                    "    2. The ACTUAL generated ResDto class — e.g. CpmsEduRegLstResDto\n"
+                    "    3. List<CpmsXxxResDto> — List of the ACTUAL generated ResDto\n"
+                    "    4. Java primitives/wrappers: String, int, long, Integer, Long, boolean\n"
+                    "    5. () empty — no parameter at all (for sequence/next-ID)\n"
+                    "  NOTHING ELSE IS ALLOWED. Period.\n\n"
+                    "  ██ FORBIDDEN type names (NEVER use these as parameter types): ██\n"
+                    "    saveDto, reqDto, resDto, dto, Dto, item, row, entity, record, param,\n"
+                    "    request, response, data, obj, Object, Map, HashMap, model, form, vo, bean\n"
+                    "  These are NOT Java class names — they cause compilation errors.\n\n"
+                    "  WRONG: public int selectDuplicateCount(saveDto param)     → 'saveDto' is NOT a class\n"
+                    "  WRONG: public int selectEduRegNextId(Object param)        → Object is forbidden\n"
+                    "  WRONG: public ResDto selectUserInfo(row param)            → 'row' is NOT a class\n"
+                    "  WRONG: public int insertEduReg(dto param)                → 'dto' is NOT a class\n"
+                    "  WRONG: public int insertEduReg(reqDto param)             → 'reqDto' is NOT a class\n"
+                    "  CORRECT: public int selectDuplicateCount(CpmsEduRegLstResDto param)  → actual class name\n"
+                    "  CORRECT: public int selectEduRegNextId(CpmsEduRegLstReqDto param)    → actual class name\n"
+                    "  CORRECT: public CpmsEduRegLstResDto selectUserInfo(CpmsEduRegLstReqDto param) → actual class names\n"
+                    "  CORRECT: public int selectEduRegNextId() { return super.selectOne(\"selectEduRegNextId\", null); }\n\n"
+                    "  ██ GETTER/SETTER RULE — ONLY call fields that EXIST in the DTO ██\n"
+                    "  BEFORE writing param.getXxx() or param.setXxx() in DaoImpl or ServiceImpl,\n"
+                    "  VERIFY the field 'xxx' exists as 'private <Type> xxx;' in the DTO class.\n"
+                    "  If the field does NOT exist in the DTO, DO NOT call it. This is a compilation error.\n"
+                    "  Example: If CpmsEduRegLstReqDto does NOT have 'uploadRowCount' field,\n"
+                    "    WRONG:  param.getUploadRowCount()  → compilation error, field doesn't exist\n"
+                    "\n"
+                    "★ DaoImpl super.* MATCHING RULES — ABSOLUTE ★\n"
+                    "  The super method MUST match the operation type of the Java method name:\n"
+                    "  - selectXxx / selectXxxList  → super.selectOne() or super.selectList()\n"
+                    "  - insertXxx                  → super.insert()\n"
+                    "  - updateXxx (single row)     → super.update()\n"
+                    "  - updateXxx (List param)     → super.batchUpdateReturnSumAffectedRows()\n"
+                    "  - deleteXxx (single row)     → super.delete()   ← NOT super.update()!\n"
+                    "  - deleteXxx (List param)     → super.batchUpdateReturnSumAffectedRows()\n"
+                    "  WRONG: public int deleteEduReg(ResDto p) { return super.update(\"deleteEduReg\", p); }\n"
+                    "  CORRECT: public int deleteEduReg(ResDto p) { return super.delete(\"deleteEduReg\", p); }\n"
             "- Do NOT generate DAO interface or Service interface files — only DaoImpl and ServiceImpl.\n"
-            "- All fields used in ServiceImpl MUST exist in the corresponding DTO.\n"
+            "- All fields used in ServiceImpl and DaoImpl MUST exist in the corresponding DTO.\n"
             "- NEVER call getter/setter for a field that does NOT exist in the DTO:\n"
             "    If DTO has 'private String eduNm;' → dto.getEduNm() and dto.setEduNm() are OK.\n"
-            "    If DTO does NOT have 'page' field → dto.getPage() and dto.setPage() are COMPILATION ERRORS.\n"
-            "    BEFORE writing any .getXxx() or .setXxx(), verify the field exists in the DTO you defined.\n"
+            "    If DTO does NOT have 'uploadRowCount' → dto.getUploadRowCount() is a COMPILATION ERROR.\n"
+            "    BEFORE writing any .getXxx() or .setXxx(), SCAN the DTO class in Dependencies below\n"
+            "    and confirm the field is declared as 'private <Type> fieldName;'.\n"
+            "    DO NOT invent fields like uploadRowCount, totalCount, successCount, failCount —\n"
+            "    these are batch-result container fields that NEVER belong on a domain DTO.\n"
             "- NEVER use java.util.UUID — use String for all ID fields.\n"
             "\n╔══════════════════════════════════════════════════════════╗\n"
             "║  STRICT GENERATION ORDER & DEPENDENCY RULE               ║\n"
@@ -1778,10 +1964,94 @@ class BackendEngineerAgent:
 
             file_guide = get_context_for_file_type(file_entry.file_type)
 
-            user = (
-                f"Specification:\n{ctx.spec_markdown}\n{schema_ctx}\n"
-                f"{table_ctx}"
-            )
+            # ── Pre-build DAO whitelist + DTO field whitelist for service_impl ──
+            # Extracted BEFORE user is built so we can put it FIRST in the prompt.
+            # LLMs give highest weight to content at the beginning of the message;
+            # the whitelist must appear before the spec so constraints are clear
+            # before the model starts generating.
+            _pre_whitelist_block = ""
+            _pre_allowed_methods: set[str] = set()
+            _pre_dao_var_name: str = ""
+            if file_entry.file_type == "service_impl":
+                _pre_dao_sigs: list[str] = []
+                # ── DTO field extraction ───────────────────────────────────────
+                # Extract ACTUAL fields from the generated DTO files so the LLM
+                # can ONLY use field names that truly exist.
+                _dto_field_lines: list[str] = []
+                for _path, _gf in ctx.generated_files.items():
+                    if _gf.file_type in ("dto_request", "dto_response"):
+                        _cls_m = re.search(r'public\s+class\s+(\w+(?:Req|Res)Dto)\b', _gf.content)
+                        _cls_name = _cls_m.group(1) if _cls_m else _gf.file_path.split("/")[-1].replace(".java", "")
+                        fields: list[str] = []
+                        for _fm in re.finditer(
+                            r'private\s+(\S+(?:<[^>]+>)?)\s+(\w+)\s*;', _gf.content
+                        ):
+                            fields.append(f"    {_fm.group(1)} {_fm.group(2)}")
+                        if fields:
+                            _dto_field_lines.append(f"  {_cls_name}:")
+                            _dto_field_lines.extend(fields)
+
+                # ── DAO method extraction ──────────────────────────────────────
+                for _path, _gf in ctx.generated_files.items():
+                    if _gf.file_type == "dao_impl":
+                        _cm = re.search(r'public\s+class\s+(\w+DaoImpl)\b', _gf.content)
+                        _cls = _cm.group(1) if _cm else ""
+                        if _cls:
+                            _pre_dao_var_name = _cls[0].lower() + _cls[1:]
+                        for _m in re.finditer(r'public\s+(\S+)\s+(\w+)\s*\(([^)]*)\)', _gf.content):
+                            _rtype, _mname, _params = _m.group(1), _m.group(2), _m.group(3).strip()
+                            if _cls and _mname == _cls:
+                                continue
+                            _pre_dao_sigs.append(f"  {_pre_dao_var_name}.{_mname}({_params})  // returns {_rtype}")
+                if _pre_dao_sigs:
+                    _pre_allowed_methods = {s.split(".")[1].split("(")[0].strip() for s in _pre_dao_sigs}
+                    _dto_whitelist_block = ""
+                    if _dto_field_lines:
+                        _dto_whitelist_block = (
+                            "╔══════════════════════════════════════════════════════════════════╗\n"
+                            "║  DTO FIELD WHITELIST — ABSOLUTE CONSTRAINT                      ║\n"
+                            "║  ServiceImpl MUST ONLY use getters/setters for fields below.    ║\n"
+                            "║  Using a getter/setter for a NON-LISTED field = COMPILE ERROR.  ║\n"
+                            "╚══════════════════════════════════════════════════════════════════╝\n"
+                            "Actual DTO fields (these are the ONLY valid fields):\n"
+                            + "\n".join(_dto_field_lines) + "\n\n"
+                            "ABSOLUTE DTO RULES:\n"
+                            "  ★ NEVER call reqDto.getXxx() or resDto.setXxx() for a field NOT listed above.\n"
+                            "  ★ If you need a new field, you CANNOT add it — the DTOs are already generated.\n"
+                            "  ★ If the spec mentions a field not in the list, IGNORE that field or\n"
+                            "    use the closest existing field from the list above.\n"
+                            "  ★ Forbidden getter/setter examples: anything not in the list above.\n"
+                            "══════════════════════════════════════════════════════════════════════\n\n"
+                        )
+                    _pre_whitelist_block = (
+                        _dto_whitelist_block
+                        + "╔══════════════════════════════════════════════════════════════════╗\n"
+                        "║  DAO METHOD WHITELIST — ABSOLUTE CONSTRAINT                     ║\n"
+                        "║  ServiceImpl MUST ONLY call the methods listed below.           ║\n"
+                        "║  Calling ANY other method = COMPILATION FAILURE.                ║\n"
+                        "╚══════════════════════════════════════════════════════════════════╝\n"
+                        f"Allowed DAO variable: {_pre_dao_var_name}\n"
+                        f"Allowed method names: {', '.join(sorted(_pre_allowed_methods))}\n\n"
+                        "Full signatures:\n"
+                        + "\n".join(_pre_dao_sigs) + "\n\n"
+                        "ABSOLUTE RULES (read before looking at the spec):\n"
+                        "  ★ ONLY call methods from the whitelist above.\n"
+                        "  ★ NEVER invent a new DAO method name not in the whitelist.\n"
+                        "  ★ If the spec seems to require an operation not in the whitelist,\n"
+                        "    implement it using ONLY the methods above (e.g. loop over allowed call).\n"
+                        "  ★ Forbidden: any daoVar.xxx() where xxx is not in 'Allowed method names'.\n"
+                        "══════════════════════════════════════════════════════════════════════\n\n"
+                    )
+
+            # Build user message — whitelist FIRST for service_impl
+            if _pre_whitelist_block:
+                user = _pre_whitelist_block
+                user += f"Specification:\n{ctx.spec_markdown}\n{schema_ctx}\n{table_ctx}"
+            else:
+                user = (
+                    f"Specification:\n{ctx.spec_markdown}\n{schema_ctx}\n"
+                    f"{table_ctx}"
+                )
             if deps_text:
                 user += f"Dependencies:\n{deps_text}\n\n"
             user += f"Generate: {file_entry.file_path}\nType: {file_entry.file_type}\nDescription: {file_entry.description}\n"
@@ -1791,6 +2061,55 @@ class BackendEngineerAgent:
 
             # Type-specific generation instructions
             if file_entry.file_type == "dao_impl":
+                # ── Inject concrete DTO class names so LLM never writes 'dto' as a type ──
+                _dao_req_classes: list[str] = []
+                _dao_res_classes: list[str] = []
+                for _p, _gf in ctx.generated_files.items():
+                    if _gf.file_type == "dto_request":
+                        _cm2 = re.search(r'public\s+class\s+(\w+ReqDto)\b', _gf.content)
+                        if _cm2:
+                            _dao_req_classes.append(_cm2.group(1))
+                    elif _gf.file_type == "dto_response":
+                        _cm2 = re.search(r'public\s+class\s+(\w+ResDto)\b', _gf.content)
+                        if _cm2:
+                            _dao_res_classes.append(_cm2.group(1))
+
+                if _dao_req_classes or _dao_res_classes:
+                    _req_list = ", ".join(_dao_req_classes) if _dao_req_classes else "(none)"
+                    _res_list = ", ".join(_dao_res_classes) if _dao_res_classes else "(none)"
+                    _ex_res = _dao_res_classes[0] if _dao_res_classes else "XxxResDto"
+                    _ex_req = _dao_req_classes[0] if _dao_req_classes else "XxxReqDto"
+                    user += (
+                        f"\n╔══════════════════════════════════════════════════════════╗\n"
+                        f"║  PARAMETER TYPE WHITELIST — ABSOLUTE CONSTRAINT          ║\n"
+                        f"╚══════════════════════════════════════════════════════════╝\n"
+                        f"DaoImpl method parameters MUST use ONLY these types:\n"
+                        f"  • ReqDto  → {_req_list}\n"
+                        f"  • ResDto  → {_res_list}\n"
+                        f"  • List<ResDto> → List<{_ex_res}>\n"
+                        f"  • Primitives  → String, int, long, Integer, Long, boolean\n"
+                        f"  • No-param    → () — use super.selectOne(\"id\", null) internally\n\n"
+                        f"FORBIDDEN parameter types (NOT Java classes — will not compile):\n"
+                        f"  ✗ saveDto, dto, Dto, reqDto, resDto   ✗ item, row, entity, record\n"
+                        f"  ✗ Object, param (as type name)        ✗ data, obj, model, form, vo, bean\n"
+                        f"  ✗ request, response                   ✗ any other non-DTO word\n\n"
+                        f"CORRECT examples using YOUR actual class names:\n"
+                        f"  public List<{_ex_res}> selectXxxList({_ex_req} param)\n"
+                        f"  public {_ex_res} selectXxx({_ex_req} param)\n"
+                        f"  public int selectDuplicateCount({_ex_res} param)\n"
+                        f"  public int insertXxx({_ex_res} param)\n"
+                        f"  public int updateXxx(List<{_ex_res}> param)\n"
+                        f"  public int deleteXxx(List<{_ex_res}> param)\n"
+                        f"  public int selectNextId()  ← no param, pass null internally\n\n"
+                        f"WRONG examples (these will ALL fail to compile):\n"
+                        f"  ✗ public int selectDuplicateCount(saveDto param)  ← 'saveDto' is NOT a class!\n"
+                        f"  ✗ public int selectDuplicateCount(dto param)      ← 'dto' is not a class\n"
+                        f"  ✗ public int selectDuplicateCount(item param)     ← 'item' is not a class\n"
+                        f"  ✗ public int selectDuplicateCount(row param)      ← 'row' is not a class\n"
+                        f"  ✗ public int selectNextId(Object param)           ← Object is forbidden\n"
+                        f"══════════════════════════════════════════════════════════════\n\n"
+                    )
+
                 # Extract ALL SQL statement IDs from Mapper XML and list them explicitly
                 mapper_ids: list[str] = []
                 for path, gf in ctx.generated_files.items():
@@ -1855,6 +2174,45 @@ class BackendEngineerAgent:
                     "NEVER use bare names like insert(), select(), update(), delete().\n"
                 )
 
+            elif file_entry.file_type == "mapper_xml":
+                user += (
+                    "\n╔══════════════════════════════════════════════════════════╗\n"
+                    "║  MANDATORY: Mapper XML MUST include ALL CRUD operations  ║\n"
+                    "╚══════════════════════════════════════════════════════════╝\n"
+                    "A complete Mapper XML MUST contain ALL of the following SQL statements:\n"
+                    "  1. <select id=\"selectXxxList\">  — list query with optional <if test> filters\n"
+                    "  2. <select id=\"selectXxx\">      — single row query by PK\n"
+                    "  3. <insert id=\"insertXxx\">      — insert single row\n"
+                    "  4. <update id=\"updateXxx\">      — batch update via <foreach> (for grid save)\n"
+                    "  5. <delete id=\"deleteXxx\">      — batch delete via <foreach> (for grid save)\n\n"
+                    "Where 'Xxx' is the domain noun (e.g. EduPgm, Window, User — match the entity name).\n"
+                    "ALL 5 SQL statements are MANDATORY regardless of spec wording.\n"
+                    "ServiceImpl's save() method depends on update + delete statements — omitting them\n"
+                    "causes ServiceImpl to invent non-existent DAO methods and fail to compile.\n\n"
+                    "Additional SQL to add when spec requires:\n"
+                    "  - Duplicate check: <select id=\"selectDuplicateCount\" resultType=\"int\">\n"
+                    "  - Lookup by non-PK key: <select id=\"selectXxxByYyy\">\n"
+                    "  - Bulk insert: <insert id=\"insertXxxList\"> with <foreach>\n\n"
+                    "NAMING RULES (must match DaoImpl method names exactly):\n"
+                    "  CORRECT: <update id=\"updateEduPgm\">   → DaoImpl: public int updateEduPgm(List<ResDto> p)\n"
+                    "  WRONG:   <update id=\"update\">         → DaoImpl cannot use bare verb 'update'\n"
+                    "  WRONG:   <update id=\"updateList\">     → domain noun missing (must be updateEduPgmList or updateEduPgm)\n\n"
+                    "TECHNICAL RULES:\n"
+                    "  - namespace MUST be the full DaoImpl class path: e.g., namespace=\"biz.edu.dao.EduA001DaoImpl\"\n"
+                    "  - parameterType: use the full DTO class path (biz.edu.dto.request.XxxReqDto)\n"
+                    "  - resultType: use the full DTO class path (biz.edu.dto.response.XxxResDto)\n"
+                    "  - NEVER use bare < or > — wrap in CDATA: <![CDATA[<=]]>\n"
+                    "  - Use <if test=\"param != null and param != ''\"> for optional WHERE filters\n"
+                    "  - batch update/delete: use <foreach collection=\"list\" item=\"item\"> pattern\n\n"
+                    "★ <if test> FIELD EXISTENCE RULE — ABSOLUTE ★\n"
+                    "  Every field name used in <if test=\"fieldName != null\"> MUST exist as a declared field\n"
+                    "  in the parameterType DTO (ReqDto or ResDto). Check the DTO in Dependencies below.\n"
+                    "  WRONG: <if test=\"uploadRowCount != null\"> — if uploadRowCount is NOT in the DTO\n"
+                    "  WRONG: <if test=\"totalCount != null\"> — if totalCount is NOT in the DTO\n"
+                    "  Before adding any <if test>, VERIFY the field exists in the DTO.\n"
+                    "=== END MAPPER XML MANDATORY RULES ===\n"
+                )
+
             elif file_entry.file_type == "dto_request":
                 user += (
                     "\n=== MANDATORY: Request DTO — match biz.sample.dto.request.UserReqDto ===\n"
@@ -1913,12 +2271,17 @@ class BackendEngineerAgent:
                                 f"  {dao_var_name}.{method_name}({params})  // returns {ret_type}"
                             )
 
+                # ── Store for post-generation inline whitelist check ──────────
+                _svc_allowed_methods: set[str] = set()
+                _svc_dao_var_name: str = dao_var_name
+
                 if dao_method_sigs:
                     sigs_list = "\n".join(dao_method_sigs)
                     allowed_method_names = sorted({
                         sig.split(".")[1].split("(")[0].strip()
                         for sig in dao_method_sigs
                     })
+                    _svc_allowed_methods = set(allowed_method_names)
                     allowed_list = ", ".join(allowed_method_names)
                     user += (
                         f"\n╔══════════════════════════════════════════════════════════╗\n"
@@ -1933,9 +2296,13 @@ class BackendEngineerAgent:
                         f"  1. ONLY call methods from the whitelist above. NEVER invent a new method name.\n"
                         f"  2. Assign result to a variable whose type EXACTLY matches '// returns <X>'.\n"
                         f"  3. Pass parameter whose type matches the declared param type shown above.\n"
-                        f"  4. If the spec requires logic that seems to need a missing DAO method,\n"
-                        f"     implement the logic using ONLY the existing whitelist methods.\n"
-                        f"     DO NOT invent a new DAO call — adapt your service logic instead.\n\n"
+                        f"  4. ★ ABSOLUTE: If a method is NOT in the whitelist, you MUST NOT call it — period.\n"
+                        f"     The whitelist is derived from the actual DaoImpl generated for this screen.\n"
+                        f"     Calling a non-whitelisted method = immediate compilation failure.\n"
+                        f"     If you need batch update/delete, look for updateXxx or deleteXxx in the whitelist.\n"
+                        f"     If they are absent from the whitelist, use the closest available method\n"
+                        f"     (e.g. call updateXxx in a for-loop for single-row updates, or skip if unsupported).\n"
+                        f"     DO NOT invent a new DAO call under any circumstances.\n\n"
                         f"FORBIDDEN CALLS (will fail to compile):\n"
                         f"  {dao_var_name}.insert(...)     ← base class — forbidden\n"
                         f"  {dao_var_name}.select(...)     ← base class — forbidden\n"
@@ -1996,9 +2363,12 @@ class BackendEngineerAgent:
                         f"╚══════════════════════════════════════════════════════════╝\n"
                         f"AVAILABLE DTO CLASSES (ONLY these exist): {dto_class_list}\n\n"
                         f"ABSOLUTE RULES:\n"
-                        f"  - DO NOT invent new DTO classes (e.g. CpmsXxxSaveReqDto, XxxUploadReqDto, etc.)\n"
+                        f"  - DO NOT invent new DTO classes (e.g. CpmsXxxSaveReqDto, XxxUploadReqDto, XxxExcelRowReqDto)\n"
                         f"  - The save method MUST use List<ResDto> as parameter — NEVER a new ReqDto wrapper\n"
-                        f"  - Import ONLY from the classes listed above — any other import = compile error\n\n"
+                        f"  - Import ONLY from the classes listed above — any other biz.*.dto.* import = compile error\n"
+                        f"  - If spec needs ExcelUpload/batch insert, add the extra fields to the EXISTING ReqDto.\n"
+                        f"    WRONG: import biz.edu.dto.request.CpmsEduExcelRowReqDto;  ← this class doesn't exist\n"
+                        f"    CORRECT: add 'private List<String> excelRows;' to CpmsEduReqDto instead\n\n"
                         f"=== AVAILABLE DTO FIELDS — ONLY call getter/setter for these ===\n"
                         + "\n".join(dto_field_lines) + "\n\n"
                         "RULE: Before writing any dto.getXxx() or dto.setXxx() call,\n"
@@ -2112,6 +2482,118 @@ class BackendEngineerAgent:
                 # 2. Remove UUID + manual audit fields deterministically (no LLM needed)
                 content = _sanitize_service_impl(content)
 
+                # ── 3. Inline DAO whitelist check + auto-fix ─────────────────
+                # Even with a detailed whitelist in the prompt, the LLM sometimes
+                # still generates calls to non-existent DAO methods.  Catch them
+                # immediately and request a targeted fix before storing the file.
+                # Use the pre-built whitelist if available, otherwise fall back to
+                # the one extracted inside the elif block.
+                _eff_allowed = _pre_allowed_methods or _svc_allowed_methods
+                _eff_dao_var = _pre_dao_var_name or _svc_dao_var_name
+                if _eff_allowed and _eff_dao_var:
+                    _dao_call_pat = re.compile(
+                        rf'\b{re.escape(_eff_dao_var)}\.(\w+)\s*\('
+                    )
+                    violations = sorted({
+                        m.group(1)
+                        for m in _dao_call_pat.finditer(content)
+                        if m.group(1) not in _eff_allowed
+                    })
+                    if violations:
+                        logger.warning(
+                            "[BACKEND_ENG] service_impl calls non-existent DAO methods %s — "
+                            "running inline whitelist fix for %s",
+                            violations, file_entry.file_path,
+                        )
+                        _fix_prompt = (
+                            f"The ServiceImpl below calls these DAO methods that DO NOT EXIST "
+                            f"in the DaoImpl: {violations}\n\n"
+                            f"ALLOWED DAO method names (all that exist in DaoImpl): "
+                            f"{sorted(_eff_allowed)}\n\n"
+                            f"TASK — fix the ServiceImpl:\n"
+                            f"  • Remove or replace EVERY call to the forbidden methods listed above.\n"
+                            f"  • Substitute with the closest semantically matching ALLOWED method if one exists.\n"
+                            f"  • If no equivalent exists, remove the block that uses the forbidden call.\n"
+                            f"  • NEVER call any method not in the ALLOWED list.\n"
+                            f"  • Preserve all other code exactly as-is.\n"
+                            f"Output ONLY the complete corrected Java source (no markdown fences):\n\n"
+                            f"{content}"
+                        )
+                        try:
+                            fixed = await codex_client.complete(
+                                system, _fix_prompt, stream=False,
+                                max_tokens=settings.CODEGEN_MAX_TOKENS,
+                            )
+                            if fixed and isinstance(fixed, str):
+                                content = _strip_fences(fixed)
+                                logger.info(
+                                    "[BACKEND_ENG] inline whitelist fix applied — removed forbidden calls %s",
+                                    violations,
+                                )
+                        except Exception as _exc:
+                            logger.warning(
+                                "[BACKEND_ENG] inline whitelist fix call failed: %s", _exc
+                            )
+
+                # ── DTO field violation check for service_impl ────────────────
+                # After the DAO whitelist fix, also verify that every getter/setter
+                # call on a DTO object references a FIELD THAT ACTUALLY EXISTS.
+                # Build the complete set of valid DTO fields from generated DTOs.
+                if file_entry.file_type == "service_impl" and _dto_field_lines:
+                    # Rebuild the set of valid fields from generated DTOs
+                    _valid_dto_fields: set[str] = set()
+                    for _path, _gf in ctx.generated_files.items():
+                        if _gf.file_type in ("dto_request", "dto_response"):
+                            for _fm in re.finditer(
+                                r'private\s+\S+(?:<[^>]+>)?\s+(\w+)\s*;', _gf.content
+                            ):
+                                _valid_dto_fields.add(_fm.group(1))
+
+                    # Detect invalid getters/setters (getXxx/setXxx where xxx not in valid fields)
+                    _dto_violations: list[str] = []
+                    for _gm in re.finditer(r'\b(?:get|set)([A-Z]\w*)\s*\(', content):
+                        _field = _gm.group(1)[0].lower() + _gm.group(1)[1:]
+                        if _field not in _valid_dto_fields:
+                            _dto_violations.append(f"get/set{_gm.group(1)}")
+
+                    if _dto_violations:
+                        _unique_violations = sorted(set(_dto_violations))
+                        logger.warning(
+                            "[BACKEND_ENG] service_impl uses non-existent DTO fields %s — "
+                            "running inline DTO field fix for %s",
+                            _unique_violations, file_entry.file_path,
+                        )
+                        _valid_list = sorted(_valid_dto_fields)
+                        _dto_fix_prompt = (
+                            f"The ServiceImpl below calls getters/setters for DTO fields that DO NOT EXIST:\n"
+                            f"  Invalid calls: {_unique_violations}\n\n"
+                            f"VALID DTO fields (ONLY these exist — these are the ONLY fields you may use):\n"
+                            f"  {_valid_list}\n\n"
+                            f"TASK — fix the ServiceImpl:\n"
+                            f"  • Remove or comment out every line that calls a getter/setter NOT in the valid list.\n"
+                            f"  • If the logic requires a value from a non-existent field, use the closest\n"
+                            f"    existing field from the valid list, or remove that logic block entirely.\n"
+                            f"  • NEVER call getXxx()/setXxx() for a field not in the valid list.\n"
+                            f"  • Preserve all other code exactly as-is.\n"
+                            f"Output ONLY the complete corrected Java source (no markdown fences):\n\n"
+                            f"{content}"
+                        )
+                        try:
+                            fixed = await codex_client.complete(
+                                system, _dto_fix_prompt, stream=False,
+                                max_tokens=settings.CODEGEN_MAX_TOKENS,
+                            )
+                            if fixed and isinstance(fixed, str):
+                                content = _strip_fences(fixed)
+                                logger.info(
+                                    "[BACKEND_ENG] DTO field fix applied — removed invalid getters/setters %s",
+                                    _unique_violations,
+                                )
+                        except Exception as _exc:
+                            logger.warning(
+                                "[BACKEND_ENG] DTO field fix call failed: %s", _exc
+                            )
+
             gf = GeneratedFile(
                 file_path=file_entry.file_path,
                 file_type=file_entry.file_type,
@@ -2130,6 +2612,103 @@ class BackendEngineerAgent:
             # ----------------------------------------------------------
             if file_entry.file_type == "dao_impl":
                 gf.content = _fix_bare_dao_method_decls(gf.content)
+
+                # ── Fix invalid parameter types — WHITELIST approach ──────────
+                # Only these types are legal as DaoImpl method parameters:
+                #   - Concrete DTO classes generated for this screen (ReqDto / ResDto)
+                #   - Java primitives / common types: String, int, long, Integer, Long, boolean, Boolean
+                # Everything else (dto, Dto, item, row, entity, Object, param-as-type, …)
+                # is replaced with the correct DTO class deterministically.
+                _known_res = _dao_res_classes[0] if _dao_res_classes else None
+                _known_req = _dao_req_classes[0] if _dao_req_classes else None
+
+                # FALLBACK: if ctx didn't have DTOs yet, extract from the DaoImpl's own imports.
+                # This handles edge cases where _dao_res_classes/_dao_req_classes are empty.
+                if not _known_res:
+                    _im = re.search(r'import\s+[\w.]+\.(Cpms\w+ResDto)\s*;', gf.content)
+                    if _im:
+                        _known_res = _im.group(1)
+                if not _known_req:
+                    _im = re.search(r'import\s+[\w.]+\.(Cpms\w+ReqDto)\s*;', gf.content)
+                    if _im:
+                        _known_req = _im.group(1)
+
+                if _known_res or _known_req:
+                    # Build the full set of allowed single-token parameter types.
+                    _allowed_param_types: set[str] = {
+                        "String", "int", "long", "Integer", "Long",
+                        "boolean", "Boolean", "double", "Double",
+                    }
+                    for _c in _dao_req_classes + _dao_res_classes:
+                        _allowed_param_types.add(_c)
+                    # Also allow any DTO class referenced in the DaoImpl's own imports
+                    for _im in re.finditer(r'import\s+[\w.]+\.(Cpms\w+(?:Req|Res)Dto)\s*;', gf.content):
+                        _allowed_param_types.add(_im.group(1))
+
+                    def _fix_dao_param_type(match: re.Match) -> str:  # noqa: F811
+                        full = match.group(0)
+                        param_type = match.group(1)
+                        if param_type in _allowed_param_types:
+                            return full
+                        mname_m = re.search(r'public\s+\S+\s+(\w+)\s*\(', full)
+                        if mname_m:
+                            mname = mname_m.group(1).lower()
+                            _uses_res = any(k in mname for k in (
+                                "duplicate", "count", "insert", "update", "delete",
+                            ))
+                            if _uses_res and _known_res:
+                                replacement = _known_res
+                            elif mname.startswith("select") and _known_req:
+                                replacement = _known_req
+                            else:
+                                replacement = _known_res or _known_req
+                        else:
+                            replacement = _known_res or _known_req
+                        fixed = full.replace(f"({param_type} ", f"({replacement} ", 1)
+                        logger.warning(
+                            "[BACKEND_ENG] Fixed invalid DAO param type '%s' → '%s' in %s",
+                            param_type, replacement, gf.file_path,
+                        )
+                        return fixed
+
+                    # Match: public <ReturnType> <methodName>(<SingleType> <varName>)
+                    # Only single-token (non-generic) parameter types — List<X> is fine as-is
+                    _bad_param_re = re.compile(
+                        r'(public\s+\S+\s+\w+\s*\(\s*)([A-Za-z][A-Za-z0-9]*)(\s+\w+\s*\))',
+                    )
+
+                    def _apply_fix(m: re.Match) -> str:
+                        prefix, param_type, suffix = m.group(1), m.group(2), m.group(3)
+                        if param_type in _allowed_param_types:
+                            return m.group(0)
+                        # Determine best replacement
+                        mname_m = re.search(r'public\s+\S+\s+(\w+)\s*\(', prefix)
+                        if mname_m:
+                            mname = mname_m.group(1).lower()
+                            _uses_res = any(k in mname for k in (
+                                "duplicate", "count", "insert", "update", "delete",
+                            ))
+                            if _uses_res and _known_res:
+                                replacement = _known_res
+                            elif mname.startswith("select") and _known_req:
+                                replacement = _known_req
+                            else:
+                                replacement = _known_res or _known_req
+                        else:
+                            replacement = _known_res or _known_req
+                        # ALWAYS replace — even if replacement is None fallback to ResDto
+                        if not replacement:
+                            replacement = _known_res or _known_req or "Object"
+                        if replacement != param_type:
+                            logger.warning(
+                                "[BACKEND_ENG] Fixed invalid DAO param type '%s' → '%s' in %s",
+                                param_type, replacement, gf.file_path,
+                            )
+                            return f"{prefix}{replacement}{suffix}"
+                        return m.group(0)
+
+                    gf.content = _bad_param_re.sub(_apply_fix, gf.content)
+
                 ctx.generated_files[gf.file_path] = gf
                 logger.info(
                     "[BACKEND_ENG] DaoImpl post-processed BEFORE service_impl generation: %s",
