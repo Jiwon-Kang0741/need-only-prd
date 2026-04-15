@@ -865,7 +865,7 @@ const progressItems = [
 ```vue
 <!-- index.vue -->
 <script lang="ts" setup>
-import PMDP020ProgressList from './components/pmdp020ProgressList/PMDP020ProgressList.vue';
+import PMDP020ProgressList from '@/pages/sy/ds/pmdp020/components/pmdp020ProgressList/PMDP020ProgressList.vue';
 // ... other imports
 </script>
 

@@ -54,16 +54,12 @@ def _load_guide_dir(dirname: str) -> dict[str, dict[str, str]]:
     return result
 
 
-_TABLE_INFO: str | None = None
-
-
 def invalidate_cache() -> None:
     """Force re-read of guide files on next access."""
-    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO
+    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT
     _BACKEND_SECTIONS = None
     _FRONTEND_SECTIONS = None
     _NAMING_CONTEXT = None
-    _TABLE_INFO = None
 
 
 def _ensure_loaded() -> None:
@@ -98,17 +94,19 @@ _BACKEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
     "dao_impl": [("표준", ["DAO 표준", "DAO", "명명 규칙", "패키지 구조"]), ("04-", None), ("05-", None)],
     "mapper_xml": [("표준", ["MyBatis", "Mapper", "DAO 표준", "DAO", "명명 규칙", "DB 컬럼"]), ("04-", None), ("05-", None)],
     "db_init_sql": [("표준", ["프로젝트 구조", "DB"]), ("02-", None)],
+    "vue_api": [("표준", ["API 통신 규칙", "API 엔드포인트", "Service 표준", "예외 처리"])],
+    "vue_types": [("표준", ["DTO 표준", "DTO", "명명 규칙", "변수 명명 규칙", "GridStatus"])],
 }
 
 _FRONTEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
-    "vue_page": [("00_", None), ("02_", None)],
-    "vue_search_form": [("02_", None), ("03_", None), ("07_", None), ("12_", ["SearchForm", "SearchFormRow", "SearchFormField", "SearchFormLabel", "SearchFormContent", "SearchFormFieldGroup", "Import 패턴", "검색 화면"])],
-    "vue_data_table": [("02_", None), ("04_", None), ("07_", None)],
-    "vue_data_table_utils": [("02_", None), ("04_", None)],
-    "vue_sum_grid": [("02_", None), ("05_", None), ("07_", None)],
-    "vue_api": [("06_", None)],
-    "vue_types": [("06_", None)],
-    "vue_scss": [("07_", None)],
+    "vue_page": [("00_", None), ("02_", None), ("13_", None), ("14_", ["상태 관리 에러", "API 연동 에러", "백엔드 응답 구조"])],
+    "vue_search_form": [("02_", None), ("03_", None), ("07_", None), ("11_", None), ("12_", ["SearchForm", "SearchFormRow", "SearchFormField", "SearchFormLabel", "SearchFormContent", "SearchFormFieldGroup", "Import 패턴", "검색 화면"]), ("13_", None), ("14_", ["상태 관리 에러", "공통코드 에러"])],
+    "vue_data_table": [("02_", None), ("04_", None), ("07_", None), ("13_", None), ("14_", ["성능 관련 에러", "CSS 스타일링 에러"])],
+    "vue_data_table_utils": [("02_", None), ("04_", None), ("14_", ["성능 관련 에러"])],
+    "vue_sum_grid": [("02_", None), ("05_", None), ("07_", None), ("13_", None), ("14_", ["상태 관리 에러"])],
+    "vue_api": [("06_", None), ("14_", ["API 연동 에러", "백엔드 응답 구조"])],
+    "vue_types": [("06_", None), ("14_", ["API 연동 에러", "백엔드 응답 구조"])],
+    "vue_scss": [("07_", None), ("14_", ["CSS 스타일링 에러"])],
     "pinia_store": [("08_", None)],
 }
 
@@ -185,26 +183,6 @@ def get_all_frontend_guide() -> str:
         full = "\n".join(_FRONTEND_SECTIONS[fname].values())
         parts.append(f"=== {fname} ===\n{full}")
     return "\n\n".join(parts)
-
-
-def get_table_info() -> str:
-    """Return the PFY DB table schema reference (테이블정보.md).
-
-    This file lists all existing PFYDB tables with column definitions.
-    Agents that generate SQL (db_init_sql, mapper_xml) must check this
-    before creating new tables — if an identical or equivalent table
-    already exists, reuse it and write queries against the existing schema.
-    """
-    global _TABLE_INFO
-    if _TABLE_INFO is not None:
-        return _TABLE_INFO
-    base = Path(settings.PROMPT_REFERENCE_DIR) / "BackendGuide"
-    table_file = base / "테이블정보.md"
-    if table_file.exists():
-        _TABLE_INFO = table_file.read_text(encoding="utf-8")
-    else:
-        _TABLE_INFO = ""
-    return _TABLE_INFO
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +320,6 @@ def invalidate_pom_cache() -> None:
 # ---------------------------------------------------------------------------
 
 _CLASS_PACKAGE_MAP: dict[str, str] | None = None
-_CLASS_FILE_MAP: dict[str, Path] | None = None  # ClassName → source file Path
 
 _PACKAGE_RE = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.MULTILINE)
 _PUBLIC_TYPE_RE = re.compile(
@@ -350,33 +327,28 @@ _PUBLIC_TYPE_RE = re.compile(
     r'(?:class|interface|enum|@interface)\s+(\w+)',
     re.MULTILINE,
 )
-_PRIVATE_FIELD_RE = re.compile(
-    r'^\s*(?:@\w+(?:\([^)]*\))?\s*)*'   # optional annotations
-    r'private\s+'
-    r'(?:(?:static|final|transient|volatile)\s+)*'
-    r'[\w<>\[\],\s]+?\s+'                # type (can be generic)
-    r'(\w+)\s*(?:=\s*[^;]+)?;',         # field name
-    re.MULTILINE,
-)
 _SKIP_DIRS = {"target", "build", ".git", "node_modules", ".settings", ".mvn"}
 
 
-def _scan_workspace_java_sources() -> tuple[dict[str, str], dict[str, Path]]:
-    """Walk PFY workspace Java source trees.
+def _scan_workspace_java_sources() -> dict[str, str]:
+    """Walk PFY workspace Java source trees and return {ClassName: fqcn} mapping.
 
-    Returns:
-        ({ClassName: fqcn}, {ClassName: source_file_path})
+    Scans the directories adjacent to PFY_BACKEND_DIR (i.e., the whole PFY
+    multi-module project) and extracts every public class/interface/enum.
+    The filename wins when multiple source files declare the same class name.
+    This mirrors what STS does: it reads the actual classpath source to know
+    the correct package for each class.
     """
     import os
 
     root = Path(settings.PFY_BACKEND_DIR).parent.parent  # C:/workspace_pfy/PFY
     if not root.exists():
-        return {}, {}
+        return {}
 
     class_map: dict[str, str] = {}
-    file_map: dict[str, Path] = {}
 
     for dirpath, dirnames, filenames in os.walk(root):
+        # Prune directories we never need to scan
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
 
         for fname in filenames:
@@ -394,104 +366,30 @@ def _scan_workspace_java_sources() -> tuple[dict[str, str], dict[str, Path]]:
                 continue
             pkg = pkg_m.group(1)
 
-            stem = fname[:-5]
+            stem = fname[:-5]  # filename without .java
             for cls_m in _PUBLIC_TYPE_RE.finditer(text):
                 cls_name = cls_m.group(1)
                 fqcn = f"{pkg}.{cls_name}"
+                # Prefer the declaration whose filename matches the class name
                 if cls_name not in class_map or stem == cls_name:
                     class_map[cls_name] = fqcn
-                    file_map[cls_name] = fpath
 
-    return class_map, file_map
+    return class_map
 
 
 def get_workspace_class_map() -> dict[str, str]:
-    """Return cached {ClassName: fqcn} map built from PFY workspace Java sources."""
-    global _CLASS_PACKAGE_MAP, _CLASS_FILE_MAP
+    """Return cached {ClassName: fqcn} map built from PFY workspace Java sources.
+
+    The map is built once at startup (lazy) and cached for the server lifetime.
+    Call invalidate_class_map() to force a rescan (e.g. after source changes).
+    """
+    global _CLASS_PACKAGE_MAP
     if _CLASS_PACKAGE_MAP is None:
-        _CLASS_PACKAGE_MAP, _CLASS_FILE_MAP = _scan_workspace_java_sources()
+        _CLASS_PACKAGE_MAP = _scan_workspace_java_sources()
     return _CLASS_PACKAGE_MAP
 
 
 def invalidate_class_map() -> None:
     """Force rescan of workspace Java sources on next access."""
-    global _CLASS_PACKAGE_MAP, _CLASS_FILE_MAP
+    global _CLASS_PACKAGE_MAP
     _CLASS_PACKAGE_MAP = None
-    _CLASS_FILE_MAP = None
-
-
-# ---------------------------------------------------------------------------
-# Parent DTO field extraction  (dynamic — no hardcoding)
-# ---------------------------------------------------------------------------
-
-_PARENT_FIELDS_CACHE: dict[str, set[str]] = {}
-
-
-def get_parent_class_fields(class_name: str) -> set[str]:
-    """Return the set of private field names declared in a parent class.
-
-    Scans the PFY workspace source files to find the class, then extracts
-    all private field declarations.  Results are cached per class name.
-
-    Usage: when generating a DTO that extends SearchBaseDto, call
-    get_parent_class_fields("SearchBaseDto") to get {"page", "size"}.
-    Any field in this set MUST NOT be redeclared in the child DTO.
-    """
-    if class_name in _PARENT_FIELDS_CACHE:
-        return _PARENT_FIELDS_CACHE[class_name]
-
-    # Ensure scan has run so _CLASS_FILE_MAP is populated
-    get_workspace_class_map()
-    global _CLASS_FILE_MAP
-
-    fields: set[str] = set()
-    if _CLASS_FILE_MAP and class_name in _CLASS_FILE_MAP:
-        src = _CLASS_FILE_MAP[class_name]
-        try:
-            text = src.read_text(encoding="utf-8", errors="ignore")
-            for m in _PRIVATE_FIELD_RE.finditer(text):
-                fields.add(m.group(1))
-        except OSError:
-            pass
-
-    _PARENT_FIELDS_CACHE[class_name] = fields
-    return fields
-
-
-def get_parent_class_source_block(class_name: str) -> str:
-    """Return a concise description of the parent class fields for use in prompts.
-
-    Returns a string like:
-        SearchBaseDto declares: page, size  (getOffset()/getLimit() are computed methods — NOT fields)
-    """
-    get_workspace_class_map()
-    global _CLASS_FILE_MAP
-
-    if not _CLASS_FILE_MAP or class_name not in _CLASS_FILE_MAP:
-        return f"{class_name}: (source not found in workspace)"
-
-    src = _CLASS_FILE_MAP[class_name]
-    try:
-        text = src.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return f"{class_name}: (could not read source)"
-
-    fields: list[str] = []
-    for m in _PRIVATE_FIELD_RE.finditer(text):
-        fields.append(m.group(1))
-
-    # Extract method names to warn about computed vs field
-    method_re = re.compile(r'public\s+\w[\w<>\[\]]*\s+(\w+)\s*\(', re.MULTILINE)
-    methods = [m.group(1) for m in method_re.finditer(text)
-               if m.group(1) not in ("get", "set", "<init>")]
-
-    result = f"{class_name} private fields: {', '.join(fields) if fields else '(none)'}"
-    if methods:
-        result += f"\n  (public methods — NOT redeclarable as fields: {', '.join(methods)})"
-    return result
-
-
-def invalidate_parent_fields_cache() -> None:
-    """Force re-extraction of parent class fields on next access."""
-    global _PARENT_FIELDS_CACHE
-    _PARENT_FIELDS_CACHE.clear()

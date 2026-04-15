@@ -53,7 +53,7 @@ import Calendar from 'primevue/calendar';
 ```
 
 **확인 방법**:
-1. `tomms-lite-front/src/components/common/[componentName]/index.ts` 존재 여부 확인
+1. `pfy-front/src/components/common/[componentName]/index.ts` 존재 여부 확인
 2. 존재하면 → Destructuring import 사용
 3. 없으면 → Direct `.vue` import 사용
 4. 참조 화면 (spov010) 패턴 확인
@@ -379,7 +379,7 @@ const searchFormConfig = computed<SearchFormConfig>(() => ({
 
 ## 📝 Step 4: watch 패턴 구현 (CRITICAL!)
 
-### 4.1 tomms-lite-front 패턴
+### 4.1 pfy-front 패턴
 
 ```typescript
 // ⭐⭐⭐ CRITICAL: SelectBox 동기화
@@ -524,7 +524,7 @@ const handleSearch = async () => {
 
 ## 📝 Step 6: CSS 스타일링
 
-### 6.1 tomms-lite-front 패턴 참고
+### 6.1 pfy-front 패턴 참고
 
 ```scss
 // pmdp010SearchForm.scss
@@ -761,7 +761,7 @@ defineExpose({
 - [ ] emit('search') 호출
 
 ### CSS
-- [ ] tomms-lite-front 스타일 참고
+- [ ] pfy-front 스타일 참고
 - [ ] 반응형 레이아웃 구현
 
 ## 🐛 자주 발생하는 에러
