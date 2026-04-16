@@ -252,8 +252,8 @@ import {
 
 // ⭐ CRITICAL: API endpoints
 const Api = {
-  selectDpReqStatSum: '/online/mvcJson/PMDP020-selectDpReqStatSum',
-  selectDpReqList: '/online/mvcJson/PMDP020-selectDpReqList',
+  selectDpReqStatSum: '/api/v1/PMDP020-selectDpReqStatSum',
+  selectDpReqList: '/api/v1/PMDP020-selectDpReqList',
 } as const;
 
 // ⭐ CRITICAL: API function with proper typing
@@ -288,7 +288,7 @@ export async function fetchSelectDpReqStatSum(
 - ✅ API import: `from './types'` (같은 디렉토리)
 - ✅ Component import: `from '@/api/pages/.../types'` (화면 컴포넌트에서)
 - ❌ URL: `/PMDP020-selectDpReqList` (잘못됨)
-- ✅ URL: `/online/mvcJson/PMDP020-selectDpReqList` (올바름)
+- ✅ URL: `/api/v1/PMDP020-selectDpReqList` (올바름)
 - ✅ `return response.data.payload` (올바름 - SPOV010 패턴)
 
 #### 1.1. **백엔드 응답 구조 패턴** (CRITICAL!)
@@ -1462,7 +1462,7 @@ export default defineConfig((configEnv: ConfigEnv) => {
           target: baseURL,
           changeOrigin: true,
         },
-        '/online/mvcJson': {
+        '/api/v1': {
           target: baseURL,
           changeOrigin: true,
         },

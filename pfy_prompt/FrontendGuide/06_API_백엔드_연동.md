@@ -64,8 +64,8 @@ import {
 
 // ⭐ CRITICAL: API 엔드포인트 URL 형식
 const Api = {
-  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
-  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
+  selectWindowList: '/api/v1/SYAR030-selectWindowList',
+  saveWindowList: '/api/v1/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -123,12 +123,12 @@ export async function saveWindowList(
 - ✅ `import api from '@/plugins/axios'` 직접 import
 - ✅ Types: `api/pages/{module}/{category}/{screenId}Types.ts`
 - ✅ API import: `from '@/api/pages/{module}/{category}/{screenId}Types'`
-- ✅ API URL: `/online/mvcJson/SYAR030-selectWindowList`
+- ✅ API URL: `/api/v1/SYAR030-selectWindowList`
 - ❌ API URL: `/SYAR030-selectWindowList` (prefix 누락)
 - ❌ API URL: `/json/SYAR030-selectWindowList` (잘못된 prefix)
 - ✅ `return response.data` (ApiResponse 전체 반환)
 - ✅ **조회 포함 모든 API 호출은 `api.post()` 사용** — `api.get()` 절대 사용 금지
-- ❌ `api.get(url, { params })` — CPMS `/online/mvcJson/` 디스패처는 GET을 처리하지 않음 (404/405)
+- ❌ `api.get(url, { params })` — CPMS `/api/v1/` 디스패처는 GET을 처리하지 않음 (404/405)
 
 ---
 
@@ -463,8 +463,8 @@ import type {
 } from '@/api/pages/sy/ar/syar030Types';
 
 const Api = {
-  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
-  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
+  selectWindowList: '/api/v1/SYAR030-selectWindowList',
+  saveWindowList: '/api/v1/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -734,7 +734,7 @@ public class SYAR030ServiceImpl {
 ### API 함수
 - [ ] `import api from '@/plugins/axios'` 직접 import
 - [ ] **모든 API 호출 `api.post()` 사용 확인 — `api.get()` 사용 금지**
-- [ ] API URL: `/online/mvcJson/{화면ID}-{메서드명}` 형식
+- [ ] API URL: `/api/v1/{화면ID}-{메서드명}` 형식
 - [ ] camelCase 파라미터 직접 전달 (변환 불필요)
 - [ ] 세션 파라미터(sLangCd 등) 미포함 (서버측 처리)
 - [ ] 감사 필드 미포함 (서버측 AuditBaseDto 처리)
@@ -850,13 +850,13 @@ const saveData = [
 // ❌ WRONG — prefix 누락 또는 잘못된 형식
 '/SYAR030-selectWindowList'
 '/json/SYAR030-selectWindowList'
-'/online/mvcJson/SYAR030/selectWindowList'  // ← 하이픈 아닌 슬래시
+'/api/v1/SYAR030/selectWindowList'  // ← 하이픈 아닌 슬래시
 ```
 
 **해결**: 정확한 URL 형식 사용
 ```typescript
-// ✅ CORRECT — /online/mvcJson/{화면ID}-{메서드명}
-'/online/mvcJson/SYAR030-selectWindowList'
+// ✅ CORRECT — /api/v1/{화면ID}-{메서드명}
+'/api/v1/SYAR030-selectWindowList'
 ```
 
 ### 4. PK 중복 에러 (CM0001)
@@ -899,8 +899,8 @@ import type {
 } from '@/api/pages/sy/ar/syar030Types';
 
 const Api = {
-  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
-  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
+  selectWindowList: '/api/v1/SYAR030-selectWindowList',
+  saveWindowList: '/api/v1/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -993,7 +993,7 @@ export interface SaveWindowListParams {
    - ✅ `import api from '@/plugins/axios'`
 
 2. **API URL 형식**
-   - ✅ `/online/mvcJson/SYAR030-selectWindowList`
+   - ✅ `/api/v1/SYAR030-selectWindowList`
    - ❌ `/SYAR030-selectWindowList`
    - ❌ `/json/SYAR030-selectWindowList`
 
