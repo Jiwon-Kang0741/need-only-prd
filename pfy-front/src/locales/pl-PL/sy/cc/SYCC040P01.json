@@ -1,0 +1,19 @@
+{
+  "btnInquiry": "조회",
+  "btnFold": "접기",
+  "btnSelect": "Select",
+  "btnClose": "Close",
+
+  "staPopTitle": "조직 검색",
+  "staLangCd": "언어",
+  "staDeptType": "조직 구분",
+  "staDeptNm": "조직명",
+  "staUseYn": "사용여부",
+
+  "grdMain.title": "조직 트리",
+  "grdMain.deptNm": "조직명",
+  "grdMain.deptLvl": "레벨",
+  "grdMain.deptCd": "조직코드",
+  "grdMain.pDeptNm": "상위 조직",
+  "grdMain.useYn": "사용여부"
+}

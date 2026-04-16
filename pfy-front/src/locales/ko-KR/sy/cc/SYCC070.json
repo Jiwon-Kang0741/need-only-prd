@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staLangCd": "언어",
+  "staWrdId": "단어ID",
+  "staWrdNm": "단어명",
+  "staUseYn": "사용여부",
+  "grdMain.title": "단어 리스트",
+  "grdMain.wrdId": "단어ID",
+  "grdMain.wrdNmKor": "단어명(한글)",
+  "grdMain.wrdNm": "단어명",
+  "grdMain.useYn": "사용여부",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일"
+}

@@ -1,0 +1,26 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "btnSubSave": "Save",
+  "btnSubExtract": "Extract",
+
+  "staLangCd": "Language",
+  "staWindowId": "Screen ID",
+  "staWindowNm": "Screen Name",
+  "staUseYn": "Used",
+
+  "grdMain.title": "Screen List",
+  "grdMain.windowId": "Screen ID",
+  "grdMain.windowNmKor": "Screen Name(Kor)",
+  "grdMain.windowNm": "Screen Name",
+  "grdMain.windowUrl": "Screen URL",
+  "grdMain.windowDesc": "Screen Description",
+  "grdMain.useYn": "Used",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date",
+  "grdSub.title": "Screen Object List",
+  "grdSub.windowId": "Screen ID",
+  "grdSub.objtTypeCd": "Object Properties",
+  "grdSub.objtId": "Object ID",
+  "grdSub.objtNm": "Object Name"
+}

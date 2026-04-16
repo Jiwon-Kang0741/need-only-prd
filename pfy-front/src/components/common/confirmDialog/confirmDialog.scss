@@ -1,0 +1,44 @@
+.p-dialog.confirm-dialog-root {
+  min-width: 250px;
+  max-width: 700px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  .header {
+    height: 25px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--txt-color-1);
+    }
+
+    .close-button {
+      margin-left: auto;
+    }
+  }
+
+  .content {
+    width: 100%;
+    margin: 15px 0 20px 0;
+    font-size: 16px;
+    text-align: center;
+    white-space: pre-wrap;
+  }
+
+  .footer {
+    display: flex;
+    gap: 8px;
+
+    .action-button {
+      min-width: 85px;
+    }
+  }
+}

@@ -1,0 +1,29 @@
+.search-input {
+  display: inline-block;
+  align-items: center;
+  position: relative;
+
+  &.fluid {
+    width: 100%;
+  }
+
+  .input-text-root {
+    padding-right: 32px;
+  }
+}
+
+.search-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  width: 20px;
+  height: 20px;
+  color: var(--icon-color-1);
+
+  &:disabled {
+    cursor: default;
+  }
+}

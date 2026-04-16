@@ -1,0 +1,27 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSub1Save": "저장",
+  "btnSub2Save": "저장",
+
+  "staRoleId": "역할ID",
+  "staRoleNm": "역할명",
+  "staWindowId": "화면ID",
+  "staWindowNm": "화면명",
+
+  "grdMain.title": "역할 리스트",
+  "grdMain.roleId": "역할ID",
+  "grdMain.roleNm": "역할명",
+  "grdMain.useYn": "사용여부",
+
+  "grdSub1.title": "화면 리스트",
+  "grdSub1.windowId": "화면ID",
+  "grdSub1.windowNm": "화면명",
+  "grdSub1.windowUrl": "화면URL",
+
+  "grdSub2.objtPermYn": "비활성화 여부",
+  "grdSub2.title": "화면 오브젝트 리스트",
+  "grdSub2.windowId": "화면ID",
+  "grdSub2.objtTypeCd": "구분",
+  "grdSub2.objtId": "오브젝트ID",
+  "grdSub2.objtNm": "오브젝트명"
+}

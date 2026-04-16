@@ -1,0 +1,44 @@
+{
+  "button": {
+    "add": "로컬 한국어 DSOV010 버튼 추가",
+    "delete": "로컬 한국어 DSOV010 버튼 삭제"
+  },
+  "static": {
+    "hello": "DSOV010 hello 한글ㄹㄹㄹㄹㄹ"
+  },
+  "MSG001": "{action} 해 주십시오.{action}",
+  "SYCC000": {
+    "click": "클릭",
+    "doubleClick": "더블클릭"
+  },
+  "btnSave": "DSOV010 버튼 권한 테스트",
+  "btnSpSummary1": "PO",
+  "btnSpSummary2": "ITEM",
+  "staPmSummaryTitle": "부품구매현황",
+  "staPmSummaryStatus1": "완료율",
+  "staPmSummaryStatus2": "요청",
+  "staPmSummaryStatus3": "진행중",
+  "staPmSummaryStatus4": "납품완료",
+  "staMtSummaryTitle": "정비현황",
+  "staMtSummaryStatus1": "완료율",
+  "staMtSummaryStatus2": "요청",
+  "staMtSummaryStatus3": "진행중",
+  "staMtSummaryStatus4": "정비완료",
+  "staSummaryTitle1": "기술지원 요청 건수",
+  "staSummaryTitle2": "교육 요청 건수",
+  "staSummaryTitle3": "기술 지원 요청 건수",
+  "staSummaryPending": "진행중",
+  "staSummaryDelayed": "지연",
+  "staSummaryRequest": "요청",
+  "staSummaryCompleted": "답변완료",
+  "staSummaryChartTitle": "구매 금액 추이",
+  "staSummaryPieChartTitle": "정비 요청",
+  "btnSummaryChartOrder": "수주금액",
+  "btnSummaryChartSales": "매출금액",
+  "btnSummaryChartWarehouse": "창고금액",
+  "btnCounty": "국가별",
+  "btnPeriod": "기간별",
+  "btnSystem": "체계별",
+  "staNatnCdNoSrchRslt": "검색 결과 없음",
+  "staNoticeTitle": "공지사항"
+}

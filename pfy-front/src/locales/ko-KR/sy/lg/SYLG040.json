@@ -1,0 +1,19 @@
+﻿{
+  "btnInquiry": "조회",
+
+  "staTrnsDtm": "작성일자",
+  "staTitle": "제목",
+  "staReciMailAdrss": "수신자 이메일",
+  "staMailErrorTitle": "전송 결과",
+
+  "grdMain.title": "메일이력 내역",
+  "grdMain.mailId": "Mail ID",
+  "grdMain.mailTitle": "제목",
+  "grdMain.sndMailAdrss": "작성자 이메일",
+  "grdMain.seq": "순번",
+  "grdMain.reciSc": "수신구분",
+  "grdMain.reciMailAdrss": "수신자 이메일",
+  "grdMain.trnsDtm": "전송일시",
+  "grdMain.mailSendYn": "전송여부",
+  "grdMain.mailError": "전송결과"
+}

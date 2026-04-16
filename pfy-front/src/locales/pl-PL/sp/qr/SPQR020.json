@@ -1,0 +1,21 @@
+﻿{
+  "staHeaderTitle": "견적요청",
+  "staStrCd": "체계",
+  "staTitle": "제목",
+  "staWriter": "작성자",
+  "btnDeleteAll": "전체삭제",
+  "btnNewProduct": "제품 추가",
+  "btnSubmit": "등록",
+  "btnCancel": "취소",
+  "grdMain.title": "Item",
+  "grdMain.rqrDrtInptYn": "직접 입력",
+  "grdMain.ctlgNo": "카탈로그 번호",
+  "grdMain.partNm": "상품명",
+  "grdMain.partNo": "부품번호",
+  "grdMain.slngUnit": "단위",
+  "grdMain.qty": "수량",
+  "grdMain.slngPric": "단위가격 (USD)",
+  "grdMain.lt": "리드타임 (일)",
+  "grdMain.refNo": "참고번호",
+  "grdMain.btnDelete": "삭제"
+}

@@ -1,0 +1,19 @@
+﻿{
+  "btnInquiry": "Search",
+
+  "staTrnsDtm": "Creation Date",
+  "staTitle": "Title",
+  "staReciMailAdrss": "Receiver E-mail",
+  "staMailErrorTitle": "Transmission Result",
+
+  "grdMain.title": "Details",
+  "grdMain.mailId": "Mail ID",
+  "grdMain.mailTitle": "Title",
+  "grdMain.sndMailAdrss": "Sender E-mail Address",
+  "grdMain.seq": "No.",
+  "grdMain.reciSc": "Receiver Category",
+  "grdMain.reciMailAdrss": "Receiver E-mail Address",
+  "grdMain.trnsDtm": "Transmission Date",
+  "grdMain.mailSendYn": "Transmission Status",
+  "grdMain.mailError": "Transmission Result"
+}

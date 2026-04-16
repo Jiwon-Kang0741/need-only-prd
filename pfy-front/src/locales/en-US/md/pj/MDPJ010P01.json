@@ -1,0 +1,11 @@
+﻿{
+  "staPopTitle": "Project Master History",
+
+  "grdMain.title": "Change History List",
+  "grdMain.ver": "Version",
+  "grdMain.setCtgr": "Setting Category",
+  "grdMain.sno": "No.",
+  "grdMain.note": "Change Details",
+  "grdMain.lastMdfrId": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

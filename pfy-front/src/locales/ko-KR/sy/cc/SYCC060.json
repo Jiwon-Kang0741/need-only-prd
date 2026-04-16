@@ -1,0 +1,22 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSubSave": "저장",
+  "btnDisplayChange": "일괄변경",
+  "btnImport": "Display 채우기",
+  "staLangCd": "언어",
+  "staWindowId": "화면 ID",
+  "staWindowNm": "화면명",
+  "staExtractYn": "추출여부",
+  "btnExtract": "추출",
+  "grdMain.title": "화면 목록",
+  "grdMain.windowId": "화면 ID",
+  "grdMain.windowNm": "화면명",
+  "grdMain.extractYn": "추출여부",
+  "grdMain.btnExtract": "추출",
+  "grdSub.title": "화면 오브젝트 리스트",
+  "grdSub.objtTypeCd": "타입",
+  "grdSub.objtId": "오브젝트ID",
+  "grdSub.objtNm": "오브젝트명",
+  "grdSub.useYn": "사용여부",
+  "grdSub.objtDisNm": "Display"
+}

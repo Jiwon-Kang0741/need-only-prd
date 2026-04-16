@@ -1,0 +1,15 @@
+{
+  "staPopTitle": "Maintenance Inquiry",
+  "staContent": "Content",
+  "btnUploadFile": "Upload File",
+  "btnSubmit": "Submit",
+  "btnClose": "Close",
+  "staSysTypNm": "System Type",
+  "staPrdtNo": "Serial Number (Part No.)",
+  "staMtncInqCtgr": "Categories",
+  "staInqrrId": "Requester",
+  "staTitleNm": "Subject",
+  "staInqAfidLst": "Attachment",
+  "staServcNo": "Service No.",
+  "staNoAtt": "There is no attachment."
+}

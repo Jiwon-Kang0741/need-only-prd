@@ -1,0 +1,29 @@
+{
+  "title": {
+    "new": "New Request",
+    "edit": "Request Details"
+  },
+  "staPblCd": "System",
+  "staAskNo": "Request No.",
+  "staStrCd": "Sub System",
+  "staReqMiut": "Requesting Unit",
+  "staStkNo": "Stock No.",
+  "staNmgd": "Item Name",
+  "staPrtno": "Part No.",
+  "staMatlCd": "Material Code",
+  "staUnit": "Unit",
+  "staQty": "Quantity",
+  "staCiObjYn": "CI Target",
+  "staPrdtsSc": "Production Type",
+  "staDoctNo": "Request Basis",
+  "staNote": "Remarks",
+  "btnSave": "Save",
+  "btnRequest": "Request",
+  "btnDelete": "Delete",
+  "btnClear": "Clear",
+  "btnCancel": "Cancel",
+  "msg": {
+    "required": "This field is required.",
+    "qtyGreaterThanZero": "Quantity must be greater than 0."
+  }
+}

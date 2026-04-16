@@ -1,0 +1,282 @@
+.treetable-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+
+  .treetable-header {
+    display: flex;
+    align-items: center;
+    height: 35px;
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--txt-color-1);
+    }
+
+    .util-buttons {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+  }
+
+  .p-treetable.treetable-root {
+    --p-treetable-header-cell-background: var(--bg-2);
+    --p-treetable-node-toggle-button-selected-hover-background: transparent;
+    --p-treetable-node-toggle-button-color: var(--icon-color-1);
+
+    border: 1px solid var(--divider-2);
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+
+    .p-treetable-table {
+      table-layout: fixed;
+
+      &:has(tr.tt-level-2.tt-last-of-level[aria-expanded='true']) {
+        & > .p-treetable-tbody {
+          &::before {
+            height: 100%;
+          }
+        }
+      }
+
+      &:has(.p-treetable-empty-message) {
+        height: 100%;
+        .p-treetable-tbody {
+          &::before,
+          &::after {
+            opacity: 0;
+          }
+        }
+        tr.p-treetable-empty-message {
+          td {
+            border-bottom: 0;
+          }
+
+          .empty-msg {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 30px 0;
+
+            .icon {
+              font-size: 30px;
+            }
+          }
+        }
+      }
+
+      & > .p-treetable-thead {
+        z-index: 4;
+        th.p-treetable-header-cell {
+          height: 48px;
+          white-space: normal;
+          word-break: keep-all;
+          padding: 5px;
+          text-align: center;
+
+          &.center {
+            .p-treetable-column-header-content {
+              justify-content: center;
+            }
+          }
+
+          &.left {
+            .p-treetable-column-header-content {
+              justify-content: flex-start;
+            }
+          }
+
+          &.right {
+            .p-treetable-column-header-content {
+              justify-content: flex-end;
+            }
+          }
+
+          .column-content {
+            color: var(--txt-color-1);
+          }
+        }
+      }
+
+      & > .p-treetable-tbody {
+        position: relative;
+        &::before,
+        &::after {
+          content: '';
+          position: absolute;
+          width: 1px;
+          z-index: 1;
+          background: var(--divider-2);
+          opacity: 0; // 기본적으로 숨김
+        }
+        &::before {
+          content: '';
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          height: calc(100% - 42px);
+        }
+        &::after {
+          content: '';
+          position: absolute;
+          top: 70px;
+          left: 35px;
+          height: calc(100% - 92px);
+        }
+        
+        // 펼쳐진 상태일 때만 세로 라인 표시
+        &:has(tr[aria-expanded='true']) {
+          &::before {
+            opacity: 1;
+          }
+        }
+        
+        // 레벨 2 이상이 펼쳐진 상태일 때만 두 번째 세로 라인 표시
+        &:has(tr.tt-level-2[aria-expanded='true']),
+        &:has(tr.tt-level-3[aria-expanded='true']) {
+          &::after {
+            opacity: 1;
+          }
+        }
+        tr:has(+ .p-treetable-row-selected) {
+          td {
+            border-block-end-color: transparent;
+          }
+        }
+
+        tr {
+          &.tt-level-2,
+          &.tt-level-3,
+          &.tt-level-4 {
+            position: relative;
+            .left {
+              position: relative;
+              &::before {
+                display: inline-block;
+                content: '';
+                position: absolute;
+                top: 23px;
+                transform: translateZ(0);
+                backface-visibility: hidden;
+                width: 6px;
+                height: 1px;
+                z-index: 3;
+                background: var(--divider-2);
+              }
+            }
+          }
+          &.tt-level-2 {
+            .left {
+              &::before {
+                left: 20px;
+              }
+            }
+          }
+          &.tt-level-3 {
+            .left {
+              &::before {
+                left: 35px;
+              }
+            }
+          }
+          &.tt-level-4 {
+            .left {
+              &::before {
+                left: 35px;
+                width: 20px;
+              }
+            }
+          }
+          &.p-treetable-row-selected {
+            background: var(--bg-select-color);
+            border-block-end-color: transparent;
+
+            td {
+              border-block-end-color: transparent;
+            }
+          }
+
+          &:last-child {
+            td {
+              border-bottom: none;
+            }
+          }
+        }
+
+        td {
+          color: var(--txt-color-1);
+          padding: 5px 10px;
+          height: 46px;
+
+          &.center {
+            .p-treetable-body-cell-content {
+              justify-content: center;
+            }
+          }
+
+          &.left {
+            .p-treetable-body-cell-content {
+              justify-content: flex-start;
+            }
+          }
+
+          &.right {
+            .p-treetable-body-cell-content {
+              justify-content: flex-end;
+            }
+          }
+
+          .p-treetable-body-cell-content {
+            width: 100%;
+            white-space: normal;
+            word-break: keep-all;
+
+            .p-treetable-node-toggle-button {
+              flex-shrink: 0;
+              position: relative;
+              z-index: 2;
+              svg {
+                fill: var(--bg-1);
+              }
+
+              &[style*='visibility: hidden'] {
+                .toggle-doc-icon {
+                  visibility: visible;
+                  background-color: var(--bg-1);
+                }
+              }
+
+              .toggle-doc-icon {
+                visibility: hidden;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 2;
+                color: var(--icon-color-1);
+                background-color: var(--bg-1);
+              }
+            }
+
+            .folder-icon {
+              color: var(--icon-color-1);
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+.search-form-container {
+  width: 100%;
+
+  :deep(.p-select) {
+    min-width: 140px;
+  }
+}

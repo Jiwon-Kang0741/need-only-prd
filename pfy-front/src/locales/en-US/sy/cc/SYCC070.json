@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staLangCd": "Language",
+  "staWrdId": "Word ID",
+  "staWrdNm": "Word Name",
+  "staUseYn": "Used",
+  "grdMain.title": "Word List",
+  "grdMain.wrdId": "Word ID",
+  "grdMain.wrdNmKor": "Word Name(Kor)",
+  "grdMain.wrdNm": "Word Name",
+  "grdMain.useYn": "Used",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

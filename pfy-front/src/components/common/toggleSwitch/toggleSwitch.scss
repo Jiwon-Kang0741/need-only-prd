@@ -1,0 +1,72 @@
+.toggle-switch-custom {
+  --toggle-switch-background: #03020a;
+  --toggleswitch-hover-background: #03020a;
+  --toggle-switch-checked-background: #fff;
+  --toggleswitch-checked-hover-background: #fff;
+  --toggleswitch-handle-hover-background: #fff;
+  --toggleswitch-checked-handle: #03020a;
+  --toggleswitch-checked-border-color: #03020a;
+  --toggleswitch-checked-hover-border-color: #03020a;
+
+  --toggleswitch-handle-checked-background: #03020a;
+  --toggleswitch-handle-checked-hover-background: #03020a;
+
+  --p-toggleswitch-background: var(--toggle-switch-background);
+  --p-toggleswitch-checked-background: var(--toggle-switch-checked-background);
+  --p-toggleswitch-checked-handle: var(--toggleswitch-checked-handle);
+  --p-toggleswitch-checked-border-color: var(
+    --toggleswitch-checked-border-color
+  );
+  --p-toggleswitch-handle-checked-background: var(
+    --toggleswitch-handle-checked-background
+  );
+  --p-toggleswitch-checked-hover-border-color: var(
+    --toggleswitch-checked-hover-border-color
+  );
+
+  // hover
+  --p-toggleswitch-handle-hover-background: var(
+    --toggleswitch-handle-hover-background
+  );
+  --p-toggleswitch-handle-checked-hover-background: var(
+    --toggleswitch-handle-checked-hover-background
+  );
+  --p-toggleswitch-hover-background: var(--toggleswitch-hover-background);
+  --p-toggleswitch-checked-hover-background: var(
+    --toggleswitch-checked-hover-background
+  );
+
+  // --p-toggleswitch-handle-border-radius: 50%;
+  //   --p-toggleswitch-handle-size: 1rem;
+  //   --p-toggleswitch-width: 2.5rem;
+  //   --p-toggleswitch-height: 1.5rem;
+  //   --p-toggleswitch-border-radius: 30px;
+  //   --p-toggleswitch-gap: 0.25rem;
+  //   --p-toggleswitch-shadow: var(--p-form-field-shadow);
+  //   --p-toggleswitch-border-width: 1px;
+  //   --p-toggleswitch-border-color: transparent;
+  //   --p-toggleswitch-hover-border-color: transparent;
+  //   --p-toggleswitch-checked-border-color: transparent;
+  //   --p-toggleswitch-checked-hover-border-color: transparent;
+  //   --p-toggleswitch-invalid-border-color: var(--p-form-field-invalid-border-color);
+  //   --p-toggleswitch-transition-duration: var(--p-form-field-transition-duration);
+  //   --p-toggleswitch-slide-duration: 0.2s;
+  //   --p-toggleswitch-focus-ring-width: var(--p-focus-ring-width);
+  //   --p-toggleswitch-focus-ring-style: var(--p-focus-ring-style);
+  //   --p-toggleswitch-focus-ring-color: var(--p-focus-ring-color);
+  //   --p-toggleswitch-focus-ring-offset: var(--p-focus-ring-offset);
+  //   --p-toggleswitch-focus-ring-shadow: var(--p-focus-ring-shadow);
+  //   --p-toggleswitch-handle-background: var(--p-surface-0);
+  //   --p-toggleswitch-handle-disabled-background: var(--p-form-field-disabled-color);
+  //   --p-toggleswitch-handle-hover-background: var(--p-surface-0);
+  //   --p-toggleswitch-handle-checked-background: var(--p-surface-0);
+  //   --p-toggleswitch-handle-checked-hover-background: var(--p-surface-0);
+  //   --p-toggleswitch-handle-color: var(--p-text-muted-color);
+  //   --p-toggleswitch-handle-hover-color: var(--p-text-color);
+  //   --p-toggleswitch-handle-checked-color: var(--p-primary-color);
+  //   --p-toggleswitch-handle-checked-hover-color: var(--p-primary-hover-color);
+  //   --p-toggleswitch-background: var(--p-surface-300);
+  //   --p-toggleswitch-disabled-background: var(--p-form-field-disabled-background);
+  //   --p-toggleswitch-hover-background: var(--p-surface-400);
+  //   --p-toggleswitch-checked-background: var(--p-primary-color); //   --p-toggleswitch-checked-hover-background: var(--p-primary-hover-color);
+}

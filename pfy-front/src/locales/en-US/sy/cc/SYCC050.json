@@ -1,0 +1,19 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staPblCd": "SystemCode",
+  "staLangCd": "Language",
+  "staTmplSc": "Template Category",
+  "staTmplNm": "Template Name",
+  "staUseYn": "Use",
+  "grdMain.title": "Template List",
+  "grdMain.pblCd": "SystemCode",
+  "grdMain.inptSno": "Input Sequence",
+  "grdMain.tmplSc": "Template Category",
+  "grdMain.tmplNm": "Template Name",
+  "grdMain.langCd": "Language",
+  "grdMain.afid": "Attached File",
+  "grdMain.useYn": "Used",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

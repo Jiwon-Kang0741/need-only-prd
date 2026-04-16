@@ -1,0 +1,15 @@
+{
+  "staPopTitle": "정비 문의",
+  "staContent": "내용",
+  "btnUploadFile": "파일 첨부",
+  "btnSubmit": "제출",
+  "btnClose": "닫기",
+  "staMtncInqCtgr": "구분",
+  "staSysTypNm": "기종명",
+  "staPrdtNo": "호기(S/N)\n부품번호",
+  "staInqrrId": " 문의자 ID",
+  "staTitleNm": "제목",
+  "staInqAfidLst": "첨부파일",
+  "staServcNo": "서비스 번호",
+  "staNoAtt": "첨부파일이 없습니다."
+}

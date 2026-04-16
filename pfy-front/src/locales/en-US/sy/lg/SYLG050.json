@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "Search",
+  "staMstkDtm": "Period",
+  "staConditions": "Conditions",
+  "staUser": "User",
+  "staWindow": "Screen",
+  "grdMain.title": "Error Log List",
+  "grdMain.userId": "User ID",
+  "grdMain.userNm": "User Name",
+  "grdMain.windowId": "Screen ID",
+  "grdMain.actnId": "Behavior ID",
+  "grdMain.mstkNm": "Error Name",
+  "grdMain.mstkCntnt": "Error Details",
+  "grdMain.mstkDtm": "Error Date and Time"
+}

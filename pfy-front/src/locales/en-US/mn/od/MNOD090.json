@@ -1,0 +1,14 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staCstmCd": "Customer Code",
+  "staCstmNm": "Customer Name",
+  "staStrCd": "System Code",
+  "staStrNm": "System Name",
+  "grdMain.title": "System List",
+  "grdMain.cstmCd": "Customer Code",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.strCd": "System Code",
+  "grdMain.strNm": "System Name",
+  "grdMain.note": "Description"
+}

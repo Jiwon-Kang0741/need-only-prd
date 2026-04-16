@@ -1,0 +1,34 @@
+.otp-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .input-otp-root {
+    --p-inputotp-input-lg-width: 52px;
+
+    .p-inputtext {
+      height: 48px;
+    }
+  }
+}
+
+.timer-text {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--brand-secondary-color);
+}
+
+.resend-btn {
+  border-radius: 4px;
+  width: 120px;
+  height: 48px;
+  background-color: var(--bg-6);
+  font-size: 18px;
+  color: var(--txt-white-color-1);
+  margin-left: auto;
+
+  &:disabled {
+    background-color: var(--bg-3);
+    color: var(--txt-color-4);
+  }
+}

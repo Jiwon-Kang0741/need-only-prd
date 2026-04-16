@@ -1,0 +1,16 @@
+﻿{
+  "grdMain.title": "정비 견적 목록",
+  "btnInquiry": "조회",
+  "staNatnCdLst": "국가",
+  "staCstmCd": "고객명",
+  "staServcNo": "서비스번호",
+  "staInqrDt": "견적요청일자",
+  "staMtncQtStat": "상태",
+  "grdMain.servcNo": "서비스번호",
+  "grdMain.natnCd": "국가",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.qtReqDt": "요청일자",
+  "grdMain.mtncQtStat": "상태",
+  "grdMain.qtTotAmt": "총 금액",
+  "grdMain.crnc": "통화"
+}

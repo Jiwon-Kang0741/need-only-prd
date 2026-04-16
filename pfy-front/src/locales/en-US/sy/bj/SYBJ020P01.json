@@ -1,0 +1,12 @@
+﻿{
+  "staPopTitle": "Batch List",
+  "btnSave": "Run",
+  "btnUploadFile": "Upload file",
+  "staNoAtt": "There are no attachments",
+
+  "staJobSchNm": "Job Name",
+  "staLogId": "Log ID",
+  "staBatParam": "Batch Parameter",
+  "staProcTm": "Elapsed Time",
+  "staAttach": "Attachment"
+}

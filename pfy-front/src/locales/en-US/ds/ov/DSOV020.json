@@ -1,0 +1,50 @@
+{
+  "button": {
+    "add": "추가",
+    "delete": "삭제"
+  },
+  "static": {
+    "hello": "hello"
+  },
+  "MSG001": "{action} 해 주십시오.{action}",
+  "SYCC000": {
+    "click": "클릭",
+    "doubleClick": "더블클릭"
+  },
+  "btnSpSummary1": "PO",
+  "btnSpSummary2": "ITEM",
+  "staTopBannerTitle1": "Order",
+  "staTopBannerTitle2": "Quote Request",
+  "staTopBannerTitle3": "Maintenance Request",
+  "staTopBannerTxt2": "If you can't find the product, request a quote.",
+  "staTopBannerTxt3": "If maintenance is needed, please request.",
+  "btnTopBannerMro": "MRO",
+  "btnTopBannerWh": "Warehouse",
+  "btnTopBannerQr": "",
+  "btnTopBannerMt": "",
+  "staSpSummaryTitle": "Procurement Summary",
+  "staSpSummaryStatus1": "Requests",
+  "staSpSummaryStatus2": "Rejected Requests",
+  "staSpSummaryStatus3": "In Progress",
+  "staSpSummaryStatus4": "Delayed",
+  "staSpSummaryStatus5": "Completed",
+  "staMtSummaryTitle": "Maintenance",
+  "staMtSummaryStatus1": "Pending Receipt",
+  "staMtSummaryStatus2": "Received",
+  "staMtSummaryStatus3": "In progress",
+  "staMtSummaryStatus4": "Completed",
+  "staMtSummaryStatus5": "Charge requests",
+  "staSummaryTitle1": "Parts Quote",
+  "staSummaryTitle2": "Maintenance Inquiries",
+  "staSummaryTitle3": "Technical Inquiry",
+  "staSummaryPending": "Pending",
+  "staSummaryDelayed": "Delayed",
+  "staSummaryRequest": "Request",
+  "staSummaryCompleted": "Completed",
+  "staSummaryChartTitle": "Expenditure Summary",
+  "staNoticeTitle": "Notice",
+  "staBotBannerTitle1": "2026 New Catalog",
+  "staBotBannerTitle2": "TOMMS Lite Portal Manual",
+  "staBotBannerTxt1": "The new catalog has been updated. Check it out now.",
+  "staBotBannerTxt2": "Check the system manual"
+}

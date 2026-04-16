@@ -1,0 +1,27 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSub1Save": "Save",
+  "btnSub2Save": "Save",
+
+  "staRoleId": "Role ID",
+  "staRoleNm": "Role Name",
+  "staWindowId": "Screen ID",
+  "staWindowNm": "Screen Name",
+
+  "grdMain.title": "Role List",
+  "grdMain.roleId": "Role ID",
+  "grdMain.roleNm": "Role Name",
+  "grdMain.useYn": "Used",
+
+  "grdSub1.title": "Screen List",
+  "grdSub1.windowId": "Screen ID",
+  "grdSub1.windowNm": "Screen Name",
+  "grdSub1.windowUrl": "Screen URL",
+
+  "grdSub2.objtPermYn": "Disabled",
+  "grdSub2.title": "Screen Object List",
+  "grdSub2.windowId": "Screen ID",
+  "grdSub2.objtTypeCd": "Object Properties",
+  "grdSub2.objtId": "Object ID",
+  "grdSub2.objtNm": "Object Name"
+}

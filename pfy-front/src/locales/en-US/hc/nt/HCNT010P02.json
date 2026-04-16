@@ -1,0 +1,16 @@
+﻿{
+  "staPopTitle": "Notice Detail",
+  "staObjNatnCdLst": "Applicable to",
+  "staNtcDate": "Period Setting",
+  "staPopNtcYn": "Popup",
+  "staTopFxdYn": "Pin to Top",
+  "staNtcTitle": "Title",
+  "staNtcAfidLst": "Attachment",
+  "staNoAtt": "There is no attachment.",
+  "btnUploadFile": "Upload file",
+  "staContent": "Content",
+  "btnSubmit": "Submit",
+  "btnEdit": "Edit",
+  "btnDelete": "Delete",
+  "btnCancel": "Cancel"
+}

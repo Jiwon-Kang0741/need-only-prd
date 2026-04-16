@@ -1,0 +1,21 @@
+﻿{
+  "staTitle": "Title",
+  "staPartQtReqStat": "Status",
+  "staCstmCd": "Customer Name",
+  "staReqDt": "Posted Date",
+  "btnNewQuote": "New Quote",
+  "btnDeleteAll": "Delete All",
+  "btnInquiry": "Inquiry",
+  "btnNewProduct": "New Quote",
+  "staLabalAll": "ALL",
+  "grdMain.title": "Quotation Requests List",
+  "grdMain.titleNm": "Title",
+  "grdMain.itemCnt": "Number of Items",
+  "grdMain.partQtReqStat": "Status",
+  "grdMain.cstmCd": "Customer Code",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.rqrNm": "Requester",
+  "grdMain.reqDtm": "Posted Date",
+  "grdMain.elsDays": "Elapsed Days",
+  "grdMain.replDtm": "Requested Date"
+}

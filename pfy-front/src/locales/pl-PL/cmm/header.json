@@ -1,0 +1,11 @@
+{
+  "notification": {
+    "title": "Powiadomienia",
+    "deleteAll": "Usuń wszystko"
+  },
+  "setting": {
+    "resetPassword": "Resetuj hasło",
+    "theme": "Motyw",
+    "language": "Język"
+  }
+}

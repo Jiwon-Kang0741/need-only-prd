@@ -1,0 +1,27 @@
+{
+  "btnInquiry": "조회",
+  "btnReset": "초기화",
+  "btnSave": "저장",
+  "staBUSN_SC": "업무구분",
+  "staTitle": "진행상태",
+  "grdMain": {
+    "PRG_STAT": "진행상태",
+    "PRG_STAT_NM": "진행상태명"
+  },
+  "grdSubMain": {
+    "title": "진행상태별 담당자",
+    "LOGN_NM": "담당자명",
+    "MAIL_RECI_SC": "메일",
+    "SMS_RECI_YN": "SMS",
+    "MY_BUSN_YN": "업무함",
+    "USER_EMAL": "이메일",
+    "MOB_NO": "휴대폰번호",
+    "COMP_NM": "소속",
+    "DEPT_NM": "부서",
+    "TYPE_CD": "사용자유형",
+    "MIUT_CD": "소속부대",
+    "LAST_MDFR_NM": "수정자",
+    "LAST_MDFC_DTM": "수정일"
+  }
+}
+

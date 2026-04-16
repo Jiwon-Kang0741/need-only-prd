@@ -1,0 +1,15 @@
+@use 'sass:meta';
+
+// 테마 CSS 변수 전역 로딩 (--bg-1, --txt-color-1 등)
+@use '@/styles/themes/light';
+@use '@/styles/themes/dark';
+
+@layer base, components;
+
+@layer base {
+  @include meta.load-css('@/styles/base/index');
+}
+
+@layer components {
+  @include meta.load-css('@/styles/components/index');
+}

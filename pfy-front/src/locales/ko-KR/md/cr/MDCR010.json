@@ -1,0 +1,22 @@
+﻿{
+  "staExCr": "경영환율",
+  "staOfcExcr": "고시환율",
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "grdMain.title": "경영환율",
+  "grdMain.stndYr": "Year",
+  "grdMain.USD": "환율금액(USD)",
+  "grdMain.EUR": "환율금액(EUR)",
+  "grdMain.KRW": "환율금액(KRW)",
+  "grdSub.title": "고시환율",
+  "grdSub.year": "Year",
+  "grdSub.excrDt": "고시일자",
+  "grdSub.fromCrncCd": "기준통화",
+  "grdSub.toCrncCd": "변경통화",
+  "grdSub.crnc": "환율금액",
+  "grdSub.fstInptId": "최초등록자",
+  "grdSub.fstInptIp": "최초등록자 IP",
+  "grdSub.fstInptDtm": "최초등록일",
+  "grdSub.lastMdfrId": "최종수정자",
+  "grdSub.lastMdfcDtm": "최종수정일"
+}

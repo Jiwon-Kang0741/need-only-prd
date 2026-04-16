@@ -1,0 +1,14 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staCstmCd": "고객코드",
+  "staStgCd": "창고코드",
+  "staCstmNm": "고객명",
+  "staStgNm": "창고명",
+  "grdMain.title": "창고 목록",
+  "grdMain.stgCd": "창고코드",
+  "grdMain.stgNm": "창고명",
+  "grdMain.cstmCd": "고객코드",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.adrss": "비고"
+}

@@ -1,0 +1,11 @@
+{
+  "notification": {
+    "title": "Notification",
+    "deleteAll": "Delete All"
+  },
+  "setting": {
+    "resetPassword": "Reset Password",
+    "theme": "Theme",
+    "language": "Language"
+  }
+}

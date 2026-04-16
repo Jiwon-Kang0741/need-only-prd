@@ -1,0 +1,4 @@
+/* 로컬 /fonts/notoSans/*.woff2 가 없으면 dev 서버가 HTML을 돌려 OTS 파싱 오류가 납니다.
+ * 오프라인·폐쇄망이면 https://fonts.google.com 에서 받아 public/fonts 에 두고
+ * 아래 @import 를 제거한 뒤 self-host @font-face 로 교체하세요. */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&family=Noto+Sans+KR:wght@100..900&family=Noto+Serif:ital,wght@0,100..900;1,100..900&display=swap');

@@ -1,0 +1,20 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+
+  "staStgCd": "창고",
+  "staPartNo": "부품번호",
+  "staPartNm": "부품명",
+
+  "grdMain.stgNm": "창고",
+  "grdMain.partNm": "부품명",
+  "grdMain.ver": "버전",
+  "grdMain.partNo": "부품번호",
+  "grdMain.invQty": "수량",
+  "grdMain.unit": "단위",
+  "grdMain.invSlngPric": "가격",
+  "grdMain.crnc": "통화",
+  "grdMain.lt": "리드타임",
+  "grdMain.fstCretDtm": "생성일",
+  "grdMain.lastMdfcDtm": "수정일"
+}

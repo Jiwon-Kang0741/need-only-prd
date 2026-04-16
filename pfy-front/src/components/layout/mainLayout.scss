@@ -1,0 +1,58 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.main-container {
+  position: relative;
+  display: flex;
+  background: var(--bg-2);
+  box-sizing: border-box;
+  width: 100%;
+
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.15s ease-in-out;
+    will-change: opacity;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
+
+  &.sidebar-expanded .main-content {
+    min-width: calc(var(--global-min-width) - var(--sidebar-width));
+  }
+
+  &.sidebar-collapsed .main-content {
+    min-width: calc(var(--global-min-width) - var(--sidebar-width-collapsed));
+  }
+
+  /* 전환 루트가 레이아웃 영향 최소화 */
+  .page-fade-root {
+    contain: layout paint; /* 레이아웃 전파 억제(지원 브라우저에서) */
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fade-enter-active,
+    .fade-leave-active {
+      transition: none;
+    }
+  }
+
+  .main-content {
+    display: flex;
+    flex-direction: column;
+
+    padding: 12px 12px 24px 24px;
+    width: 100%;
+    gap: 8px;
+    transition: min-width var(--sidebar-transition-duration) ease;
+  }
+
+  .tab-content {
+    flex: 1;
+    padding: 32px 24px;
+    background: var(--bg-1);
+    color: var(--p-tabs-tabpanel-color);
+    border-radius: 16px;
+    border-top-left-radius: 0;
+  }
+}

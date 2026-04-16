@@ -1,0 +1,16 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnDownload": "PreView",
+  "staFileNm": "파일명",
+  "staFileDownDtm": "다운일자",
+  "staUser": "사용자",
+  "grdMain.title": "파일다운목록",
+  "grdMain.userId": "사용자ID",
+  "grdMain.userNm": "사용자명",
+  "grdMain.fileNo": "파일ID",
+  "grdMain.fileSeq": "파일SEQ",
+  "grdMain.fileNm": "파일명",
+  "grdMain.fileDownDtm": "파일다운일시",
+  "grdMain.fileExist": "파일유무",
+  "grdMain.download": "다운로드"
+}

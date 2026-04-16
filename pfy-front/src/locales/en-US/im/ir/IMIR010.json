@@ -1,0 +1,20 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+
+  "staStgCd": "Warehouse",
+  "staPartNo": "Part No",
+  "staPartNm": "Description",
+
+  "grdMain.stgNm": "Warehouse",
+  "grdMain.partNm": "Description",
+  "grdMain.ver": "Version",
+  "grdMain.partNo": "Part No",
+  "grdMain.invQty": "Quantity",
+  "grdMain.unit": "Unit",
+  "grdMain.invSlngPric": "Price",
+  "grdMain.crnc": "Currency",
+  "grdMain.lt": "Lead Time",
+  "grdMain.fstCretDtm": "Created Date",
+  "grdMain.lastMdfcDtm": "Updated Date"
+}

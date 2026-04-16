@@ -1,0 +1,26 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+
+  "staAccIp": "IP",
+  "staUserNm": "사용자",
+  "staUseYn": "사용여부",
+
+  "grdMain.title": "접속 IP 목록",
+  "grdMain.ipId": "IP_ID",
+  "grdMain.accIp": "허용 IP",
+  "grdMain.sideType": "내/외부",
+  "grdMain.userId": "사용자 ID",
+  "grdMain.userNm": "사용자",
+  "grdMain.onpstCd": "소속",
+  "grdMain.fwAplcYn": "방화벽적용",
+  "grdMain.tipFwAplcYn": "",
+  "grdMain.fwUseStdt": "방화벽 시작일자",
+  "grdMain.tipFwUseStdt": "",
+  "grdMain.fwUseEndt": "방화벽 종료일자",
+  "grdMain.tipFwUseEndt": "",
+  "grdMain.note": "비고",
+  "grdMain.useYn": "사용여부",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일"
+}

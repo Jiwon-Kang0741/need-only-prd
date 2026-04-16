@@ -1,0 +1,14 @@
+{
+  "staPopTitle": "User Search",
+  "staTypeCd": "User Type",
+  "staCompNm": "Department",
+  "stalognNm": "Name",
+  "staDeptNm": "Dept.",
+  "staAll": "ALL",
+  "btnInquiry": "Inquiry",
+  "grdMain.title": "User List",
+  "grdMain.userId": "User Id",
+  "grdMain.userNm": "Name",
+  "grdMain.deptNm": "Department",
+  "grdMain.userEmal": "Email Address"
+}

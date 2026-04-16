@@ -1,0 +1,16 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSubSave": "Save",
+  "btnSubFold": "Fold",
+
+  "staRoleId": "Role ID",
+  "staRoleNm": "Role Name",
+  "grdMain.title": "Role List",
+  "grdMain.roleId": "Role ID",
+  "grdMain.roleNm": "Role Name",
+  "grdMain.useYn": "Used",
+
+  "grdSub.title": "Menu List",
+  "grdSub.menuNm": "Menu Name",
+  "grdSub.menuId": "Menu ID"
+}

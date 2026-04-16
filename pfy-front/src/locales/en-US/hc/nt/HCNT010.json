@@ -1,0 +1,17 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "staCategory": "Category",
+  "staObjNatnCd": "Applicable to",
+  "staPostedDate": "Posted date",
+  "staAllPeriod": "All period",
+  "staNatnCdNoSrchRslt": "No Search Result",
+
+  "grdMain.objNatnNmLst": "Applicable to",
+  "grdMain.ntcExprYn": "Expired",
+  "grdMain.ntcTitle": "Title",
+  "grdMain.ntcAfYn": "Attachment",
+  "grdMain.writrNm": "Writer",
+  "grdMain.makeDtm": "Posted Date",
+  "grdMain.hits": "View",
+  "btnNewWrite": "New Write"
+}

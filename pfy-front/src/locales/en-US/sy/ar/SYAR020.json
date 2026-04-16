@@ -1,0 +1,26 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnFold": "Fold Menu",
+  "btnSubSave": "Save",
+
+  "staLangCd": "Language",
+  "staMenuNm": "Menu Name",
+  "staUseYn": "Used",
+
+  "grdMain.title": "Menu Tree",
+  "grdMain.menuNm": "Menu Tree",
+
+  "grdSub.title": "Menu List",
+  "grdSub.menuId": "Menu ID",
+  "grdSub.menuNmKor": "Menu Name(Kor)",
+  "grdSub.menuNm": "Menu Name",
+  "grdSub.windowId": "Screen ID",
+  "grdSub.windowNm": "ScreenName",
+  "grdSub.menuSort": "Sorting",
+  "grdSub.useYn": "Used",
+  "grdSub.fstOpYn": "First open or not",
+  "grdSub.menuParam": "Parameter",
+  "grdSub.menuIcon": "Menu Icon",
+  "grdSub.lastMdfrNm": "Modifier",
+  "grdSub.lastMdfcDtm": "Modification Date"
+}

@@ -1,0 +1,14 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSelect": "Select",
+
+  "staPopTitle": "Role Inquiry",
+  "staRoleId": "Role ID",
+  "staRoleNm": "Role Name",
+
+  "grdMain.title": "Role List",
+  "grdMain.roleId": "Role ID",
+  "grdMain.roleNm": "Role Name",
+  "grdMain.roleDesc": "Role Details",
+  "grdMain.useYn": "Used"
+}

@@ -1,0 +1,27 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+
+  "staAccIp": "IP",
+  "staUserNm": "User Name",
+  "staUseYn": "Use",
+
+  "grdMain.title": "Access IP List",
+
+  "grdMain.ipId": "IP_ID",
+  "grdMain.accIp": "Allowed IP",
+  "grdMain.sideType": "In/Out",
+  "grdMain.userId": "User ID",
+  "grdMain.userNm": "User",
+  "grdMain.onpstCd": "Department",
+  "grdMain.fwAplcYn": "F/W Application",
+  "grdMain.tipFwAplcYn": "Firewall Application",
+  "grdMain.fwUseStdt": "F/W Start Date",
+  "grdMain.tipFwUseStdt": "Firewall Start Date",
+  "grdMain.fwUseEndt": "F/W End Date",
+  "grdMain.tipFwUseEndt": "Firewall End Date",
+  "grdMain.note": "Remarks",
+  "grdMain.useYn": "Used",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

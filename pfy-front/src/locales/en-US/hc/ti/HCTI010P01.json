@@ -1,0 +1,13 @@
+﻿{
+  "staPopTitle": "Technical Inquiry",
+  "staContent": "Content",
+  "btnUploadFile": "Upload File",
+  "btnSubmit": "Submit",
+  "staTinqKnd": "Category",
+  "staRlsYn": "Visibility",
+  "staRlsYnPublic": "public",
+  "staRlsYnPrivate": "private",
+  "staTitleNm": "Title",
+  "staInqAfidLst": "Attachment",
+  "staNoAtt": "There is no attachment."
+}

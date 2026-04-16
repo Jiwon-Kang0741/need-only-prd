@@ -1,0 +1,17 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-badge {
+  &.p-badge-secondary {
+    background: var(--p-secondary-500);
+    border: 1px solid var(--p-secondary-500);
+    color: #fff;
+  }
+
+  &[data-p='circle secondary2 normal'],
+  &[data-p='circle secondary2 small'],
+  &[data-p='circle secondary2 large'] {
+    background: var(--p-secondary2-500);
+    border: 1px solid var(--p-secondary2-500);
+    color: #fff;
+  }
+}

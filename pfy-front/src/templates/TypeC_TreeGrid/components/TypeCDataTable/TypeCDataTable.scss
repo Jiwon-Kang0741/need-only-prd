@@ -1,0 +1,65 @@
+.datatable-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+
+  .datatable-header {
+    flex-shrink: 0;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--divider-2);
+    background: var(--bg-2);
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--txt-color-1);
+    }
+
+    .count {
+      font-size: 0.8rem;
+      color: var(--txt-color-3);
+      display: flex;
+      gap: 4px;
+      align-items: center;
+
+      .total { color: #fa5514; }
+      .num   { color: #3848ff; }
+    }
+
+    .action-group-wrapper {
+      display: flex;
+
+      .action-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+
+        & + .action-group { border-left: 1px solid var(--divider-2); }
+        &:last-child { padding-right: 0; }
+      }
+    }
+  }
+
+  :deep(.type-c-datatable.p-datatable) {
+    flex: 1 !important;
+    min-height: 0;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  :deep(.p-paginator) {
+    flex-shrink: 0;
+    border-top: 1px solid var(--divider-2);
+    border-radius: 0;
+  }
+}

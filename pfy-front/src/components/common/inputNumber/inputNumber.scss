@@ -1,0 +1,43 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-inputnumber {
+  &.p-invalid {
+    .p-inputtext {
+      &:enabled:focus {
+        border-color: var(--p-inputtext-invalid-border-color);
+      }
+    }
+    .p-inputnumber-button {
+      border-color: var(--p-inputtext-invalid-border-color);
+      &:hover {
+        border-color: var(--p-inputtext-invalid-border-color);
+      }
+    }
+  }
+  .p-inputtext {
+    border-left: 0;
+    border-right: 0;
+    text-align: center;
+    &:enabled:focus {
+      border-color: var(--p-inputtext-border-color);
+    }
+  }
+
+  .p-inputnumber-button {
+    &:disabled {
+      background: var(--p-inputtext-disabled-background);
+    }
+    &.p-disabled {
+      opacity: 1;
+    }
+    width: 25px;
+    svg {
+      transform: rotate(90deg);
+      color: var(--txt-color-1);
+    }
+  }
+
+  .p-inputnumber-input {
+    width: 100%;
+  }
+}

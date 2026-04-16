@@ -1,0 +1,17 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staEditorTitle": "Body",
+  "staFrmId": "Document Format ID",
+  "staFrmNm": "Document Format Name",
+  "staLangCd": "Language",
+  "staUseYn": "Used",
+
+  "grdMain.title": "Document Form List",
+  "grdMain.frmId": "Document Format ID",
+  "grdMain.frmNm": "Document Format Name",
+  "grdMain.useYn": "Used",
+  "grdMain.frmDesc": "Document Format Description",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

@@ -1,0 +1,85 @@
+.input-form-container {
+  background: var(--bg-1);
+  border: 1px solid var(--divider-2);
+  border-radius: 8px;
+  padding: 20px;
+
+  .form-section {
+    margin-bottom: 24px;
+
+    &:last-of-type {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--brand-primary-color);
+      color: var(--txt-color-1);
+    }
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    &--inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+    }
+
+    &--full {
+      grid-column: 1 / -1;
+    }
+
+    .field-label {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--txt-color-2);
+
+      &.required::after {
+        content: ' *';
+        color: var(--error-color);
+      }
+    }
+
+    .radio-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+
+      .radio-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.875rem;
+        color: var(--txt-color-1);
+        cursor: pointer;
+      }
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 16px;
+    margin-top: 16px;
+    border-top: 1px solid var(--divider-1);
+  }
+}

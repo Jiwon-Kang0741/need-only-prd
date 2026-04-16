@@ -1,0 +1,17 @@
+{
+  "btnInquiry": "Inquiry",
+  "btnFold": "Fold",
+  "btnSelect": "Select",
+  "btnClose": "Close",
+  "staPopTitle": "Organization Search",
+  "staLangCd": "Language",
+  "staDeptType": "Organization Category",
+  "staDeptNm": "Organization Name",
+  "staUseYn": "Used",
+  "grdMain.title": "Organization Tree",
+  "grdMain.deptNm": "Organization Name",
+  "grdMain.deptLvl": "Level",
+  "grdMain.deptCd": "Organization Code",
+  "grdMain.pDeptNm": "Parent Organization",
+  "grdMain.useYn": "Used"
+}

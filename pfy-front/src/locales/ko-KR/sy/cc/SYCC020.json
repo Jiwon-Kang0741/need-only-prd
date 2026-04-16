@@ -1,0 +1,20 @@
+﻿{
+  "staMsgCtgr": "메시지 분류",
+  "staMsgGbCd": "메시지 유형",
+  "staMsgId": "메시지 ID",
+  "staMsgNm": "메시지명",
+  "staUseYn": "사용 여부",
+  "staLangCd": "언어",
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "grdMain.title": "메시지 목록",
+  "grdMain.msgId": "메시지 ID",
+  "grdMain.msgNmKor": "메시지명(한글)",
+  "grdMain.msgNm": "메시지명",
+  "grdMain.msgSc": "메시지 분류",
+  "grdMain.msgGbCd": "메시지 유형",
+  "grdMain.msgDesc": "메시지 설명",
+  "grdMain.useYn": "사용 여부",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "최종 수정일"
+}

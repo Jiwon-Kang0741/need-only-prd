@@ -1,0 +1,55 @@
+// 설정 팝오버 스타일
+.setting-popover-root {
+  filter: drop-shadow(1px 1px 12px rgba(0, 0, 0, 0.15));
+  padding: 24px 20px 20px;
+
+  --p-popover-arrow-offset: 10px;
+  --p-popover-shadow: 0;
+  --p-popover-content-padding: 0;
+}
+
+.setting-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .setting-menu-item {
+    display: flex;
+    align-items: center;
+    width: 180px;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+
+    .title {
+      font-weight: 500;
+      color: var(--txt-color-1);
+      text-align: left;
+    }
+  }
+
+  .reset-btn {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+
+    .title {
+      flex: 1;
+    }
+
+    .icon {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+  }
+
+  .theme-switch {
+    margin-left: auto;
+  }
+
+  .language-select {
+    margin-left: auto;
+    width: 100px;
+  }
+}

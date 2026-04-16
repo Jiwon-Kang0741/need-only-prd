@@ -1,0 +1,27 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnFold": "Fold",
+  "btnSubSave": "Save",
+
+  "staLangCd": "Language",
+  "staDeptType": "Organization Category",
+  "staDeptNm": "Organization Name",
+  "staUseYn": "Used",
+
+  "grdMain.title": "Organization Tree",
+  "grdMain.deptNm": "Organization Name",
+  "grdMain.deptCd": "Organization Code",
+  "grdMain.useYn": "Used",
+
+  "grdSub.title": "Organization List",
+  "grdSub.deptCd": "Organization Code",
+  "grdSub.deptNmKor": "Organization Name(KR)",
+  "grdSub.deptNm": "Organization Name",
+  "grdSub.deptSort": "Sorting",
+  "grdSub.note": "Remarks",
+  "grdSub.useYn": "Used",
+  "grdSub.mngrNm": "Manager Name",
+  "grdSub.brnCd": "Branch Code",
+  "grdSub.lastMdfrNm": "Last Modifier",
+  "grdSub.lastMdfcDtm": "Last Modified Date"
+}

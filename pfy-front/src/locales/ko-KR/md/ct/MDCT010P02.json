@@ -1,0 +1,19 @@
+{
+  "staPopupTitle": "계약별 장비 조회",
+  "staNatnCd": "국가명",
+  "staCstmNm": "고객명",
+  "staContNo": "계약번호",
+  "staCstmContNo": "계약번호",
+  "staSysTypNm": "기종명",
+  "staSno": "장비호기",
+  "btnInquiry": "조회",
+  "grdMain.natnCd": "국가코드",
+  "grdMain.natnNm": "국가명",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.cstmContNo": "계약번호",
+  "grdMain.contNo": "계약번호",
+  "grdMain.eqpmNo": "장비번호",
+  "grdMain.sysTypCd": "기종코드",
+  "grdMain.sysTypNm": "기종명",
+  "grdMain.sno": "장비호기"
+}

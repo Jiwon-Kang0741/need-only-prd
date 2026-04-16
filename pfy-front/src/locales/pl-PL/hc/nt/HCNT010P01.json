@@ -1,0 +1,14 @@
+﻿{
+  "staPopTitle": "공지사항 등록",
+  "staObjNatnCdLst": "공지 범위",
+  "staNtcDate": "게시 기간",
+  "staPopNtcYn": "팝업 여부",
+  "staTopFxdYn": "상단 고정",
+  "staNtcTitle": "제목",
+  "staNtcAfidLst": "첨부파일",
+  "staNoAtt": "첨부파일이 없습니다.",
+
+  "btnUploadFile": "파일 첨부",
+  "staContent": "내용",
+  "btnSubmit": "등록"
+}

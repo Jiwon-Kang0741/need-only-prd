@@ -1,0 +1,11 @@
+﻿{
+  "btnInquiry": "조회",
+  "staLangCd": "언어",
+  "staPopTitle": "그룹코드 검색",
+  "staClsId": "그룹코드",
+  "staClsNm": "그룹코드명",
+  "grdMain.title": "그룹코드 목록",
+  "grdMain.clsId": "그룹코드",
+  "grdMain.clsNm": "그룹코드명",
+  "grdMain.clsDesc": "그룹코드 설명"
+}

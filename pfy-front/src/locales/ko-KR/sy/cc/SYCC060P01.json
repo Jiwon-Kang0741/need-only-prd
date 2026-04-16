@@ -1,0 +1,13 @@
+﻿{
+  "staPopTitle": "일괄 변경",
+  "staObjtNm": "오브젝트 이름",
+  "staApplyObjtNm": "오브젝트 이름",
+  "staApplyObjtDisNm": "표시명",
+  "staLangCd": "언어",
+  "staApply": "적용",
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "grdMain.title": "변경 대상 목록",
+  "grdMain.objtNm": "오브젝트 이름",
+  "grdMain.objtDisNm": "표시명"
+}

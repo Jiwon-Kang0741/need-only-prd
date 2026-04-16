@@ -1,0 +1,337 @@
+@use '@/styles/helpers/index.scss' as *;
+@use 'sass:list';
+
+.p-datepicker.common-datepicker {
+  --p-icon-size: 20px;
+
+  &.day-range-picker {
+    min-width: 245px;
+  }
+
+  &.with-time-picker {
+    min-width: 280px;
+  }
+
+  &.p-datepicker-fluid {
+    width: 100%;
+  }
+
+  .p-datepicker-input {
+    width: 100%;
+  }
+  .p-datepicker-input-icon-container {
+    color: var(--icon-color-2);
+  }
+}
+
+.p-datepicker-panel.common-datepicker-panel {
+  --p-datepicker-date-color: var(--txt-color-2);
+  --p-datepicker-date-hover-color: var(--txt-color-2);
+  --p-datepicker-date-selected-color: var(--txt-white-static-color);
+  --p-datepicker-week-day-color: var(--txt-color-3);
+
+  min-width: 220px;
+
+  .p-datepicker-header {
+    border-block-end: 0;
+
+    .p-datepicker-title {
+      --p-datepicker-title-gap: 0;
+
+      .p-datepicker-select-month {
+        position: relative;
+
+        &:after {
+          content: '.';
+          position: absolute;
+          bottom: 3px;
+          right: -1px;
+          font-size: 14px;
+          color: var(--txt-color-3);
+        }
+      }
+    }
+  }
+
+  .p-datepicker-day-view {
+    font-size: 11px;
+    thead {
+      $day-names: ('Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa');
+      $day-labels: ('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
+
+      @for $i from 1 through list.length($day-names) {
+        $abbr: list.nth($day-names, $i);
+        $label: list.nth($day-labels, $i);
+
+        th[abbr='#{$abbr}'] {
+          &::after {
+            content: '#{$label}';
+            display: inline-block;
+            font-size: 11px;
+            color: var(--txt-color-3);
+          }
+        }
+
+        th[abbr='Sun'] {
+          .p-datepicker-weekday {
+            color: var(--brand-secondary-color);
+          }
+        }
+        th[abbr='Sat'] {
+          .p-datepicker-weekday {
+            color: var(--p-secondary2-500);
+          }
+        }
+      }
+    }
+
+    td:nth-child(1) {
+      .p-datepicker-day {
+        color: var(--brand-secondary-color);
+      }
+    }
+    td:nth-child(7) {
+      .p-datepicker-day {
+        color: var(--brand-secondary-color-2);
+      }
+    }
+
+    td.p-datepicker-day-cell {
+      padding: 0;
+      width: 32px;
+
+      .p-datepicker-day {
+        width: 100%;
+        margin: 2px 0;
+        border-radius: 3px;
+        font-size: 11px;
+
+        &.p-datepicker-day-selected {
+          background: var(--p-secondary2-500);
+        }
+        &.p-datepicker-day-selected-range {
+          background: var(--bg-select-color);
+          border-radius: 0;
+        }
+
+        &.p-datepicker-day-selected {
+          color: var(--txt-white-static-color);
+        }
+      }
+    }
+  }
+
+  .p-datepicker-month-view {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 59px);
+    border: 1px solid var(--divider-1);
+    border-radius: var(--p-datepicker-month-border-radius);
+    overflow: hidden;
+
+    $month-labels: (
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '10',
+      '11',
+      '12'
+    );
+    .p-datepicker-month {
+      width: auto;
+      border: 1px solid var(--divider-1);
+      border-radius: 0;
+      border-top: 0;
+      border-right: 0;
+      &:nth-last-child(-n + 4) {
+        border-bottom: 0;
+      }
+      &:nth-last-child(4n) {
+        border-left: 0;
+      }
+      &:not(:nth-child(4n)) {
+        border-right: 0;
+      }
+      @for $i from 1 through list.length($month-labels) {
+        font-size: 0;
+        &:nth-child(#{$i})::after {
+          content: '#{list.nth($month-labels, $i)}';
+          display: inline-block;
+          font-size: 11px;
+          color: var(--txt-color-2);
+        }
+      }
+
+      &.p-datepicker-month-selected {
+        background: var(--p-secondary2-500);
+
+        &::after {
+          color: var(--txt-white-static-color);
+        }
+      }
+    }
+  }
+
+  .p-datepicker-year-view {
+    border-collapse: collapse;
+    border: 1px solid var(--divider-1);
+    border-bottom: 0;
+    border-right: 0;
+    border-radius: 4px;
+    overflow: hidden;
+
+    .p-datepicker-year {
+      border-collapse: collapse;
+      border: 1px solid var(--divider-1);
+      border-left: 0;
+      border-top: 0;
+      border-radius: 0;
+      padding: 11px 10px;
+
+      &.p-datepicker-year-selected {
+        background: var(--brand-secondary-color-2);
+      }
+    }
+  }
+
+  // 시간 선택기 스타일링
+  &.with-time-panel {
+    .p-datepicker-time-picker {
+      border-top: 1px solid var(--divider-1);
+      padding: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+
+      .p-datepicker-hour-picker,
+      .p-datepicker-minute-picker,
+      .p-datepicker-second-picker,
+      .p-datepicker-ampm-picker {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+
+        button {
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          border: 1px solid var(--divider-1);
+          background: var(--bg-default-color);
+          color: var(--txt-color-2);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+
+          &:hover {
+            background: var(--bg-hover-color);
+            border-color: var(--p-secondary2-500);
+          }
+
+          &:active {
+            background: var(--bg-active-color);
+          }
+        }
+
+        span {
+          font-size: 13px;
+          color: var(--txt-color-2);
+          min-width: 28px;
+          text-align: center;
+          padding: 4px 0;
+        }
+      }
+
+      .p-datepicker-separator {
+        font-size: 16px;
+        color: var(--txt-color-3);
+        align-self: center;
+        padding-top: 30px;
+      }
+    }
+  }
+
+  // numberOfMonths=2 + showTime일 때 각 달력에 시간 선택기 추가
+  &.dual-time-panel {
+    .p-datepicker-calendar-container {
+      display: flex;
+      gap: 16px;
+
+      .p-datepicker-calendar {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+    }
+
+    .dual-time-picker {
+      border-top: 1px solid var(--divider-1);
+      padding: 12px;
+      margin-top: 8px;
+      display: flex;
+      justify-content: center;
+
+      .dual-time-picker-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dual-time-picker-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+
+        .time-btn {
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          border: 1px solid var(--divider-1);
+          background: var(--bg-default-color);
+          color: var(--txt-color-2);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+          font-size: 10px;
+
+          &:hover {
+            background: var(--bg-hover-color);
+            border-color: var(--p-secondary2-500);
+          }
+
+          &:active {
+            background: var(--bg-active-color);
+          }
+        }
+
+        .time-value {
+          font-size: 13px;
+          color: var(--txt-color-2);
+          min-width: 28px;
+          text-align: center;
+          padding: 4px 0;
+          font-weight: 500;
+        }
+      }
+
+      .time-separator {
+        font-size: 16px;
+        color: var(--txt-color-3);
+        align-self: center;
+        padding-top: 30px;
+      }
+    }
+  }
+}

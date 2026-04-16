@@ -1,0 +1,22 @@
+﻿{
+  "grdMain.title": "Maintenance Statistics List",
+  "btnInquiry": "Inquiry",
+  "staNatnCdLst": "Country",
+  "staCstmCd": "Customer Name",
+  "staInqrDtCtgr": "Period",
+  "staSysTypNm": "System Type",
+  "staEqpmNo": "Equipment No.",
+  "staSno": "Serial No.",
+  "chkChrgMtncYn": "Chargeable Maintenance",
+  "grdMain.eqpmNo": "Equipment No.",
+  "grdMain.natnCd": "Country",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.mtncReqDt": "Period",
+  "grdMain.sysTypNm": "System Type",
+  "grdMain.sno": "Serial No.",
+  "grdMain.chrgMtncReqCnt": "CM\nCount",
+  "grdMain.mtncReqCnt": "Request\nCount",
+  "grdMain.chrgMtncTotAmt": "Total Price",
+  "grdMain.crnc": "Currency",
+  "grdMain.chargeAmtList": "Total Price (Currency)"
+}

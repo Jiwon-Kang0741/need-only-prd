@@ -1,0 +1,71 @@
+.p-splitter.splitter-root {
+  border: 0;
+
+  .p-splitter-gutter {
+    position: relative;
+    background-color: transparent;
+
+    .drag-icon {
+      position: absolute;
+      z-index: 2;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 12px;
+      height: 100%;
+      background-color: var(--bg-3);
+      border-radius: 2px;
+      transition: opacity 0.3s ease;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+
+      pointer-events: none;
+
+      background-image:
+        linear-gradient(var(--bg-4), var(--bg-4)),
+        linear-gradient(var(--bg-4), var(--bg-4));
+      background-repeat: no-repeat, no-repeat;
+      background-size:
+        2px 12px,
+        2px 12px;
+      background-position:
+        3px center,
+        7px center;
+    }
+
+    &[data-p='vertical'] {
+      &::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        transform: translateY(-50%);
+        width: 100%;
+        height: 12px;
+        background-color: var(--bg-3);
+        border-radius: 2px;
+        transition: opacity 0.3s ease;
+      }
+
+      &::after {
+        transform: translate(-50%, -50%) rotate(90deg);
+      }
+    }
+  }
+}

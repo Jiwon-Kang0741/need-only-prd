@@ -1,0 +1,18 @@
+﻿{
+  "staNatnCd": "Country",
+  "staCstmCd": "Customer Code",
+  "btnInquiry": "Inquiry",
+  "staStDt": "Contract Start Date",
+  "staEnDt": "Contract End Date",
+  "staContractNum": "Contract number",
+  "grdMain.title": "Contract List",
+  "grdMain.eqpmNo": "Vehicle number",
+  "grdMain.sysTypNm": "Model",
+  "grdMain.sysTypEngNm": "Model",
+  "grdMain.sysTypCd": "Product Code",
+  "grdMain.matlCd": "Material Code",
+  "grdMain.sno": "Unit Code",
+  "grdMain.plcDlvMiutNm": "Receiving Unit",
+  "grdMain.asurStdt": "Warranty Start Date",
+  "grdMain.asurEndt": "Warranty End Date"
+}

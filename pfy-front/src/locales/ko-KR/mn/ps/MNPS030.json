@@ -1,0 +1,19 @@
+{
+  "btnInquiry": "조회",
+  "btnReset": "초기화",
+  "btnSave": "저장",
+  "staBUSN_SC": "업무구분",
+  "staTitle": "진행상태",
+  "grdMain": {
+    "PRG_STAT": "진행상태",
+    "PRG_STAT_NM": "진행상태명"
+  },
+  "grdSubMain": {
+    "BEF_PRG_STAT_CD": "이전 진행상태 코드",
+    "BEF_PRG_STAT": "이전 진행상태 명",
+    "USE_YN": "사용여부",
+    "LAST_MDFR_NM": "수정자",
+    "LAST_MDFC_DTM": "수정일"
+  }
+}
+

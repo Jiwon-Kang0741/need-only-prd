@@ -1,0 +1,20 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staNatnCd": "Country",
+  "staCstmCd": "Customer Code",
+  "staSearchConditions": "Search Conditions",
+  "grdMainTitle": "Customer Management",
+  "grdMain.title": "Customer List",
+  "grdMain.cstmCd": "Customer Code",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.cstmEngNm": "Customer Name (EN)",
+  "grdMain.natnCd": "Country",
+  "grdMain.crnc": "Currency",
+  "grdMain.dlvTerm": "Incoterms",
+  "grdMain.payTerm": "Pay Terms",
+  "grdMain.rprsPrdtGb": "Main Product",
+  "grdMain.cretContNm": "Contract Name Template",
+  "grdMain.cstmAddrss": "Customer Address",
+  "grdMain.cstmEngAddrss": "Customer Address (EN)"
+}

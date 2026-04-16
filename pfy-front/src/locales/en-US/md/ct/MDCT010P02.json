@@ -1,0 +1,19 @@
+{
+  "staPopupTitle": "Equipment by Contract",
+  "staNatnCd": "Country",
+  "staCstmNm": "Customer Name",
+  "staContNo": "Contract No.",
+  "staCstmContNo": "Contract No.",
+  "staSysTypNm": "System Type",
+  "staSno": "Serial No.",
+  "btnInquiry": "Inquiry",
+  "grdMain.natnCd": "Country Code",
+  "grdMain.natnNm": "Country",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.cstmContNo": "Contract Code",
+  "grdMain.contNo": "Contract No.",
+  "grdMain.eqpmNo": "Equipment No.",
+  "grdMain.sysTypCd": "System Type",
+  "grdMain.sysTypNm": "System Type",
+  "grdMain.sno": "Serial No."
+}

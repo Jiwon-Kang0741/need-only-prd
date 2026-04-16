@@ -1,0 +1,22 @@
+﻿{
+  "staPopTitle": "CRON Reference",
+
+  "grdMain.title": "Values supported by Cron Expression",
+  "grdMain.field": "Field",
+  "grdMain.value": "Value",
+  "grdMain.wildCard": "wild card",
+
+  "grdSub1.title": "Wildcards supported for Cron Expressions",
+  "grdSub1.wildCard": "wild card",
+  "grdSub1.description": "Description",
+
+  "grdSub2.title": "Examples of Cron Expressions",
+  "grdSub2.sec": "Second",
+  "grdSub2.minute": "Min",
+  "grdSub2.hour": "Time",
+  "grdSub2.dayOfMonth": "Day",
+  "grdSub2.month": "Month",
+  "grdSub2.weekOfMonth": "Days",
+  "grdSub2.year": "Year",
+  "grdSub2.mean": "Meaning"
+}

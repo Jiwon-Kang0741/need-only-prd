@@ -1,0 +1,14 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staCstmCd": "고객코드",
+  "staCstmNm": "고객명",
+  "staStrCd": "체계코드",
+  "staStrNm": "체계명",
+  "grdMain.title": "체계 목록",
+  "grdMain.cstmCd": "고객코드",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.strCd": "체계코드",
+  "grdMain.strNm": "체계명",
+  "grdMain.note": "비고"
+}

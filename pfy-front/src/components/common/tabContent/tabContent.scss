@@ -1,0 +1,42 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-tab-container-custom {
+  --p-tabs-tabpanel-padding: 0 0 12px 0;
+
+  &.tab-sticky {
+    position: relative;
+  }
+
+  .p-tablist.p-tab-list-custom {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+}
+
+.p-tablist.p-tab-list-custom {
+  --p-tabs-tablist-border-color: transparent;
+  --p-tabs-active-bar-background: var(--brand-secondary-color);
+  --p-tabs-active-bar-height: 2px;
+  padding-bottom: 12px;
+  background-color: var(--p-tabs-tablist-background);
+
+  .p-tablist-active-bar {
+    display: none;
+    width: 67px;
+  }
+}
+
+.p-tab-custom {
+  --p-tabs-tab-font-weight: 400;
+  --p-tabs-tab-padding: 5px 12px;
+  --p-tabs-tab-color: var(--txt-color-3);
+  --p-tabs-tab-active-color: var(--brand-secondary-color);
+  --p-tabs-tab-border-color: transparent;
+  --p-tabs-tab-active-border-color: var(--brand-secondary-color);
+  --p-tabs-tab-border-width: 0 0 2px 0;
+
+  &.p-tab-active {
+    font-weight: 600;
+  }
+}

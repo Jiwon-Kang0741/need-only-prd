@@ -1,0 +1,56 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-tag-custom {
+  --p-tag-padding: 2px 12px;
+  --p-tag-font-size: 12px;
+  --p-tag-font-weight: 500;
+  min-width: 80px;
+
+  // primary
+  --p-tag-primary-color: var(--txt-color-2);
+  --p-tag-primary-background: var(--bg-4);
+
+  //secondary
+  --p-tag-secondary-color: var(--txt-white-static-color);
+  --p-tag-secondary-background: var(--brand-secondary-color);
+
+  //status
+  --p-tag-success-color: var(--success-color);
+  --p-tag-success-background: var(--status-recieve);
+
+  --p-tag-info-color: var(--info-color);
+  --p-tag-info-background: var(--status-out);
+
+  --p-tag-warn-color: var(--waring-color);
+  --p-tag-warn-background: var(--status-companion);
+
+  --p-tag-danger-color: var(--error-color);
+  --p-tag-danger-background: var(--status-ship);
+
+  &[data-p='secondary2'],
+  &[data-p='rounded secondary2'] {
+    color: var(--txt-white-static-color);
+    background: var(--brand-secondary-color-2);
+    border: 1px solid var(--brand-secondary-color-2);
+  }
+
+  &.tag-color-green {
+    color: var(--success-color);
+    background: var(--status-recieve);
+  }
+
+  &.tag-color-blue {
+    color: var(--info-color);
+    background: var(--status-out);
+  }
+
+  &.tag-color-yellow {
+    color: var(--waring-color);
+    background: var(--status-companion);
+  }
+
+  &.tag-color-red {
+    color: var(--error-color);
+    background: var(--status-ship);
+  }
+}

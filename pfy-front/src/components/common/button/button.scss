@@ -1,0 +1,133 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.button-root {
+  --p-button-gap: 3px;
+
+  --p-button-border-radius: 4px;
+
+  // sm 버튼 재정의
+  --p-button-sm-padding-x: 8px;
+  --p-button-sm-padding-y: 6px;
+  --p-button-sm-font-size: 13px;
+
+  --p-button-primary-background: var(--brand-primary-color);
+  --p-button-primary-color: var(--txt-white-color-1);
+
+  --p-button-rounded-border-radius: 24px;
+
+  // primary button 재정의
+  --p-button-primary-hover-background: var(--button-hover-color);
+  --p-button-primary-hover-border-color: var(--button-hover-color);
+
+  --p-button-outlined-primary-border-color: var(--button-outlined-color);
+  --p-button-outlined-primary-hover-background: var(--bg-1);
+  --p-button-outlined-primary-color: var(--txt-color-2);
+
+  --p-button-primary-active-background: var(--brand-primary-color);
+  --p-button-primary-active-border-color: var(--brand-primary-color);
+  --p-button-primary-active-color: var(--txt-white-color-1);
+
+  // secondary button 재정의
+  --p-button-secondary-background: var(--brand-secondary-color);
+  --p-button-secondary-border-color: var(--brand-secondary-color);
+  --p-button-secondary-color: var(--txt-white-static-color);
+
+  --p-button-secondary-hover-border-color: var(--button-secondary-hover-color);
+  --p-button-secondary-hover-background: var(--button-secondary-hover-color);
+  --p-button-secondary-hover-color: var(--txt-white-static-color);
+
+  --p-button-outlined-secondary-border-color: var(--button-secondary-color);
+  --p-button-outlined-secondary-color: var(--button-secondary-color);
+  --p-button-outlined-secondary-hover-background: var(--bg-1);
+
+  --p-button-secondary-active-background: var(--button-secondary-color);
+  --p-button-secondary-active-border-color: var(--button-secondary-color);
+  --p-button-secondary-active-color: var(--txt-white-color-1);
+
+  --p-button-text-secondary-color: var(--brand-secondary-color);
+
+  // contrast button 재정의
+  --p-button-contrast-background: var(--bg-1);
+  --p-button-contrast-color: var(--txt-color-2);
+  --p-button-contrast-border-color: var(--button-outlined-color);
+  --p-button-contrast-active-background: var(--p-primary-100);
+  --p-button-contrast-active-color: var(--txt-color-2);
+
+  --p-button-contrast-hover-background: var(--bg-1);
+  --p-button-contrast-hover-border-color: var(--button-hover-color);
+  --p-button-contrast-hover-color: var(--txt-color-2);
+
+  --p-button-contrast-active-background: var(
+    --p-button-outlined-primary-active-background
+  );
+  --p-button-contrast-active-border-color: var(--button-hover-color);
+  --p-button-contrast-active-color: var(--txt-color-2);
+
+  --p-button-outlined-contrast-border-color: var(--button-outlined-color);
+  --p-button-outlined-contrast-color: var(--txt-color-2);
+  --p-button-outlined-contrast-hover-background: var(--bg-1);
+  --p-button-outlined-contrast-hover-border-color: var(--button-hover-color);
+  --p-button-outlined-contrast-active-background: var(--p-primary-100);
+
+  &.p-component:disabled {
+    opacity: 1;
+    background: var(--bg-3);
+    border: var(--bg-3);
+    color: var(--txt-color-4);
+  }
+
+  .p-button-sm {
+    font-size: var(--p-button-sm-font-size);
+    padding: var(--p-button-sm-padding-y) var(--p-button-sm-padding-x);
+  }
+
+  & > svg {
+    max-width: none;
+  }
+
+  // &.p-button-secondary2 {
+  //   background: var(--p-secondary2-500);
+  //   border: 1px solid var(--p-secondary2-500);
+
+  //   &:not(:disabled):hover {
+  //     background: var(--p-secondary2-600);
+  //     border-color: var(--p-secondary2-600);
+  //   }
+
+  //   &.p-button-outlined {
+  //     background: transparent;
+  //     border-color: var(--p-secondary2-500);
+  //     color: var(--p-secondary2-500);
+
+  //     &:not(:disabled):hover {
+  //       background: var(--p-secondary2-50);
+  //       border-color: var(--p-secondary2-500);
+  //     }
+  //   }
+
+  //   &.p-button-text.p-button-secondary2 {
+  //     border-color: transparent;
+
+  //     &:not(:disabled):hover {
+  //       background: color-mix(
+  //         in srgb,
+  //         var(--p-secondary2-500),
+  //         transparent 96%
+  //       );
+  //     }
+  //   }
+  // }
+
+  & > .router-link-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+// unstyled mode
+button[data-p-disabled='true'] {
+  svg {
+    opacity: 0.5;
+  }
+}

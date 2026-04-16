@@ -1,0 +1,20 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSubSave": "Save",
+
+  "staUserId": "User ID",
+  "staUserNm": "User Name",
+  "grdMain.title": "User List",
+  "grdMain.userNm": "Name",
+  "grdMain.userId": "UserID",
+  "grdMain.deptNm": "Dept.",
+  "grdMain.posiNm": "Position",
+  "grdMain.jobNm": "Position",
+  "grdSub.title": "Roles by User",
+  "grdSub.roleId": "Role ID",
+  "grdSub.roleNm": "Role Name",
+  "grdSub.useYn": "Used",
+  "grdSub.givenNm": "Authorizer",
+  "grdSub.givenDtm": "Authorization Date & Time",
+  "grdSub.authGrntBase": "Authorization Basis"
+}

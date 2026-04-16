@@ -1,0 +1,45 @@
+.content-header {
+  --starIcon-color: var(--p-slate-500);
+
+  display: flex;
+  margin-bottom: 8px;
+  justify-content: flex-start;
+
+  .header-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    .header-title {
+      font-weight: 600;
+      font-size: 28px;
+      letter-spacing: -1px;
+    }
+
+    .bookmark-button {
+      position: relative;
+      top: 2px;
+
+      & > svg {
+        color: var(--starIcon-color);
+
+        &.active {
+          fill: var(--p-secondary-500);
+          color: var(--p-secondary-500);
+        }
+      }
+    }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 8px;
+  }
+
+  .header-breadcrumb {
+    padding: 0;
+  }
+}
