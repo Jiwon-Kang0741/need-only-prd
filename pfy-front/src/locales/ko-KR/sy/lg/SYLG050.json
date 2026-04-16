@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "조회",
+  "staMstkDtm": "작성일자",
+  "staConditions": "조회조건",
+  "staUser": "사용자",
+  "staWindow": "화면",
+  "grdMain.title": "에러로그 리스트",
+  "grdMain.userId": "사용자ID",
+  "grdMain.userNm": "사용자명",
+  "grdMain.windowId": "화면ID",
+  "grdMain.actnId": "행위ID",
+  "grdMain.mstkNm": "에러명",
+  "grdMain.mstkCntnt": "에러내용",
+  "grdMain.mstkDtm": "에러일시"
+}

@@ -1,0 +1,24 @@
+﻿{
+  "staSchDtm": "작업일자",
+  "staUseYn": "사용여부",
+  "staExeSc": "구분",
+
+  "btnInquiry": "조회",
+  "btnExecution": "실행",
+  "btnDetails": "실행",
+
+  "grdMain.title": "배치 목록",
+  "grdMain.jobschNm": "작업명",
+  "grdMain.jobschDesc": "작업상세",
+  "grdMain.useYn": "사용여부",
+  "grdMain.btnExecution": "실행",
+
+  "grdSub.title": "배치수행이력",
+  "grdSub.exeSc": "구분",
+  "grdSub.schStrtDtm": "시작일시",
+  "grdSub.schEndDtm": "종료일시",
+  "grdSub.procTm": "수행시간(ms)",
+  "grdSub.respStat": "작업상태",
+  "grdSub.btnMessage": "작업메시지",
+  "grdSub.btnDetails": "실행근거"
+}

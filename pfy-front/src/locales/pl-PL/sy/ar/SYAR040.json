@@ -1,0 +1,17 @@
+{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staRoleId": "역할 ID",
+  "staRoleNm": "역할명",
+  "staUseYn": "사용여부",
+  "grdMain.title": "역할 목록",
+  "grdMain.roleId": "역할 ID",
+  "grdMain.roleNm": "역할명",
+  "grdMain.roleDesc": "역할내용",
+  "grdMain.firstLinkUrl": "최초링크URL",
+  "grdMain.useYn": "사용여부",
+  "grdMain.deftAuthYnCd": "디폴트권한여부",
+  "grdMain.roleSort": "정렬",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일"
+}

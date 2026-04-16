@@ -1,0 +1,18 @@
+﻿{
+  "staNatnCd": "국가",
+  "staCstmCd": "고객 코드",
+  "btnInquiry": "조회",
+  "staStDt": "보증 시작일",
+  "staEnDt": "보증 종료일",
+  "staContractNum": "계약 번호",
+  "grdMain.title": "장비 목록",
+  "grdMain.eqpmNo": "장비 번호",
+  "grdMain.sysTypNm": "기종명",
+  "grdMain.sysTypEngNm": "기종명(영문)",
+  "grdMain.sysTypCd": "기종코드",
+  "grdMain.matlCd": "자재코드",
+  "grdMain.sno": "장비호기",
+  "grdMain.plcDlvMiutNm": "납지부대명",
+  "grdMain.asurStdt": "보증 시작일",
+  "grdMain.asurEndt": "보증 종료일"
+}

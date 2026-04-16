@@ -1,0 +1,13 @@
+﻿{
+  "staPopTitle": "기술 문의 작성",
+  "staContent": "내용",
+  "btnUploadFile": "파일 업로드",
+  "btnSubmit": "문의하기",
+  "staTinqKnd": "종류",
+  "staRlsYn": "공개 여부",
+  "staRlsYnPublic": "공개",
+  "staRlsYnPrivate": "비공개",
+  "staTitleNm": "제목",
+  "staInqAfidLst": "첨부파일",
+  "staNoAtt": "첨부파일이 없습니다."
+}

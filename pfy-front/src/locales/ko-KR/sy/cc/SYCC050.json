@@ -1,0 +1,19 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staPblCd": "체계코드",
+  "staLangCd": "언어코드",
+  "staTmplSc": "템플릿구분",
+  "staTmplNm": "템플릿명",
+  "staUseYn": "사용여부",
+  "grdMain.title": "템플릿양식목록",
+  "grdMain.pblCd": "체계코드",
+  "grdMain.inptSno": "입력순번",
+  "grdMain.tmplSc": "템플릿구분",
+  "grdMain.tmplNm": "템플릿명",
+  "grdMain.langCd": "언어코드",
+  "grdMain.afid": "첨부파일",
+  "grdMain.useYn": "사용여부",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일자"
+}

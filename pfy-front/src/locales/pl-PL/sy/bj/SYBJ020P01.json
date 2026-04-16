@@ -1,0 +1,11 @@
+﻿{
+  "staPopTitle": "배치작업실행근거 관리",
+  "btnSave": "실행",
+  "btnUploadFile": "Upload file",
+  "staNoAttach": "첨부파일이 없습니다.",
+  "staJobSchNm": "작업명",
+  "staLogId": "로그 ID",
+  "staBatParam": "배치파라미터",
+  "staProcTm": "수행시간",
+  "staAttach": "Attachment"
+}

@@ -1,0 +1,17 @@
+﻿{
+  "btnInquiry": "조회",
+  "staCategory": "카테고리",
+  "staObjNatnCd": "공지 범위",
+  "staPostedDate": "등록일",
+  "staAllPeriod": "전체기간",
+  "staNatnCdNoSrchRslt": "검색 결과 없음",
+
+  "grdMain.objNatnNmLst": "공지 범위",
+  "grdMain.ntcExprYn": "만료여부",
+  "grdMain.ntcTitle": "제목",
+  "grdMain.ntcAfYn": "첨부",
+  "grdMain.writrNm": "작성자",
+  "grdMain.makeDtm": "등록일",
+  "grdMain.hits": "조회수",
+  "btnNewWrite": "작성하기"
+}

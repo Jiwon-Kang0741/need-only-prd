@@ -1,0 +1,23 @@
+﻿{
+  "staPopTitle": "CRON 참조",
+
+  "grdMain.title": "Cron 표현식에 대해 지원되는 값",
+  "grdMain.field": "필드",
+  "grdMain.value": "값",
+  "grdMain.wildCard": "wild card",
+
+  "grdSub1.title": "Cron 표현식에 대해 지원되는 와일드카드",
+  "grdSub1.wildCard": "wild card",
+  "grdSub1.description": "설명",
+
+  "grdSub2.title": "Cron 식의 예",
+
+  "grdSub2.sec": "초",
+  "grdSub2.minute": "분",
+  "grdSub2.hour": "시간",
+  "grdSub2.dayOfMonth": "일",
+  "grdSub2.month": "월",
+  "grdSub2.weekOfMonth": "요일",
+  "grdSub2.year": "년도",
+  "grdSub2.mean": "의미"
+}

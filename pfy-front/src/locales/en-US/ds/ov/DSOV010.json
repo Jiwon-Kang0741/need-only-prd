@@ -1,0 +1,46 @@
+{
+  "button": {
+    "add": "local english DSOV010 button add",
+    "delete": "local englishDSOV010 button delete"
+  },
+  "static": {
+    "hello": "DSOV010 hello ENGLISH"
+  },
+  "MSG001": "{action} 해 주십시오.{action}",
+  "SYCC000": {
+    "click": "클릭",
+    "doubleClick": "더블클릭"
+  },
+  "staText": {
+    "dsov020": "local english DSOV020 staText"
+  },
+  "btnSave": "DSOV010 버튼 권한 테스트 영어임영엉엉여영ㅇ엉어",
+  "btnSpSummary1": "PO",
+  "btnSpSummary2": "ITEM",
+  "staSpSummaryTitle": "Procurement Summary",
+  "staSpSummaryStatus1": "Requested",
+  "staSpSummaryStatus2": "In Progress",
+  "staSpSummaryStatus3": "Attention Required",
+  "staSpSummaryStatus4": "Delayed",
+  "staMtSummaryTitle": "Maintenance Summary",
+  "staMtSummaryStatus1": "Number of Requests",
+  "staMtSummaryStatus2": "Received",
+  "staMtSummaryStatus3": "In progress",
+  "staMtSummaryStatus4": "Charge Requests",
+  "staSummaryTitle1": "Parts Quote",
+  "staSummaryTitle2": "Maintenance Inquiries",
+  "staSummaryTitle3": "Technical Inquiry",
+  "staSummaryPending": "Pending",
+  "staSummaryDelayed": "Delayed",
+  "staSummaryRequest": "Request",
+  "staSummaryCompleted": "Completed",
+  "staSummaryChartTitle": "Expenditure Summary",
+  "staSummaryPieChartTitle": "Maintenance Request",
+  "btnSummaryChartOrder": "Order amount",
+  "btnSummaryChartSales": "Sales amount",
+  "btnSummaryChartWarehouse": "Warehouse amount",
+  "btnCounty": "Country",
+  "btnPeriod": "Period",
+  "btnSystem": "System",
+  "staNatnCdNoSrchRslt": "No Search Result"
+}

@@ -1,0 +1,11 @@
+﻿{
+  "staPopTitle": "프로젝트 마스터 변경이력",
+
+  "grdMain.title": "변경이력 목록",
+  "grdMain.ver": "버전",
+  "grdMain.setCtgr": "설정구분",
+  "grdMain.sno": "순번",
+  "grdMain.note": "변경내용",
+  "grdMain.lastMdfrId": "수정자",
+  "grdMain.lastMdfcDtm": "수정일"
+}

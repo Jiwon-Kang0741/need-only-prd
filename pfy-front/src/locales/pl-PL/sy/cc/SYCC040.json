@@ -1,0 +1,27 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnFold": "접기",
+  "btnSubSave": "저장",
+
+  "staLangCd": "언어",
+  "staDeptType": "조직 구분",
+  "staDeptNm": "조직명",
+  "staUseYn": "사용여부",
+
+  "grdMain.title": "조직 트리",
+  "grdMain.deptNm": "조직명",
+  "grdMain.deptCd": "조직코드",
+  "grdMain.useYn": "사용여부",
+
+  "grdSub.title": "조직 목록",
+  "grdSub.deptCd": "조직코드",
+  "grdSub.deptNm": "조직명",
+  "grdSub.deptNmKor": "조직 영문명(한글)",
+  "grdSub.deptSort": "정렬",
+  "grdSub.note": "비고",
+  "grdSub.useYn": "사용여부",
+  "grdSub.mngrNm": "관리자명",
+  "grdSub.brnCd": "지점코드",
+  "grdSub.lastMdfrNm": "수정자",
+  "grdSub.lastMdfcDtm": "수정일"
+}

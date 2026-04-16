@@ -1,0 +1,26 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "btnSubSave": "저장",
+  "btnSubExtract": "추출",
+
+  "staLangCd": "언어",
+  "staWindowId": "화면 ID",
+  "staWindowNm": "화면명",
+  "staUseYn": "사용여부",
+  "grdMain.title": "화면 리스트",
+  "grdMain.windowId": "화면 ID",
+  "grdMain.windowNmKor": "화면명(한글)",
+  "grdMain.windowNm": "화면명",
+  "grdMain.windowUrl": "화면URL",
+  "grdMain.windowDesc": "화면설명",
+  "grdMain.useYn": "사용여부",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일",
+  "grdSub.title": "화면 오브젝트 리스트",
+  "grdSub.windowId": "화면 ID",
+  "grdSub.objtTypeCd": "구분",
+  "grdSub.objtId": "오브젝트 ID",
+  "grdSub.objtNm": "오브젝트명",
+  "비고(확인 후 삭제)": "grdMain 화면작성자 데이터 없음"
+}

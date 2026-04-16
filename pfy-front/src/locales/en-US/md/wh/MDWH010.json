@@ -1,0 +1,14 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staCstmCd": "Customer Code",
+  "staStgCd": "Warehouse Code",
+  "staCstmNm": "Customer Name",
+  "staStgNm": "Warehouse Name",
+  "grdMain.title": "Warehouse List",
+  "grdMain.stgCd": "Warehouse Code",
+  "grdMain.stgNm": "Warehouse Name",
+  "grdMain.cstmCd": "Customer Code",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.adrss": "Description"
+}

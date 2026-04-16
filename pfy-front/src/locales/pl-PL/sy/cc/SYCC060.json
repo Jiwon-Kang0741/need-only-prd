@@ -1,0 +1,22 @@
+﻿{
+  "btnInquiry": "Szukaj",
+  "btnSubSave": "Zapisz",
+  "btnDisplayChange": "Zmień zbiorczo",
+  "btnImport": "Wypełnij Display",
+  "staLangCd": "Język",
+  "staWindowId": "ID ekranu",
+  "staWindowNm": "Nazwa ekranu",
+  "staExtractYn": "Wyodrębnienie",
+  "btnExtract": "Wyodrębnij",
+  "grdMain.title": "Lista ekranów",
+  "grdMain.windowId": "ID ekranu",
+  "grdMain.windowNm": "Nazwa ekranu",
+  "grdMain.extractYn": "Wyodrębnienie",
+  "grdMain.btnExtract": "Wyodrębnij",
+  "grdSub.title": "Lista obiektów ekranu",
+  "grdSub.objtTypeCd": "Typ",
+  "grdSub.objtId": "ID obiektu",
+  "grdSub.objtNm": "Nazwa obiektu",
+  "grdSub.useYn": "Aktywność",
+  "grdSub.objtDisNm": "Display"
+}

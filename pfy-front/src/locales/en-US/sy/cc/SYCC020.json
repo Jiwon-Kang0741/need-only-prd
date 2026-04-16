@@ -1,0 +1,20 @@
+﻿{
+  "staMsgCtgr": "Message Category",
+  "staMsgGbCd": "Message Type",
+  "staMsgId": "Message ID",
+  "staMsgNm": "Message Name",
+  "staUseYn": "Used",
+  "staLangCd": "Language",
+  "btnInquiry": "Serach",
+  "btnSave": "Save",
+  "grdMain.title": "Message List",
+  "grdMain.msgId": "Message ID",
+  "grdMain.msgNmKor": "Message Name(Kor)",
+  "grdMain.msgNm": "Message Name",
+  "grdMain.msgSc": "Message Category",
+  "grdMain.msgGbCd": "Message Type",
+  "grdMain.msgDesc": "Message Description",
+  "grdMain.useYn": "Used",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

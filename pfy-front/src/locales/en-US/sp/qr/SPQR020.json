@@ -1,0 +1,21 @@
+﻿{
+  "staHeaderTitle": "Quotation Request",
+  "staStrCd": "Model",
+  "staTitle": "Title",
+  "staWriter": "writer",
+  "btnDeleteAll": "Delete All",
+  "btnNewProduct": "New Product",
+  "btnSubmit": "Submit",
+  "btnCancel": "Cancel",
+  "grdMain.title": "Item",
+  "grdMain.rqrDrtInptYn": "Direct Input",
+  "grdMain.ctlgNo": "catalog No.",
+  "grdMain.partNm": "Description",
+  "grdMain.partNo": "Part No",
+  "grdMain.slngUnit": "Unit",
+  "grdMain.qty": "Quantity",
+  "grdMain.slngPric": "Unit Price (USD)",
+  "grdMain.lt": "Lead Time (Day)",
+  "grdMain.refNo": "Reference No",
+  "grdMain.btnDelete": "Delete"
+}

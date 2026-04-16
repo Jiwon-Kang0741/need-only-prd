@@ -1,0 +1,9 @@
+﻿{
+  "staPopTitle": "서비스 조회",
+  "staServiceNm": "서비스명",
+  "btnInquiry": "조회",
+  "grdMain.title": "서비스 목록",
+  "grdMain.serviceType": "서비스종류",
+  "grdMain.serviceNm": "서비스명",
+  "grdMain.serviceClass": "서비스 클래스명"
+}

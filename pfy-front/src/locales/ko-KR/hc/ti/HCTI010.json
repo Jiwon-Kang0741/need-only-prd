@@ -1,0 +1,18 @@
+﻿{
+  "staTinqKnd": "카테고리",
+  "staTinqStat": "상태",
+  "staPostedDate": "등록일",
+  "staTitleNm": "제목",
+  "staCstmCdLst": "고객명",
+  "staAllPeriod": "전체기간",
+  "btnInquiry": "조회",
+  "btnNewWrite": "신규 작성",
+  "grdMain.tinqStat": "상태",
+  "grdMain.tinqKnd": "카테고리",
+  "grdMain.rlsYn": "공개여부",
+  "grdMain.titleNm": "제목",
+  "grdMain.cstmCd": "고객코드",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.inqrrNm": "요청자",
+  "grdMain.inqDtm": "등록일"
+}

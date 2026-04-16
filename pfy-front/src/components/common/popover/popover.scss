@@ -1,0 +1,61 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-popover-content {
+  .popover-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 50px;
+    padding: 10px 0;
+  }
+
+  .filter-popover {
+    max-width: 200px;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .checkbox-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 140px;
+      overflow: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+
+      label {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        width: calc(100% - 20px);
+      }
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+    }
+
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+}

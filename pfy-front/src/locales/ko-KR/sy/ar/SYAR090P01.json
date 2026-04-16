@@ -1,0 +1,14 @@
+{
+  "staPopTitle": "사용자 검색",
+  "staTypeCd": "기관구분",
+  "staCompNm": "기관명",
+  "stalognNm": "사용자",
+  "staDeptNm": "부서명",
+  "staAll": "ALL",
+  "btnInquiry": "조회",
+  "grdMain.title": "사용자 목록",
+  "grdMain.userId": "사용자Id",
+  "grdMain.userNm": "성명",
+  "grdMain.deptNm": "부서",
+  "grdMain.userEmal": "이메일 주소"
+}

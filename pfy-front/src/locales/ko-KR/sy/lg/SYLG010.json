@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staLognDtm": "로그인 일자",
+  "staUserId": "사용자ID",
+  "staUserNm": "사용자",
+  "grdMain.title": "로그인 리스트",
+  "grdMain.dept": "부서",
+  "grdMain.userId": "사용자ID",
+  "grdMain.userNm": "사용자명",
+  "grdMain.lognDtm": "로그인일시",
+  "grdMain.logoutDtm": "로그아웃일시",
+  "grdMain.lognIp": "로그인IP",
+  "비고": "화면구성에 부서가 있는데 API 문서에 없음"
+}

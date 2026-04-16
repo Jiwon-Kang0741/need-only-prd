@@ -1,0 +1,7 @@
+.input-text-root {
+  width: var(--form-element-width);
+
+  &.p-inputtext-fluid {
+    width: 100%;
+  }
+}

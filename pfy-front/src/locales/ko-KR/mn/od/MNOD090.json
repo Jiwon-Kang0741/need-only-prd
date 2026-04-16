@@ -1,0 +1,16 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staSTR_CD": "체계코드",
+  "staSTR_NM": "체계명",
+  "staVNDR_SC": "업체구분",
+  "staVNDR_NM": "업체명",
+  "grdMain.title": "체계 목록",
+  "grdMain.STRUCTURE": "구성",
+  "grdMain.STR_CD": "체계코드",
+  "grdMain.STR_NM": "체계명",
+  "grdMain.VNDR_SC": "업체구분",
+  "grdMain.VNDR_NM": "업체명",
+  "grdMain.VNDR_CD": "업체코드",
+  "grdMain.NOTE": "비고"
+}

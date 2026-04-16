@@ -1,0 +1,31 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.radio-button-root {
+  --p-radiobutton-checked-background: #fff;
+  --p-radiobutton-checked-hover-background: #fff;
+  --p-radiobutton-icon-checked-color: #000;
+  --p-radiobutton-icon-checked-hover-color: #000;
+}
+
+.p-radiobutton {
+  &[data-p~='invalid'] {
+    .p-radiobutton-box {
+      border-color: var(--p-radiobutton-invalid-border-color);
+    }
+  }
+
+  &.p-radiobutton-checked .p-radiobutton-box .p-radiobutton-icon {
+    transform: translateZ(0) scale(0.8);
+  }
+}
+
+.radio-button-group {
+  display: flex;
+  gap: 10px;
+}
+
+.radio-button-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}

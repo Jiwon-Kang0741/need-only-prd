@@ -1,0 +1,17 @@
+{
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "staRoleId": "Role ID",
+  "staRoleNm": "Role Name",
+  "staUseYn": "Used",
+  "grdMain.title": "Role List",
+  "grdMain.roleId": "Role ID",
+  "grdMain.roleNm": "Role Name",
+  "grdMain.roleDesc": "Role Details",
+  "grdMain.firstLinkUrl": "First Link URL",
+  "grdMain.useYn": "Used",
+  "grdMain.deftAuthYnCd": "Default Authority",
+  "grdMain.roleSort": "Sorting",
+  "grdMain.lastMdfrNm": "Modifier",
+  "grdMain.lastMdfcDtm": "Modification Date"
+}

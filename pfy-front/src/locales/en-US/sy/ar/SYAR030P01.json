@@ -1,0 +1,18 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnApply": "Apply",
+
+  "staPopTitle": "Screen Search",
+  "staWindowId": "Screen ID",
+  "staWindowNm": "Screen Name",
+
+  "grdMain.title": "Screen List",
+  "grdMain.windowId": "Screen ID",
+  "grdMain.windowNm": "Screen Name",
+  "grdMain.windowUrl": "Screen URL",
+
+  "grdSub.title": "Screen Selection List",
+  "grdSub.windowId": "Screen ID",
+  "grdSub.windowNm": "Screen Name",
+  "grdSub.windowUrl": "Screen URL"
+}

@@ -1,0 +1,120 @@
+.login-wrap {
+  display: flex;
+  height: 100vh;
+  min-height: 700px;
+  background-image: url('@/assets/images/Gemini_Generated_Image_Coding.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
+
+  .section {
+    width: 50%;
+    height: 100%;
+
+    &.left {
+      position: relative;
+      display: flex;
+      align-items: center;
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    &.right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(255, 255, 255, 0.75);
+    }
+  }
+
+  .login-logo {
+    position: absolute;
+    top: 48px;
+    left: 38px;
+
+    & > img {
+      width: 232px;
+      height: auto;
+    }
+  }
+
+  .login-header {
+    color: var(--txt-white-static-color);
+    font-size: 76px;
+    letter-spacing: -2px;
+    margin-left: 120px;
+    font-weight: 500;
+    margin-top: 200px;
+  }
+
+  .login-form-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 500px;
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+
+      &:not(:last-child) {
+        margin-bottom: 10px;
+      }
+    }
+
+    .form-button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 40px;
+
+      &.otp {
+        margin-top: 12px;
+      }
+    }
+
+    .form-label {
+      font-size: 14px;
+      color: var(--txt-color-2);
+      margin-bottom: 6px;
+    }
+  }
+
+  .title {
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--brand-primary-color);
+    margin-bottom: 22px;
+    letter-spacing: -1px;
+  }
+
+  .description {
+    font-size: 14px;
+    color: var(--txt-color-2);
+    margin-bottom: 50px;
+  }
+
+  .submit-button {
+    width: 100%;
+    background: var(--brand-primary-color);
+    color: var(--txt-white-static-color);
+    font-weight: 600;
+    border-radius: 4px;
+    border: none;
+    font-size: 20px;
+    min-height: 56px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background 0.3s ease;
+
+    &:hover {
+      background: var(--brand-secondary-color);
+    }
+
+    &:disabled {
+      background-color: var(--bg-3);
+      color: var(--txt-color-4);
+    }
+  }
+}

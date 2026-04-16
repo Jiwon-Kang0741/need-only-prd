@@ -1,0 +1,22 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "btnUnlockAccounts": "장기미접속자해제",
+  "btnUnlock": "잠금해제",
+  "staNatnCd": "국가",
+  "staCstmCd": "고객코드",
+  "staSearchConditions": "검색조건",
+  "grdMainTitle": "고객 관리",
+  "grdMain.title": "고객 목록",
+  "grdMain.cstmCd": "고객코드",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.cstmEngNm": "고객명(영문)",
+  "grdMain.natnCd": "국가",
+  "grdMain.cretContNm": "생성계약명",
+  "grdMain.rprsPrdtGb": "대표제품군",
+  "grdMain.crnc": "통화",
+  "grdMain.dlvTerm": "인도조건",
+  "grdMain.payTerm": "지급조건",
+  "grdMain.cstmAddrss": "고객 주소",
+  "grdMain.cstmEngAddrss": "고객주소(영문)"
+}

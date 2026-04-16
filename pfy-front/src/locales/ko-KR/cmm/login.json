@@ -1,0 +1,14 @@
+{
+  "button": {
+    "add": "추가",
+    "delete": "삭제"
+  },
+  "static": {
+    "hello": "hello"
+  },
+  "MSG001": "{action} 해 주십시오.{action}",
+  "SYCC000": {
+    "click": "클릭",
+    "doubleClick": "더블클릭"
+  }
+}

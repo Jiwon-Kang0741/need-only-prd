@@ -1,0 +1,26 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnFold": "접기",
+  "btnSubSave": "저장",
+
+  "staLangCd": "언어",
+  "staMenuNm": "메뉴명",
+  "staUseYn": "사용여부",
+
+  "grdMain.title": "메뉴 트리",
+  "grdMain.menuNm": "메뉴 트리",
+
+  "grdSub.title": "메뉴 리스트",
+  "grdSub.menuId": "메뉴ID",
+  "grdSub.menuNmKor": "메뉴명(한글)",
+  "grdSub.menuNm": "메뉴명",
+  "grdSub.windowId": "화면 ID",
+  "grdSub.windowNm": "화면명",
+  "grdSub.menuSort": "정렬",
+  "grdSub.useYn": "사용여부",
+  "grdSub.fstOpYn": "최초 오픈 여부",
+  "grdSub.menuParam": "파라미터",
+  "grdSub.menuIcon": "메뉴아이콘",
+  "grdSub.lastMdfrNm": "수정자",
+  "grdSub.lastMdfcDtm": "수정일"
+}

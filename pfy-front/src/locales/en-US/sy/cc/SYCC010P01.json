@@ -1,0 +1,11 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "staLangCd": "Language",
+  "staPopTitle": "Group Code Inquiry",
+  "staClsId": "Group Code",
+  "staClsNm": "Group Code Name",
+  "grdMain.title": "Group Code List",
+  "grdMain.clsId": "Group Code",
+  "grdMain.clsNm": "Group Code Name",
+  "grdMain.clsDesc": "Group Code Description"
+}

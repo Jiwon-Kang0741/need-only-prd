@@ -1,0 +1,19 @@
+{
+  "staPopTitle": "Reset Password",
+  "staCurPwd": "Current Password",
+  "staNewPwd": "New Password",
+  "staNewPwdCnf": "Confirm New Password",
+  "btnReplace": "Reset",
+  "btnCancel": "Cancel",
+  "staPwRule1": "<b>When setting a new password, please follow these rules:</b>",
+  "staPwRule2": "• The new password must <b>match</b> in both fields.",
+  "staPwRule3": "• The password must be <b>at least 10 characters long</b> and include <b>letters, numbers, and special characters</b>.",
+  "staPwRule4": "• The password <b>cannot include your user ID</b>.",
+  "staPwRule5": "• <b>Easily guessable passwords</b> are not allowed.",
+  "staPwRule6": "• You <b>cannot use the same character 3 or more times consecutively</b>.",
+  "staPwRule7": "• The new password <b>cannot be the same as your current password</b>.",
+  "staPwRule8": "<b>Additional Notes:</b>",
+  "staPwRule9": "• Users are responsible for the secure use of their password.",
+  "staPwRule10": "• The password must be changed every 3 months.",
+  "staPwRule11": "Setting a strong password helps keep your account secure."
+}

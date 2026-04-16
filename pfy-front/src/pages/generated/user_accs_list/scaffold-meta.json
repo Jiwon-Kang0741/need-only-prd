@@ -1,0 +1,7 @@
+{
+  "screenId": "USER_ACCS_LIST",
+  "screenName": "사용자접근관리",
+  "pageType": "list",
+  "routePath": "/USER_ACCS_LIST",
+  "generatedAt": "2026-04-07T01:56:59.507Z"
+}

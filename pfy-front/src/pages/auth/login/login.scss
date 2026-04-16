@@ -1,0 +1,31 @@
+.forgot-password-button {
+  width: 100%;
+  background: var(--bg-1);
+  color: var(--txt-color-3);
+  font-size: 16px;
+  border-radius: 4px;
+  border: none;
+  font-size: 16px;
+  min-height: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background 0.3s ease;
+  border: 1px solid var(--divider-2);
+  transition: all 0.3s ease;
+
+  &:hover {
+    color: var(--txt-color-1);
+    border-color: var(--scrollbar-color);
+  }
+
+  &:disabled {
+    background-color: var(--bg-3);
+    color: var(--txt-color-4);
+  }
+}
+
+.save-id-label {
+  font-size: 15px;
+  color: var(--txt-color-3);
+}

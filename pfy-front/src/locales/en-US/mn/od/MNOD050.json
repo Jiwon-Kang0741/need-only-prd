@@ -1,0 +1,22 @@
+{
+  "btnInquiry": "Search",
+  "btnReset": "Reset",
+  "btnSave": "Save",
+  "btnCopy": "Copy Contract",
+  "btnRequest": "Request Approval",
+  "btnConfirm": "Approve",
+  "staCONT_NO": "Contract No",
+  "staSTR_CD": "Sub System",
+  "grdMain.title": "BOM Version List",
+  "grdMain._CHK": "",
+  "grdMain.VER": "Version",
+  "grdMain.APLC_DT": "Application Date",
+  "grdMain.CONFM_REQ_YMD": "Approval Request Date",
+  "grdMain.CONFM_RQR_NM": "Approval Requester",
+  "grdMain.CONFM_YMD": "Approval Date",
+  "grdMain.APRVR_NM": "Approver",
+  "grdMain.PRG_STAT": "Progress Status",
+  "grdMain.RFLT_YN": "Reflect",
+  "grdMain.NOTE": "Request Reason",
+  "grdMain.LOG_YN": "Change History"
+}

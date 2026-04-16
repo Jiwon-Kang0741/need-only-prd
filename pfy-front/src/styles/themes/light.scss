@@ -1,0 +1,252 @@
+:root {
+  --white-static-color: #fff;
+
+  // text
+  --txt-color-1: var(--p-slate-1000);
+  --txt-color-2: var(--p-slate-900);
+  --txt-color-3: var(--p-slate-600);
+  --txt-color-4: var(--p-slate-400);
+  --txt-color-5: var(--p-slate-300);
+  --txt-white-color-1: var(--p-slate-0);
+  --txt-white-color-2: var(--p-slate-200);
+  --txt-white-color-3: var(--p-slate-300);
+
+  --txt-white-static-color: var(--p-slate-0);
+  --txt-black-static-color: var(--p-slate-1000);
+
+  // brand
+  --brand-primary-color: var(--p-slate-1000);
+  --brand-secondary-color: var(--p-secondary-500);
+  --brand-secondary-color-2: var(--p-secondary2-500);
+  --brand-secondary-color-3: var(--p-slate-1000);
+
+  // icon
+  --icon-color-1: var(--p-slate-800);
+  --icon-secondary2-color: var(--p-secondary2-500);
+  --icon-disabled-color: var(--p-slate-400);
+  --icon-white-color: var(--p-slate-0);
+  --icon-white-static-color: var(--p-slate-0);
+  --icon-black-static-color: var(--p-slate-1000);
+
+  // bg
+  --bg-1: var(--p-slate-0);
+  --bg-2: var(--p-slate-100);
+  --bg-3: var(--p-slate-200);
+  --bg-4: var(--p-slate-300);
+  --bg-5: var(--p-slate-800);
+  --bg-6: var(--p-slate-700);
+  --bg-orange-color: var(--p-secondary-100);
+  --bg-select-color: var(--p-secondary2-100);
+  --bg-hover-color: var(--p-slate-100);
+  --bg-total-color: var(--p-slate-800);
+  --bg-input-color: var(--p-slate-0);
+  --bg-total-color: var(--p-slate-800);
+
+  //button
+  --button-secondary-color: var(--p-secondary-500);
+  --button-secondary-hover-color: var(--p-secondary-400);
+  --button-secondary2-color: var(--p-secondary2-500);
+  --button-secondary2-hover-color: var(--p-secondary2-400);
+  --button-hover-color: var(--p-slate-900);
+  --button-outlined-color: var(--p-slate-500);
+  --button-tab-on-color: var(--p-slate-600);
+
+  // divider
+  --divider-1: var(--p-slate-200);
+  --divider-2: var(--p-slate-300);
+  --divider-3: var(--p-slate-500);
+  --scrollbar-color: var(--p-slate-600);
+
+  // semantic
+  --success-color: #21d47d;
+  --info-color: #606dff;
+  --waring-color: #eaae18;
+  --error-color: #e71e26;
+
+  // status
+  --status-recieve: #c3f5dd;
+  --status-out: #d4d7ff;
+  --status-companion: #fff2d4;
+  --status-ship: #ffc7c9;
+  --status-black: var(--brand-secondary-color-3);
+  --status-green: #21d47d;
+  --status-lightblue: #d4d7ff;
+  --status-lightgray: var(--bg-3);
+  --status-red: var(--error-color);
+  --status-blue: #606dff;
+  --status-yellow: #ffc73c;
+  --status-gray: var(--bg-4);
+  --status-purple: #a65af2;
+  --status-orange: #ff7843;
+
+  // graph
+  --graph-1: var(--success-color);
+  --graph-2: #419ff1;
+  --graph-3: var(--p-secondary2-500);
+  --graph-4: #7257fe;
+  --graph-5: #a65af2;
+  --graph-6: var(--p-secondary-500);
+  --graph-7: #ffc73c;
+  --graph-8: var(--p-slate-900);
+
+  // primary color
+  --p-primary-50: var(--p-slate-200);
+  --p-primary-100: var(--p-slate-200);
+  --p-primary-200: var(--p-slate-600);
+  --p-primary-300: var(--p-slate-300);
+  --p-primary-400: var(--p-slate-200);
+  --p-primary-500: var(--p-slate-950);
+  --p-primary-600: var(--p-slate-800);
+  --p-primary-700: var(--p-slate-700);
+
+  // //VER.01
+  // // secondary color (Main: Olive Khaki #565F45)
+  // --p-secondary-50:  #f2f3eb;  // 아주 연한 올리브 틴트 (배경 강조용)
+  // --p-secondary-100: #e5e8d8;  // 연한 카키 베이지 (Hover 상태 등)
+  // --p-secondary-200: #cbd1b3;  // 부드러운 파스텔 올리브
+  // --p-secondary-300: #b1b98f;  // 톤 다운된 리프 그린
+  // --p-secondary-400: #8b966e;  // 중간 다리 역할 (Muted Leaf)
+  // --p-secondary-500: #717d56;  // 활성화된 강조색 (Active 포인트)
+  // --p-secondary-600: #565f45;  // [Main] 브랜드 대표 컬러
+  // --p-secondary-700: #464d38;  // 짙은 올리브 (Hover/Dark Text)
+  // --p-secondary-800: #363b2b;  // 깊은 숲색 (Deep Olive)
+  // --p-secondary-900: #262a1e;  // 거의 검정에 가까운 딥 카키
+
+  // // secondary2 color (Main: Energetic Orange #FF8C00)
+  // --p-secondary2-50:  #fff6e6;  // 아주 연한 살구색 (Bg 포인트용)
+  // --p-secondary2-100: #ffecce;  // 부드러운 크림 오렌지
+  // --p-secondary2-200: #ffd89e;  // 파스텔 오렌지 (Soft UI)
+  // --p-secondary2-300: #ffc066;  // 밝은 귤색
+  // --p-secondary2-400: #ffa633;  // 활기찬 미디움 오렌지
+  // --p-secondary2-500: #ff8c00;  // [Main] 생동감 있는 오렌지 (Action 포인트)
+  // --p-secondary2-600: #e67e00;  // 짙은 오렌지 (Hover 상태용)
+  // --p-secondary2-700: #b36200;  // 차분한 브라운 오렌지
+  // --p-secondary2-800: #804600;  // 딥 테라코타 (Dark Accent)
+  // --p-secondary2-900: #4d2a00;  // 거의 검정에 가까운 다크 브라운
+
+  // // surface color chain (Custom Warm Slate)
+  // --p-slate-0:    #ffffff;    // Pure White (강조용 대비)
+  // --p-slate-100:  #f8f5ee;    // 가장 밝은 베이스 (요청하신 시작점)
+  // --p-slate-200:  #f1ede2;    // 부드러운 레이어 구분
+  // --p-slate-300:  #e4dfd1;    // 비활성화된 버튼/입력창 배경
+  // --p-slate-400:  #cfc9ba;    // 경계선(Border) - 약하게
+  // --p-slate-500:  #b6b0a1;    // 경계선(Border) - 강하게
+  // --p-slate-600:  #948f81;    // 보조 텍스트 (Secondary)
+  // --p-slate-700:  #757166;    // 본문 텍스트 (Body)
+  // --p-slate-800:  #5c5951;    // 강조 텍스트 (Strong)
+  // --p-slate-900:  #42413b;    // 제목 및 어두운 요소
+  // --p-slate-1000: #2b2a26;    // Very Dark Grey (어두운 배경용)
+  // --p-slate-1100: #1a1b16;    // Black에 가까운 딥 올리브 그레이
+
+
+  // secondary color (Main: Energetic Orange #FF8C00)
+  --p-secondary-50:  #fff6e6;  // 아주 연한 살구색 (Bg 포인트용)
+  --p-secondary-100: #ffecce;  // 부드러운 크림 오렌지
+  --p-secondary-200: #ffd89e;  // 파스텔 오렌지 (Soft UI)
+  --p-secondary-300: #ffc066;  // 밝은 귤색
+  --p-secondary-400: #ffa633;  // 활기찬 미디움 오렌지
+  --p-secondary-500: #ff8c00;  // [Main] 생동감 있는 오렌지 (Action 포인트)
+  --p-secondary-600: #e67e00;  // 짙은 오렌지 (Hover 상태용)
+  --p-secondary-700: #b36200;  // 차분한 브라운 오렌지
+  --p-secondary-800: #804600;  // 딥 테라코타 (Dark Accent)
+  --p-secondary-900: #4d2a00;  // 거의 검정에 가까운 다크 브라운
+
+  // // secondary2 color (Main: Antique Gold #C49A2C)
+  --p-secondary2-50:  #fdf9ed;  // 아주 연한 바닐라 (배경 포인트)
+  --p-secondary2-100: #f7eed3;  // 부드러운 샌드 베이지
+  --p-secondary2-200: #eedda9;  // 따뜻한 샴페인 골드
+  --p-secondary2-300: #e2c97c;  // 밝은 머스타드
+  --p-secondary2-400: #d5b552;  // 활기찬 골든 옐로우
+  --p-secondary2-500: #c49a2c;  // [Main] 앤틱 골드 (Action 포인트)
+  --p-secondary2-600: #aa8422;  // 깊이 있는 다크 골드 (Hover 상태용)
+  --p-secondary2-700: #8a6b1c;  // 차분한 브론즈
+  --p-secondary2-800: #6a5215;  // 딥 브라운 골드
+  --p-secondary2-900: #45360e;  // 거의 검정에 가까운 다크 초콜릿
+
+  // surface color chain (Based on Olive Khaki #565F45)
+  --p-slate-0:    #ffffff;    // Pure White
+  --p-slate-100:  #f6f7f2;    // 아주 연한 카키 틴트 (전체 배경용)
+  --p-slate-200:  #edf0e6;    // 카드 배경 및 섹션 구분
+  --p-slate-300:  #e0e5d5;    // 비활성화 요소/입력창 배경
+  --p-slate-400:  #c8cfb9;    // 경계선(Border) - 약하게
+  --p-slate-500:  #abb496;    // 경계선(Border) - 강하게
+  --p-slate-600:  #8a9475;    // 보조 텍스트 (Secondary)
+  --p-slate-700:  #6c755a;    // 본문 텍스트 (Body)
+  --p-slate-800:  #565f45;    // [Main Base] 브랜드 메인 명도
+  --p-slate-900:  #444b37;    // 제목 및 강조 텍스트
+  --p-slate-1000: #2d3224;    // 다크 모드 배경/매우 어두운 요소
+  --p-slate-1100: #1a1d15;    // Black을 대체하는 딥 올리브 블랙
+
+  // VER.00
+  // // secondary color
+  // --p-secondary-50: #ffeae1;
+  // --p-secondary-100: #ffd6c6;
+  // --p-secondary-200: #ffb99d;
+  // --p-secondary-300: #ff9970;
+  // --p-secondary-400: #ff7843;
+  // --p-secondary-500: #fa5514;
+  // --p-secondary-600: #d24006;
+  // --p-secondary-700: #9f2e02;
+  // --p-secondary-800: #6f2001;
+  // --p-secondary-900: #4f1600;
+
+  // // secondary2 color
+  // --p-secondary2-50: #eaeefe;
+  // --p-secondary2-100: #d7defd;
+  // --p-secondary2-200: #b7c4fb;
+  // --p-secondary2-300: #859af1;
+  // --p-secondary2-400: #3359e8;
+  // --p-secondary2-500: #3359e8;
+  // --p-secondary2-600: #2946bb;
+  // --p-secondary2-700: #1b328b;
+  // --p-secondary2-800: #15245e;
+  // --p-secondary2-900: #0f162c;
+
+  // // surface color chain
+  // --p-slate-0: #ffffff;
+  // --p-slate-100: #f4f6fa;
+  // --p-slate-200: #e8ebf1;
+  // --p-slate-300: #d2d7df;
+  // --p-slate-400: #b7bdc7;
+  // --p-slate-500: #989ea7;
+  // --p-slate-600: #73767c;
+  // --p-slate-700: #55575c;
+  // --p-slate-800: #424347;
+  // --p-slate-900: #292c33;
+  // --p-slate-1000: #191b20;
+  // --p-slate-1100: #03020a;
+
+
+
+  // form color
+  --p-form-field-focus-border-color: var(--brand-secondary-color-2);
+  --p-form-field-color: var(--txt-color-1);
+
+  // modal color
+  --p-overlay-modal-shadow: 4px 4px 16px 0px #0000004d;
+
+//     // success / info color (Muted Teal Blue #5E818C Base)
+// --p-info-50:   #f0f5f6;  // 아주 연한 블루 틴트 (성공 알림 배경)
+// --p-info-100:  #dae4e7;  // 부드러운 스카이 그레이
+// --p-info-200:  #b9cbd1;  // 파스텔 틸
+// --p-info-300:  #98b2ba;  // 뮤트 블루 그린
+// --p-info-400:  #7998a1;  // 중간 다리 역할
+// --p-info-500:  #5e818c;  // [Main] 정보 및 성공 안내 (Icon/Point)
+// --p-info-600:  #4c6972;  // 짙은 안내색 (Hover)
+// --p-info-700:  #3a5158;  // 정보 텍스트 (가독성 확보)
+// --p-info-800:  #29393e;  // 다크 틸 (Deep Info)
+// --p-info-900:  #182124;  // 거의 검정에 가까운 네이비 블루
+
+
+// // error / danger color (Muted Terracotta Red #C05A4D Base)
+// --p-error-50:   #fdf3f2;  // 아주 연한 핑크 틴트 (에러 알림 배경)
+// --p-error-100:  #f9e2df;  // 부드러운 로즈 베이지
+// --p-error-200:  #f0c2bb;  // 파스텔 테라코타
+// --p-error-300:  #e4a298;  // 톤 다운된 코랄 레드
+// --p-error-400:  #d57f72;  // 중간 명도 에러색
+// --p-error-500:  #c05a4d;  // [Main] 경고 및 삭제 (Action Button)
+// --p-error-600:  #a04a3f;  // 짙은 경고색 (Hover)
+// --p-error-700:  #803b32;  // 에러 메시지 텍스트 (가독성 확보)
+// --p-error-800:  #602c26;  // 딥 브릭 (Deep Danger)
+// --p-error-900:  #3f1d19;  // 거의 검정에 가까운 딥 레드
+}

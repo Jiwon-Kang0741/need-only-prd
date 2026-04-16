@@ -1,0 +1,19 @@
+:root {
+  --global-min-width: 1900px;
+  --global-header-height: 32px;
+
+  --font-size: 14px;
+  --line-height: 16px;
+
+  --sidebar-width: 300px;
+  --sidebar-width-collapsed: 80px;
+  --sidebar-transition-duration: 0.3s;
+
+  --form-element-width: 160px;
+
+  //z-index
+  --sidebar-z-index: 99;
+
+  --p-form-field-lg-padding-y: 13px;
+  --p-form-field-lg-padding-x: 16px;
+}

@@ -1,0 +1,23 @@
+{
+	"titleMtas110p01": "야간정비요청",
+	"btnClear": "초기화",
+	"btnDelete": "삭제",
+	"btnSave": "저장",
+	"btnRequest": "요청",
+	"btnRegist": "의뢰",
+	"btnReject": "요청철회",
+	"staPblCd": "체계",
+	"staStrCd": "부체계",
+	"staUnt": "호기",
+	"staAskNo": "요청번호",
+	"staStkNo": "재고번호",
+	"staNmgd": "품명",
+	"staTrbCd": "고장유형",
+	"staReqYmd": "요청일자",
+	"staReqRsn": "요청사유",
+	"staRqrNm": "요청자",
+	"staReqMiutNm": "요청부대",
+	"staReqPtoAfidNm": "요청첨부사진",
+	"staReqVdoAfidNm": "요청첨부영상",
+	"staAskUconfmRsn": "철회사유"
+}

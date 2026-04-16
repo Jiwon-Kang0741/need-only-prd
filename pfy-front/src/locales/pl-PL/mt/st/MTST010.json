@@ -1,0 +1,21 @@
+﻿{
+  "grdMain.title": "정비 통계 목록",
+  "btnInquiry": "조회",
+  "staNatnCdLst": "국가",
+  "staCstmCd": "고객명",
+  "staInqrDtCtgr": "기간",
+  "staSysTypNm": "기종명",
+  "staEqpmNo": "주장비 번호",
+  "staSno": "호기 (S/N)",
+  "chkChrgMtncYn": "유상 정비",
+  "grdMain.eqpmNo": "주장비 번호",
+  "grdMain.natnCd": "국가",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.sysTypNm": "기종명",
+  "grdMain.sno": "호기 (S/N)",
+  "grdMain.chrgMtncReqCnt": "유상건수",
+  "grdMain.mtncReqCnt": "총 건수",
+  "grdMain.chrgMtncTotAmt": "총 금액",
+  "grdMain.crnc": "화폐 단위",
+  "grdMain.chargeAmtList": "총 금액 (화폐 단위)"
+}

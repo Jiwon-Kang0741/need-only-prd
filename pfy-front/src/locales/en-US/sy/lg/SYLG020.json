@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "Search",
+  "btnSave": "Save",
+  "staLogDtm": "Period",
+  "staConditions": "Conditions",
+  "staUser": "User",
+  "staWindow": "Screen",
+  "grdMain.title": "Access List",
+  "grdMain.userId": "User ID",
+  "grdMain.userNm": "User Name",
+  "grdMain.windowId": "Screen ID",
+  "grdMain.windowNm": "Screen Name",
+  "grdMain.logDtm": "Screen Access Date & Time",
+  "grdMain.lognIp": "Access IP"
+}

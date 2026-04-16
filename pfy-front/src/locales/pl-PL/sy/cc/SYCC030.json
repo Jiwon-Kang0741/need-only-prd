@@ -1,0 +1,17 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "staEditorTitle": "본문",
+  "staFrmId": "문서양식ID",
+  "staFrmNm": "문서양식명",
+  "staLangCd": "언어",
+  "staUseYn": "사용여부",
+
+  "grdMain.title": "문서양식 리스트",
+  "grdMain.frmId": "문서양식ID",
+  "grdMain.frmNm": "문서양식명",
+  "grdMain.useYn": "사용여부",
+  "grdMain.frmDesc": "문서양식설명",
+  "grdMain.lastMdfrNm": "수정자",
+  "grdMain.lastMdfcDtm": "수정일"
+}

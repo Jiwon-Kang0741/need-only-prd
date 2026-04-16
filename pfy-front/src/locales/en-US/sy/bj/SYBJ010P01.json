@@ -1,0 +1,9 @@
+﻿{
+  "staPopTitle": "Service Search",
+  "staServiceNm": "Service Name",
+  "btnInquiry": "Inquiry",
+  "grdMain.title": "Service List",
+  "grdMain.serviceType": "Service Type",
+  "grdMain.serviceNm": "Service Name",
+  "grdMain.serviceClass": "Service Class Name"
+}

@@ -1,0 +1,11 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  &:not(:last-child) {
+    margin-right: 16px;
+  }
+}

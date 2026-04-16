@@ -1,0 +1,11 @@
+{
+  "notification": {
+    "title": "알림",
+    "deleteAll": "전체삭제"
+  },
+  "setting": {
+    "resetPassword": "비밀번호 변경",
+    "theme": "테마",
+    "language": "언어"
+  }
+}

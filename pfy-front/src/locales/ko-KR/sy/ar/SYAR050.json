@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnSubSave": "저장",
+  "btnSubFold": "접기",
+
+  "staRoleId": "역할 ID",
+  "staRoleNm": "역할명",
+  "grdMain.title": "역할 리스트",
+  "grdMain.roleId": "역할ID",
+  "grdMain.roleNm": "역할명",
+  "grdMain.useYn": "사용여부",
+  "grdSub.title": "메뉴 리스트",
+  "grdSub.menuNm": "메뉴명",
+  "grdSub.menuId": "메뉴ID"
+}

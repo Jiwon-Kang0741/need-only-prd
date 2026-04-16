@@ -1,0 +1,170 @@
+.sum-grid-wrapper {
+  width: 100%;
+  border: 1px solid var(--divider-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--bg-1);
+  margin-bottom: 1rem;
+}
+
+// DataTable 스타일
+.sum-grid-datatable {
+  :deep(.sum-grid-table.p-datatable) {
+    border: none;
+    border-radius: 0;
+    --p-datatable-header-cell-backgroud: var(--bg-2);
+    --p-datatable-row-selected-background: var(--bg-select-color);
+    --p-datatable-body-cell-selected-border-color: var(--bg-select-color);
+    --p-datatable-column-title-font-weight: 400;
+    --p-datatable-header-cell-padding: 6px;
+    --p-datatable-body-cell-padding: 6px;
+
+    .p-datatable-header {
+      display: none;
+    }
+
+    .p-datatable-thead {
+      th {
+        height: 46px;
+        font-size: var(--font-size);
+        color: var(--txt-color-1);
+        text-align: center !important;
+        background: var(--p-datatable-header-cell-backgroud);
+        border-right: 1px solid var(--divider-2);
+        border-bottom: 1px solid var(--divider-2);
+
+        // 모든 내부 요소 가운데 정렬
+        * {
+          text-align: center !important;
+        }
+
+        // PrimeVue의 다양한 헤더 구조 타겟팅
+        .p-column-header-content,
+        .p-column-header,
+        .p-column-title,
+        .p-column-header-text {
+          text-align: center !important;
+          justify-content: center !important;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          margin: 0 auto;
+        }
+
+        .p-column-header-content {
+          justify-content: center !important;
+          width: 100%;
+          display: flex;
+          align-items: center;
+        }
+
+        .p-column-title {
+          text-align: center !important;
+          width: 100%;
+          margin: 0 auto;
+          display: block;
+        }
+
+        .p-column-header {
+          text-align: center !important;
+          width: 100%;
+        }
+
+        // headerClass로 추가된 클래스
+        &.sum-grid-header-center {
+          text-align: center !important;
+
+          * {
+            text-align: center !important;
+            justify-content: center !important;
+          }
+        }
+
+        // ColumnGroup의 헤더 셀
+        &[role="columnheader"] {
+          text-align: center !important;
+
+          * {
+            text-align: center !important;
+            justify-content: center !important;
+          }
+        }
+
+        &:last-child {
+          border-right: none;
+        }
+      }
+    }
+
+    .p-datatable-tbody {
+      tr {
+        background-color: var(--bg-1);
+        border-bottom: 1px solid var(--divider-2);
+
+        &:last-child {
+          border-bottom: none;
+        }
+      }
+
+      td {
+        padding: 6px 12px;
+        text-align: center;
+        border-right: 1px solid var(--divider-2);
+        vertical-align: middle;
+        background-color: var(--bg-1);
+        height: 46px;
+        font-size: var(--font-size);
+        color: var(--txt-color-1);
+        border-bottom-color: var(--divider-2);
+        contain: layout style;
+        position: relative;
+        transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        will-change: background-color;
+
+        &:hover {
+          background-color: var(--p-datatable-row-hover-background);
+        }
+
+        &:last-child {
+          border-right: none;
+        }
+      }
+    }
+
+    .p-datatable-wrapper {
+      border: none;
+    }
+  }
+}
+
+// 데이터 셀
+.sum-cell {
+  width: 100%;
+  padding: 0;
+  text-align: center;
+  font-weight: 400;
+  font-size: var(--font-size);
+  color: var(--txt-color-1);
+  transition:
+    background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+
+  &.clickable {
+    cursor: pointer;
+    border-radius: 4px;
+
+    &:hover {
+      background-color: var(--p-datatable-row-hover-background);
+      color: var(--p-datatable-row-hover-color);
+    }
+
+    &:active {
+      background-color: var(--p-datatable-row-selected-background);
+      color: var(--p-datatable-row-selected-color);
+    }
+  }
+}

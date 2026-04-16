@@ -1,0 +1,18 @@
+{
+  "staPopTitle": "Parts by Catalog",
+  "staNatnCd": "Country",
+  "staNatnNm": "Country",
+  "staCstmCd": "Customer Name",
+  "staPartNo": "Part No.",
+  "staPartNm": "Part Name",
+  "staStrCd": "System Type",
+  "btnInquiry": "Inquiry",
+  "grdMain.title": "Item",
+  "grdMain.natnCd": "Country",
+  "grdMain.natnNm": "Country",
+  "grdMain.cstmCd": "Customer Name",
+  "grdMain.strCd": "System Type",
+  "grdMain.ctlgNo": "Catalog No.",
+  "grdMain.partNm": "Part Name",
+  "grdMain.partNo": "Part No"
+}

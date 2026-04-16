@@ -1,0 +1,20 @@
+{
+  "staPopTitle": "제품 목록",
+  "staStrCd": "체계명",
+  "staStgCd": "창고",
+  "staCtlgNo": "카탈로그 번호",
+  "staPartNo": "부품 번호",
+  "staPartNm": "부품명",
+  "staCnddPrdtYn": "후보 제품",
+  "btnInquiry": "조회",
+  "btnSave": "저장",
+  "grdMain.title": "Item",
+  "grdMain.strNm": "체계명",
+  "grdMain.stgNm": "창고명",
+  "grdMain.partNm": "부품명",
+  "grdMain.partNo": "부품 번호",
+  "grdMain.unit": "단위",
+  "grdMain.invQty": "재고",
+  "grdMain.lt": "리드타임",
+  "grdMain.slngPric": "가격"
+}

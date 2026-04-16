@@ -1,0 +1,105 @@
+.tabs {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  flex: 1;
+}
+
+.tab-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+}
+
+.tab-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+.tab-list {
+  display: flex;
+  flex-wrap: nowrap;
+  margin: 0;
+  width: max-content;
+  transition: transform 0.3s ease;
+}
+
+.scroll-controls {
+  display: flex;
+  flex-shrink: 0;
+  margin-left: 20px;
+  gap: 2px;
+}
+
+.scroll-btn {
+  border: none;
+  border-radius: 4px;
+  color: var(--text-color-1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  flex-shrink: 0;
+  z-index: 1;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.close-all-btn {
+  margin-left: 8px;
+}
+
+.tab {
+  flex-shrink: 0;
+  width: 160px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  margin-right: 1px;
+  background: var(--p-slate-600); //var(--button-outlined-color);
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  user-select: none;
+  color: white;
+
+  .tab-title {
+    flex: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tab-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  &.active {
+    background: var(--bg-1);
+    color: var(--text-color-1);
+    font-weight: bold;
+    border: 1px solid var(--divider-3);
+    border-bottom: 0;
+  }
+}

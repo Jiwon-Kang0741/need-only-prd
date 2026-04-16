@@ -1,0 +1,22 @@
+﻿{
+  "staExCr": "Management  Exchange Rate",
+  "staOfcExcr": "Notify Exchange Rate",
+  "btnInquiry": "Inquiry",
+  "btnSave": "Save",
+  "grdMain.title": "Management  Exchange Rate",
+  "grdMain.stndYr": "Year",
+  "grdMain.USD": "USD",
+  "grdMain.EUR": "EUR",
+  "grdMain.KRW": "KRW",
+  "grdSub.title": "Notify Exchange Rate",
+  "grdSub.year": "Year",
+  "grdSub.excrDt": "exchange Date",
+  "grdSub.fromCrncCd": "base currency",
+  "grdSub.toCrncCd": "opponent currency",
+  "grdSub.crnc": "exchange rate amount",
+  "grdSub.fstInptId": "Creator",
+  "grdSub.fstInptIp": "Created Ip",
+  "grdSub.fstInptDtm": "Created Date",
+  "grdSub.lastMdfrId": "Modifier",
+  "grdSub.lastMdfcDtm": "Modification Date"
+}

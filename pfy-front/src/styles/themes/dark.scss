@@ -1,0 +1,79 @@
+html[class='dark'] {
+  --white-static-color: #fff;
+
+  // text
+  --txt-color-1: var(--p-slate-0);
+  --txt-color-2: var(--p-slate-200);
+  --txt-color-3: var(--p-slate-500);
+  --txt-color-4: var(--p-slate-700);
+  --txt-color-5: var(--p-slate-800);
+  --txt-white-color-1: var(--p-slate-1000);
+  --txt-white-color-2: var(--p-slate-900);
+  --txt-white-color-3: var(--p-slate-800);
+
+  --txt-white-static-color: var(--p-slate-0);
+  --txt-black-static-color: var(--p-slate-1100);
+
+  // brand
+  --brand-primary-color: var(--p-slate-0);
+  --brand-secondary-color: var(--p-secondary-400);
+  --brand-secondary-color-2: var(--p-secondary2-400);
+  --brand-secondary-color-3: var(--p-slate-100);
+
+  // icon
+  --icon-color-1: var(--p-slate-100);
+  --icon-secondary2-color: var(--p-secondary2-400);
+  --icon-disabled-color: var(--p-slate-700);
+  --icon-white-color: var(--p-slate-1000);
+  --icon-white-static-color: var(--p-slate-0);
+  --icon-black-static-color: var(--p-slate-1000);
+
+  --divider-1: var(--p-slate-800);
+  --divider-2: var(--p-slate-700);
+  --divider-3: var(--p-slate-600);
+
+  // bg
+  --bg-1: var(--p-slate-1000);
+  --bg-2: var(--p-slate-900);
+  --bg-3: var(--p-slate-800);
+  --bg-4: var(--p-slate-700);
+  --bg-5: var(--p-slate-300);
+  --bg-6: var(--p-slate-400);
+  --bg-orange-color: var(--p-secondary-800);
+  --bg-select-color: var(--p-secondary2-800);
+  --bg-hover-color: var(--p-slate-900);
+  --bg-total-color: var(--p-secondary2-600);
+  --bg-input-color: var(--p-slate-900);
+  --bg-total-color: var(--p-secondary2-600);
+
+  //button
+  --button-secondary-color: var(--p-secondary-400);
+  --button-secondary-hover-color: var(--p-secondary-600);
+  --button-secondary2-color: var(--p-secondary2-400);
+  --button-secondary2-hover-color: var(--p-secondary2-600);
+  --button-hover-color: var(--p-slate-200);
+  --button-outlined-color: var(--p-slate-700);
+  --button-tab-on-color: var(--p-slate-500);
+
+  // divider
+  --divider-1: var(--p-slate-800);
+  --divider-2: var(--p-slate-700);
+  --divider-3: var(--p-slate-600);
+  --scrollbar-color: var(--p-slate-500);
+
+  // semantic
+  --success-color: #33d486;
+  --info-color: #606dff;
+  --waring-color: #ffc73c;
+  --error-color: #e71e26;
+
+  // graph
+  --graph-1: var(--success-color);
+  --graph-2: #419ff1;
+  --graph-3: var(--p-secondary2-400);
+  --graph-4: #7257fe;
+  --graph-5: #a65af2;
+  --graph-6: var(--p-secondary-400);
+  --graph-7: #ffc73c;
+  --graph-8: var(--p-slate-200);
+}

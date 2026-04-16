@@ -1,0 +1,29 @@
+{
+  "title": {
+    "new": "요청 등록",
+    "edit": "요청 상세"
+  },
+  "staPblCd": "체계",
+  "staAskNo": "요청번호",
+  "staStrCd": "부체계",
+  "staReqMiut": "요청부대",
+  "staStkNo": "재고번호",
+  "staNmgd": "품명",
+  "staPrtno": "부품번호",
+  "staMatlCd": "자재코드",
+  "staUnit": "단위",
+  "staQty": "수량",
+  "staCiObjYn": "CI대상여부",
+  "staPrdtsSc": "제작구분",
+  "staDoctNo": "요청근거",
+  "staNote": "비고",
+  "btnSave": "저장",
+  "btnRequest": "요청",
+  "btnDelete": "삭제",
+  "btnClear": "초기화",
+  "btnCancel": "취소",
+  "msg": {
+    "required": "필수 입력 항목입니다.",
+    "qtyGreaterThanZero": "수량은 0보다 커야 합니다."
+  }
+}

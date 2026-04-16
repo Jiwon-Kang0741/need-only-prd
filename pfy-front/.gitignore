@@ -1,0 +1,78 @@
+# macOS 관련
+.DS_Store
+
+# Windows 관련
+Thumbs.db
+ehthumbs.db
+
+# Node.js 관련
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.pnpm-debug.log*
+
+# 환경설정 파일
+.env
+.env.*.local
+
+# 빌드 결과물
+dist/
+dist-ssr/
+build/
+storybook-static/
+
+# Vite 관련 캐시
+.vite/
+*.local
+
+# TypeScript 빌드 결과
+*.tsbuildinfo
+
+# ESLint 캐시
+.eslintcache
+
+# Prettier 캐시
+.prettiercache
+
+# 로그 파일
+*.log
+logs/
+
+# 테스트 커버리지
+coverage/
+
+# 에디터 및 IDE 관련
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.iml
+*.iws
+out/
+
+# Visual Studio 관련
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# 임시 파일, 백업 파일
+*.tmp
+*.bak
+*.backup
+*.swp
+*~
+
+# ConvertPrompt 폴더 제외
+ConvertPrompt/
+
+# Rule 폴더    
+Rules/
+NewRules/
+
+# AI코딩 결과물 
+scripts/
+reports/

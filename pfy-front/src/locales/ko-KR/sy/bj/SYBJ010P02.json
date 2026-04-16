@@ -1,0 +1,8 @@
+﻿{
+  "staPopTitle": "서비스 메소드 조회",
+  "staServiceClass": "서비스 클래스명",
+  "btnInquiry": "조회",
+  "grdMain.title": "메소드 목록",
+  "grdMain.serviceMethodNm": "메소드 타입",
+  "grdMain.methodParameters": "메소드명"
+}

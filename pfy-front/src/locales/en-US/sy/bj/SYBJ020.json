@@ -1,0 +1,24 @@
+﻿{
+  "staSchDtm": "Date",
+  "staUseYn": "Status",
+  "staExeSc": "Execution Category",
+
+  "btnInquiry": "Inquiry",
+  "btnExecution": "Run",
+  "btnDetails": "Run",
+
+  "grdMain.title": "Batch List",
+  "grdMain.jobschNm": "Work Name",
+  "grdMain.jobschDesc": "Description",
+  "grdMain.useYn": "Used",
+  "grdMain.btnExecution": "Execution",
+
+  "grdSub.title": "Batch Execution Details",
+  "grdSub.exeSc": "Execution Category",
+  "grdSub.schStrtDtm": "Start Date",
+  "grdSub.schEndDtm": "End Date",
+  "grdSub.procTm": "Elapsed Time (ms)",
+  "grdSub.respStat": "Status",
+  "grdSub.btnMessage": "Message",
+  "grdSub.btnDetails": "Details"
+}

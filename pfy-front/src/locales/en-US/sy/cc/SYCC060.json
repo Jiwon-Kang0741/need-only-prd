@@ -1,0 +1,22 @@
+﻿{
+  "btnInquiry": "Inquiry",
+  "btnSubSave": "Save",
+  "btnDisplayChange": "Bulk change",
+  "btnImport": "Load Display",
+  "staLangCd": "Language",
+  "staWindowId": "Screen ID",
+  "staWindowNm": "Screen Name",
+  "staExtractYn": "Extract",
+  "btnExtract": "Extract",
+  "grdMain.title": "Screen List",
+  "grdMain.windowId": "Screen ID",
+  "grdMain.windowNm": "Screen Name",
+  "grdMain.extractYn": "Extract",
+  "grdMain.btnExtract": "Extract",
+  "grdSub.title": "Screen Object List",
+  "grdSub.objtTypeCd": "Object Type",
+  "grdSub.objtId": "Object ID",
+  "grdSub.objtNm": "Object Name",
+  "grdSub.useYn": "Used",
+  "grdSub.objtDisNm": "Display"
+}

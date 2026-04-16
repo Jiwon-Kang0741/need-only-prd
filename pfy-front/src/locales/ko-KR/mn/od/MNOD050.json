@@ -1,0 +1,22 @@
+{
+  "btnInquiry": "조회",
+  "btnReset": "초기화",
+  "btnSave": "저장",
+  "btnCopy": "차수복사",
+  "btnRequest": "승인요청",
+  "btnConfirm": "승인",
+  "staCONT_NO": "차수",
+  "staSTR_CD": "부체계",
+  "grdMain.title": "BOM 버전 목록",
+  "grdMain._CHK": "",
+  "grdMain.VER": "버전",
+  "grdMain.APLC_DT": "적용일자",
+  "grdMain.CONFM_REQ_YMD": "승인요청일",
+  "grdMain.CONFM_RQR_NM": "승인요청자",
+  "grdMain.CONFM_YMD": "승인일",
+  "grdMain.APRVR_NM": "승인자",
+  "grdMain.PRG_STAT": "진행상태",
+  "grdMain.RFLT_YN": "반영여부",
+  "grdMain.NOTE": "요청사유",
+  "grdMain.LOG_YN": "변경이력"
+}

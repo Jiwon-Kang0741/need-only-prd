@@ -1,0 +1,20 @@
+﻿{
+  "staTitle": "제목",
+  "staPartQtReqStat": "상태",
+  "staCstmCd": "고객명",
+  "staReqDt": "요청일",
+  "btnNewQuote": "새 견적",
+  "btnDeleteAll": "전체 삭제",
+  "btnInquiry": "조회",
+  "btnNewProduct": "제품 추가",
+  "grdMain.title": "견적 요청 목록",
+  "grdMain.titleNm": "제목",
+  "grdMain.itemCnt": "Item 건수",
+  "grdMain.partQtReqStat": "상태",
+  "grdMain.cstmCd": "고객코드",
+  "grdMain.cstmNm": "고객명",
+  "grdMain.rqrNm": "요청자",
+  "grdMain.reqDtm": "등록일",
+  "grdMain.elsDays": "경과일",
+  "grdMain.replDtm": "답변일"
+}

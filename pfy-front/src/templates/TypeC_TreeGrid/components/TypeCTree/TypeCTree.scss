@@ -1,0 +1,52 @@
+.type-c-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+
+  :deep(.treetable-container) {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1 !important;
+    height: auto !important;
+    min-height: 0;
+    gap: 0 !important;
+    overflow: hidden;
+  }
+
+  :deep(.treetable-header) {
+    flex-shrink: 0;
+    height: 44px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--divider-2);
+    background: var(--bg-2);
+
+    .title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--txt-color-1);
+    }
+
+    .util-buttons {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+    }
+  }
+
+  :deep(.p-treetable.treetable-root) {
+    flex: 1 !important;
+    min-height: 0;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+  }
+
+  :deep(.menu-nm-text) {
+    margin-left: 6px;
+  }
+}

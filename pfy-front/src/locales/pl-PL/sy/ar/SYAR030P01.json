@@ -1,0 +1,18 @@
+﻿{
+  "btnInquiry": "조회",
+  "btnApply": "적용",
+
+  "staPopTitle": "화면 검색",
+  "staWindowId": "화면ID",
+  "staWindowNm": "화면명",
+
+  "grdMain.title": "화면 목록",
+  "grdMain.windowId": "화면ID",
+  "grdMain.windowNm": "화면명",
+  "grdMain.windowUrl": "화면URL",
+
+  "grdSub.title": "화면 선택 목록",
+  "grdSub.windowId": "화면ID",
+  "grdSub.windowNm": "화면명",
+  "grdSub.windowUrl": "화면URL"
+}

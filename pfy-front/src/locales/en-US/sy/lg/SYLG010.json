@@ -1,0 +1,15 @@
+﻿{
+  "btnInquiry": "Search",
+  "btnSave": "Save",
+  "staLognDtm": "Login Date",
+  "staUserId": "User",
+  "staUserNm": "User",
+  "grdMain.title": "Login List",
+  "grdMain.dept": "Dept",
+  "grdMain.userId": "User ID",
+  "grdMain.userNm": "User Name",
+  "grdMain.lognDtm": "Login Date & Time",
+  "grdMain.logoutDtm": "Logout Date & Time",
+  "grdMain.lognIp": "Login IP",
+  "비고": "화면구성에 부서가 있는데 API 문서에 없음"
+}

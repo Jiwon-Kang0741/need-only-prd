@@ -1,0 +1,16 @@
+﻿{
+  "grdMain.title": "Maintenance Quotation List",
+  "btnInquiry": "Inquiry",
+  "staNatnCdLst": "Country",
+  "staCstmCd": "Customer Name",
+  "staServcNo": "Service No.",
+  "staInqrDt": "Quotation Request Date",
+  "staMtncQtStat": "Status",
+  "grdMain.servcNo": "Service No.",
+  "grdMain.natnCd": "Country",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.qtReqDt": "Request Date",
+  "grdMain.mtncQtStat": "Status",
+  "grdMain.qtTotAmt": "Total Amount",
+  "grdMain.crnc": "Currency"
+}

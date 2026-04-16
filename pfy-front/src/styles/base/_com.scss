@@ -1,0 +1,29 @@
+html,
+body {
+  font-size: var(--font-size);
+}
+
+body {
+  width: 100%;
+  min-width: var(--global-min-width);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--txt-color-1);
+  background: var(--bg-1);
+  font-family: 'Noto Sans', sans-serif; /* Google Fonts (_font.scss @import) */
+}
+
+#app {
+  height: 100%;
+}
+
+/* 한국어 로케일일 때 한국어 폰트 우선 */
+html[lang='ko'] body,
+html[lang='ko-KR'] body {
+  font-family: 'Noto Sans KR', 'Noto Sans', sans-serif;
+}
+
+.hide {
+  display: none;
+  font-size: 0;
+}

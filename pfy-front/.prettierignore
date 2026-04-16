@@ -1,0 +1,31 @@
+# 빌드 결과물
+dist/
+build/
+out/
+
+# 의존성
+node_modules/
+
+# 로그 파일
+*.log
+
+# 테스트 커버리지
+coverage/
+
+# 환경 변수 파일
+.env
+.env.*
+
+# VSCode 설정 폴더
+.vscode/
+
+# 최소화된 JS 파일 제외
+*.min.js
+
+# 타입스크립트 선언 파일 제외
+*.d.ts
+
+# 기타 설정 파일 제외
+*.config.js
+*.config.cjs
+*.config.mjs

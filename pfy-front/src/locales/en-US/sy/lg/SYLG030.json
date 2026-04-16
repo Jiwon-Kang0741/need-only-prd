@@ -1,0 +1,16 @@
+﻿{
+  "btnInquiry": "Search",
+  "btnDownload": "PreView",
+  "staFileNm": "File Name",
+  "staFileDownDtm": "Download Date",
+  "staUser": "User",
+  "grdMain.title": "File Download List",
+  "grdMain.userId": "User ID",
+  "grdMain.userNm": "User Name",
+  "grdMain.fileNo": "File ID",
+  "grdMain.fileSeq": "File SEQ",
+  "grdMain.fileNm": "File Name",
+  "grdMain.fileDownDtm": "File Download Date & Time",
+  "grdMain.fileExist": "File Available",
+  "grdMain.download": "Download"
+}

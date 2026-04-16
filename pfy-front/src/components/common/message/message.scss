@@ -1,0 +1,15 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-message {
+  &.p-message-secondary {
+    background: var(--p-secondary-50);
+    border: 1px solid var(--p-secondary-100);
+    color: var(--p-secondary-500);
+  }
+
+  &.p-message-secondary2 {
+    background: var(--p-secondary2-50);
+    border: 1px solid var(--p-secondary2-100);
+    color: var(--p-secondary2-500);
+  }
+}

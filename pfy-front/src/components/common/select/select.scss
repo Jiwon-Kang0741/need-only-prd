@@ -1,0 +1,11 @@
+.select-root {
+  width: var(--form-element-width);
+}
+
+.p-select-option.p-select-option-selected.p-focus {
+  --p-select-option-selected-focus-color: var(--txt-color-1);
+}
+
+.p-select-option {
+  min-height: 30px;
+}

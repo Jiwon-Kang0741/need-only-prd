@@ -1,0 +1,18 @@
+{
+  "staPopTitle": "카탈로그 부품 검색",
+  "staNatnCd": "국가",
+  "staNatnNm": "국가명",
+  "staCstmCd": "고객명",
+  "staPartNo": "부품번호",
+  "staPartNm": "부품명",
+  "staStrCd": "기종명",
+  "btnInquiry": "조회",
+  "grdMain.title": "Item",
+  "grdMain.natnCd": "국가",
+  "grdMain.natnNm": "국가명",
+  "grdMain.cstmCd": "고객명",
+  "grdMain.strCd": "기종명",
+  "grdMain.ctlgNo": "카탈로그번호",
+  "grdMain.partNm": "부품명",
+  "grdMain.partNo": "부품번호"
+}

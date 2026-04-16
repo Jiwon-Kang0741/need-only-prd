@@ -1,0 +1,18 @@
+﻿{
+  "staTinqKnd": "Category",
+  "staTinqStat": "Status",
+  "staPostedDate": "Posted date",
+  "staTitleNm": "Title",
+  "staCstmCdLst": "Customer Name",
+  "staAllPeriod": "All Period",
+  "btnInquiry": "Inquiry",
+  "btnNewWrite": "New Write",
+  "grdMain.tinqStat": "Status",
+  "grdMain.tinqKnd": "Category",
+  "grdMain.rlsYn": "Visibility",
+  "grdMain.titleNm": "Title",
+  "grdMain.cstmCd": "Customer Code",
+  "grdMain.cstmNm": "Customer Name",
+  "grdMain.inqrrNm": "Requester",
+  "grdMain.inqDtm": "Posted date"
+}

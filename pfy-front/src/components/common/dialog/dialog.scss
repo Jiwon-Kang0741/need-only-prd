@@ -1,0 +1,68 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-dialog-mask {
+  &.mask-transparent {
+    background-color: transparent !important;
+  }
+}
+
+.p-dialog.dialog-root {
+  padding-bottom: 10px;
+
+  .p-dialog-header {
+    padding: 32px 32px 14px;
+
+    .p-dialog-title {
+      font-size: 24px;
+      color: var(--txt-color-1);
+    }
+
+    .p-dialog-close-button {
+      .p-icon {
+        width: 24px;
+        height: 24px;
+        color: var(--p-slate-800);
+      }
+    }
+
+    background: transparent;
+  }
+
+  .p-dialog-content {
+    padding: 0 32px 32px 40px;
+
+    .dialog-content-container {
+      margin-top: 0;
+    }
+
+    .p-dialog-content-actions {
+      padding: 40px 0 0;
+    }
+  }
+
+  &.layer-sm,
+  &.p-confirmdialog {
+    .p-dialog-header {
+      padding: 16px 16px 10px;
+
+      .p-dialog-title {
+        font-size: 16px;
+      }
+
+      .p-dialog-close-button {
+        .p-icon {
+          width: 20px;
+          height: 20px;
+        }
+      }
+    }
+
+    .p-dialog-content {
+      padding: 0 16px 16px 16px;
+
+      .p-dialog-content-actions {
+        padding: 20px 0 0;
+      }
+    }
+  }
+}

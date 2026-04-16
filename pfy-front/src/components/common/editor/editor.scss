@@ -1,0 +1,341 @@
+@use '@/styles/helpers/index.scss' as *;
+@use 'sass:list';
+
+.editor-container {
+  height: 100%;
+
+  /* Tiptap editor Style  */
+  .ProseMirror-focused {
+    border: none !important;
+    outline: none !important;
+  }
+
+  .tiptap.ProseMirror {
+    height: var(--editor-height, 500px);
+    padding: 16px 24px;
+    padding-bottom: 1.25rem;
+    font-size: var(--font-size);
+
+    &.resize-cursor {
+      cursor: col-resize;
+    }
+  }
+
+  /* List styles */
+  .tiptap.ProseMirror ul,
+  .tiptap.ProseMirror ol {
+    padding: 0 1rem;
+    margin: 1.25rem 1rem 1.25rem 0.4rem;
+  }
+  .tiptap.ProseMirror li p {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
+
+  .tiptap.ProseMirror ul {
+    list-style-type: disc;
+  }
+  .tiptap.ProseMirror ol {
+    list-style-type: decimal;
+  }
+
+  /* Heading styles */
+  .tiptap.ProseMirror h1,
+  .tiptap.ProseMirror h2,
+  .tiptap.ProseMirror h3,
+  .tiptap.ProseMirror h4,
+  .tiptap.ProseMirror h5,
+  .tiptap.ProseMirror h6 {
+    // line-height: 1.1;
+    text-wrap: pretty;
+  }
+
+  .tiptap.ProseMirror h1 {
+    font-size: 2.25rem;
+    line-height: 1.25;
+  }
+  .tiptap.ProseMirror h2 {
+    font-size: 2rem;
+    line-height: 1.3;
+  }
+  .tiptap.ProseMirror h3 {
+    font-size: 1.75rem;
+    line-height: 1.4;
+  }
+  .tiptap.ProseMirror h4 {
+    font-size: 1.5rem;
+    line-height: 1.4;
+  }
+  .tiptap.ProseMirror h5 {
+    font-size: 1.25rem;
+    line-height: 1.5;
+  }
+  .tiptap.ProseMirror h6 {
+    font-size: 1rem;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  em,
+  u,
+  strong,
+  span {
+    vertical-align: baseline;
+  }
+
+  /* Code and preformatted text styles */
+  .tiptap.ProseMirror code {
+    background-color: var(--purple-light);
+    border-radius: 0.4rem;
+    color: var(--black);
+    font-size: 0.85rem;
+    padding: 0.25em 0.3em;
+  }
+
+  pre {
+    background: var(--black);
+    border-radius: 0.5rem;
+    color: var(--white);
+    margin: 1.5rem 0;
+    padding: 0.75rem 1rem;
+    overflow: auto;
+    white-space: pre-wrap;
+
+    /* code {
+    background: none;
+    color: inherit;
+    font-size: 0.8rem;
+    padding: 0;
+  } */
+  }
+
+  .tiptap.ProseMirror blockquote {
+    border-left: 3px solid rgba(61, 37, 20, 0.12);
+    margin: 1.5rem 0;
+    padding-left: 1rem;
+  }
+
+  .tiptap.ProseMirror hr {
+    border: none;
+    border-top: 1px solid rgba(61, 37, 20, 0.08);
+    margin: 2rem 0;
+  }
+
+  .tiptap.ProseMirror p {
+    padding: 0.375rem 0;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .toolbar .btn.is-active {
+    background: var(--p-button-primary-hover-background);
+    border: 1px solid var(--p-button-primary-hover-border-color);
+    color: var(--p-button-primary-hover-color);
+  }
+
+  .tiptap.ProseMirror .column-resize-handle {
+    background-color: var(--purple);
+    bottom: -2px;
+    pointer-events: none;
+    position: absolute;
+    right: -2px;
+    top: 0;
+    width: 4px;
+  }
+
+  .editor-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--txt-color-1);
+    margin-bottom: 8px;
+  }
+
+  .common-editor-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+
+    border-radius: 16px;
+    border: 1px solid var(--divider-2);
+    overflow: hidden;
+
+    .toolbar-wrap {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      height: 48px;
+      border-bottom: 1px solid var(--divider-2);
+      background-color: var(--bg-2);
+
+      &.is-readonly {
+        display: none;
+        pointer-events: none;
+      }
+
+      &.is-disabled {
+        pointer-events: none;
+      }
+
+      .heading-select {
+        width: 120px;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        .value-txt {
+          color: var(--txt-color-1);
+        }
+        .p-select-label {
+          padding-left: 0;
+          padding-right: 0;
+        }
+      }
+
+      .toolbar-group {
+        position: relative;
+        padding: 0 12px;
+        &:last-of-type::after {
+          display: none;
+        }
+        &::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          right: 0;
+          transform: translate(0, -50%);
+          width: 1px;
+          height: 100%;
+          background: var(--divider-2);
+        }
+        &.first {
+          padding-left: 0;
+        }
+        .item {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+      }
+
+      button:not(.p-button) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        &.active {
+          border-radius: 4px;
+          background: var(--bg-select-color);
+        }
+      }
+
+      .btn-insert-table {
+        height: 24px;
+        color: var(--txt-color-1);
+        border-color: var(--p-slate-500);
+        background: var(--bg-1);
+      }
+    }
+    .editor-content {
+      width: 100%;
+      color: #000;
+      background-color: #fff;
+      overflow: auto;
+      height: 100%;
+
+      &.is-disabled {
+        pointer-events: none;
+      }
+
+      &::-webkit-scrollbar {
+        width: 16px;
+        height: 16px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: var(--divider-3);
+        border-radius: 30px;
+        border: 5px solid transparent;
+        background-clip: content-box;
+      }
+      &::-webkit-scrollbar-thumb:hover {
+        background: var(--divider-3);
+        border: 5px solid transparent;
+        background-clip: content-box;
+      }
+
+      @supports (-moz-appearance: none) {
+        scrollbar-width: thin;
+      }
+    }
+  }
+  .p-popover {
+    &.toolbar-popover {
+      margin-block-start: 17px;
+      &::before,
+      &::after {
+        display: none;
+      }
+      .p-popover-content {
+        padding: 4px;
+      }
+      .btn-group {
+        .item {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          padding-left: 4px;
+          &::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translate(0, -50%);
+            width: 1px;
+            height: 16px;
+            background: var(--divider-2);
+          }
+          &:first-of-type {
+            padding-right: 0;
+            &::before {
+              display: none;
+            }
+          }
+        }
+        button {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          &.active {
+            border-radius: 4px;
+            background: var(--bg-select-color);
+          }
+        }
+      }
+    }
+  }
+
+  .p-colorpicker {
+    .p-colorpicker-preview {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid color-mix(in srgb, #000, transparent 90%);
+    }
+  }
+}

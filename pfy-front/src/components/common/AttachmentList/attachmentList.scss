@@ -1,0 +1,46 @@
+.attachment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .attachment-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    padding: 4px;
+
+    &:hover {
+      background-color: var(--bg-2);
+    }
+
+    .attachment-name {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      text-decoration: none;
+      word-break: break-all;
+      align-items: center;
+
+      .attachment-icon {
+        flex-shrink: 0;
+      }
+    }
+
+    .attachment-delete {
+      flex: 0 0 auto;
+    }
+  }
+
+  .attachment-empty {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    color: var(--text-color-secondary);
+    padding: 0.5rem 0;
+  }
+}

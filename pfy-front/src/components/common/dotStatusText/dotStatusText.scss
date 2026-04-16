@@ -1,0 +1,83 @@
+.dot-status-text {
+  padding-left: 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  color: var(--txt-color-1);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--dot-color, var(--bg-4));
+  }
+
+  // 커스텀 색상이 지정된 경우
+  &[style*='--dot-color'] {
+    color: var(--text-color, var(--txt-color-1));
+  }
+
+  // 색상 타입 처리
+  &--custom-color::before {
+    background-color: var(--dot-color);
+  }
+
+  &--custom-color.dot-status-text--match-color {
+    color: var(--text-color, var(--txt-color-1));
+  }
+
+  // Status별 색상
+
+  &--pending::before {
+    background-color: var(--brand-secondary-color-3);
+  }
+
+  &--success::before {
+    background-color: var(--success-color);
+  }
+
+  &--info::before {
+    background-color: var(--info-color);
+  }
+
+  &--warning::before {
+    background-color: var(--waring-color);
+  }
+
+  &--danger::before {
+    background-color: var(--error-color);
+  }
+
+  // matchColor가 true일 때 글자색도 동일하게
+  &--match-color {
+    &.dot-status-text--default {
+      color: var(--bg-4);
+    }
+
+    &.dot-status-text--pending {
+      color: var(--brand-secondary-color-3);
+    }
+
+    &.dot-status-text--success {
+      color: var(--success-color);
+    }
+
+    &.dot-status-text--info {
+      color: var(--info-color);
+    }
+
+    &.dot-status-text--warning {
+      color: var(--waring-color);
+    }
+
+    &.dot-status-text--danger {
+      color: var(--error-color);
+    }
+  }
+}

@@ -1,0 +1,28 @@
+@use '@/styles/helpers/index.scss' as *;
+
+.p-breadcrumb.breadcrumb-root {
+  --p-breadcrumb-gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .p-breadcrumb-list {
+    line-height: 20px;
+  }
+
+  .p-breadcrumb-item {
+    & > span {
+      font-size: 12px;
+      line-height: 1.2;
+      color: var(--txt-color-2);
+    }
+  }
+  .p-breadcrumb-separator {
+    position: relative;
+    top: 1px;
+
+    svg {
+      color: var(--txt-color-2);
+    }
+  }
+}
