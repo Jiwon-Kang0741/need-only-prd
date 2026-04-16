@@ -88,7 +88,7 @@ _FRONTEND_CHECKS = [
     (re.compile(r'<script(?!\s+setup)[\s>]'), '<script> without setup — must use <script setup lang="ts">'),
     (re.compile(r'\balert\s*\('), 'alert() found — use Toast component instead'),
     (re.compile(r'\bconfirm\s*\('), 'confirm() found — use ConfirmDialog instead'),
-    (re.compile(r'\bapi\.get\s*\('), 'api.get() found — CPMS /online/mvcJson/ dispatcher only accepts POST. Use api.post() for ALL calls including search/select'),
+    (re.compile(r'\bapi\.get\s*\('), 'api.get() found — CPMS /api/v1/ dispatcher only accepts POST. Use api.post() for ALL calls including search/select'),
     # Fabrication detection: common patterns of LLM-invented imports
     (re.compile(r"from\s+['\"]primevue/"), 'Direct PrimeVue import found — CPMS wraps PrimeVue components. Use CPMS common components from @/components/common/ instead'),
     (re.compile(r"import\s+.*\s+from\s+['\"]@/components/(?!common/)[^'\"]+['\"]"), 'Non-common component import — verify this path exists. CPMS shared components live under @/components/common/'),
@@ -1714,10 +1714,10 @@ class FrontendEngineerAgent:
             "- import api from '@/plugins/axios'\n"
             "- import { formatErrorMessage } from '@/utils/formatErrorMessage'\n"
             "- import type { ... } from './{screenId}Types'\n"
-            "- API URL pattern: /online/mvcJson/{SCREEN_CODE}-{method}\n"
+            "- API URL pattern: /api/v1/{SCREEN_CODE}-{method}\n"
             "- Export async functions for each API call (selectList, save, etc.)\n"
             "- CRITICAL: ALL API calls MUST use api.post() — NEVER use api.get(), api.put(), or api.delete()\n"
-            "  The CPMS /online/mvcJson/ dispatcher only accepts POST requests. Even search/select operations use POST.\n"
+            "  The CPMS /api/v1/ dispatcher only accepts POST requests. Even search/select operations use POST.\n"
             "  WRONG: api.get(Api.selectList, { params })  ← this will fail with 404/405\n"
             "  CORRECT: api.post(Api.selectList, params)  ← always POST, params in request body\n"
             "- Pass camelCase params directly matching backend DTO field names (NO uppercase conversion)\n"
@@ -2026,7 +2026,7 @@ class FrontendQAAgent:
             "- Flag any import path that does NOT match the CRITICAL IMPORT PATHS listed in the frontend guide\n"
             "- Flag any PrimeVue component usage not documented in the guide\n"
             "- Flag any composable (useXxx) not listed in the guide\n"
-            "- Flag any API endpoint pattern that does not follow /online/mvcJson/{SCREEN_CODE}-{method}\n"
+            "- Flag any API endpoint pattern that does not follow /api/v1/{SCREEN_CODE}-{method}\n"
             "- Flag any store method call not documented in the provided context\n"
             "- Flag api.get() calls — CPMS only uses api.post()\n"
             "- For each flagged item, fix_instruction MUST say: remove the fabricated code and replace with // TODO comment\n\n"
