@@ -187,3 +187,79 @@ export async function getGeneratedFiles(layer?: string): Promise<{ files: import
   const res = await fetch(url, { headers: apiHeaders() })
   return res.json()
 }
+
+// --- Mockup Pipeline API ---
+
+export async function mockupAiGenerate(
+  title: string, pageType: string, description?: string,
+): Promise<import('../types').AiGenerateResult> {
+  const res = await fetch('/api/mockup/ai-generate', {
+    method: 'POST',
+    headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, page_type: pageType, description }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupScaffold(
+  screenId: string, screenName: string, pageType: string, fields: Record<string, unknown>[], tabs?: Record<string, unknown>[],
+): Promise<import('../types').ScaffoldResult> {
+  const res = await fetch('/api/mockup/scaffold', {
+    method: 'POST',
+    headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ screen_id: screenId, screen_name: screenName, page_type: pageType, fields, tabs }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupAiAnnotate(): Promise<import('../types').AnnotateResult> {
+  const res = await fetch('/api/mockup/ai-annotate', {
+    method: 'POST',
+    headers: apiHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupAiInterview(): Promise<import('../types').InterviewResult> {
+  const res = await fetch('/api/mockup/ai-interview', {
+    method: 'POST',
+    headers: apiHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupInterviewResult(
+  answers?: { no: number; answer: string }[],
+  rawInterviewText?: string,
+): Promise<import('../types').InterviewResultResponse> {
+  const res = await fetch('/api/mockup/interview-result', {
+    method: 'POST',
+    headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers, raw_interview_text: rawInterviewText }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export function mockupGenerateSpec(onEvent: (event: import('../types').SSEEvent) => void): void {
+  consumeSSE('/api/mockup/generate-spec', onEvent, {})
+}

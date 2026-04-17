@@ -103,3 +103,78 @@ export interface CodeGenState {
   error: string | null
   ports: { db?: number; backend?: number; frontend?: number } | null
 }
+
+// --- Mockup Pipeline Types ---
+
+export interface FieldOption {
+  label: string
+  value: string
+  color?: string
+}
+
+export interface FieldDef {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select' | 'radio' | 'badge' | 'date' | 'daterange' | 'textarea' | 'checkbox'
+  searchable?: boolean
+  listable?: boolean
+  detailable?: boolean
+  editable?: boolean
+  required?: boolean
+  options?: FieldOption[]
+  width?: string
+}
+
+export interface InterviewQuestion {
+  no: number
+  category: string
+  question: string
+  priority: '높음' | '보통' | '낮음'
+  tip: string
+}
+
+export interface MockupState {
+  screenId: string
+  screenName: string
+  pageType: string
+  fields: Record<string, unknown>[]
+  vueCode: string | null
+  annotations: Record<string, unknown>[] | null
+  annotationMarkdown: string | null
+  interviewQuestions: InterviewQuestion[] | null
+  interviewAnswers: { no: number; answer: string }[] | null
+  rawInterviewText: string | null
+  interviewNoteMd: string | null
+  currentStep: number
+}
+
+export interface AiGenerateResult {
+  success: boolean
+  domain?: string
+  searchFields?: Record<string, unknown>[]
+  tableColumns?: Record<string, unknown>[]
+  mockRows?: Record<string, unknown>[]
+  formFields?: Record<string, unknown>[]
+}
+
+export interface ScaffoldResult {
+  success: boolean
+  vue_code: string
+}
+
+export interface AnnotateResult {
+  success: boolean
+  annotation_count: number
+  annotation_markdown: string
+}
+
+export interface InterviewResult {
+  success: boolean
+  questions: InterviewQuestion[]
+}
+
+export interface InterviewResultResponse {
+  success: boolean
+  interview_note_md: string
+  spec_version: number
+}
