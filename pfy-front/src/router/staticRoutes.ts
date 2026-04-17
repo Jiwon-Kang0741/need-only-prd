@@ -148,6 +148,12 @@ export const staticRoutes: RouteRecordRaw[] = [
         component: () => import('@/pages/generated/EduProgList.vue'),
       },
     {
+      path: '/SCR001',
+      name: 'SCR001',
+      meta: { menuId: 'SCR001', generated: true },
+      component: () => import('@/pages/generated/scr001/index.vue'),
+    },
+    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/pages/_system/notFound/index.vue'),
