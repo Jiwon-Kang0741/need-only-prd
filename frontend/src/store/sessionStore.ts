@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { ChatMessage, CodeGenState, ValidationResult } from '../types'
+import type { ChatMessage, CodeGenState, ValidationResult, MockupState } from '../types'
+import { SCREEN_ID_INVALID_CHARS } from '../types'
 import {
   generateSpec as apiGenerateSpec,
   sendChat as apiSendChat,
@@ -9,6 +10,12 @@ import {
   stopContainers as apiStopContainers,
   deleteSource as apiDeleteSource,
   importSpec as apiImportSpec,
+  mockupAiGenerate as apiMockupAiGenerate,
+  mockupScaffold as apiMockupScaffold,
+  mockupAiAnnotate as apiMockupAiAnnotate,
+  mockupAiInterview as apiMockupAiInterview,
+  mockupInterviewResult as apiMockupInterviewResult,
+  mockupGenerateSpec as apiMockupGenerateSpec,
 } from '../api/client'
 
 const initialCodeGen: CodeGenState = {
@@ -53,6 +60,21 @@ interface SessionStore {
   stopContainers: () => Promise<void>
   deleteSource: () => Promise<void>
   loadSpecFromText: (text: string) => Promise<void>
+
+  // --- Mockup Pipeline ---
+  specMode: 'text' | 'mockup'
+  mockupState: MockupState | null
+  mockupLoading: boolean
+  mockupError: string | null
+  setSpecMode: (mode: 'text' | 'mockup') => void
+  mockupAiGenerate: (title: string, pageType: string, description?: string) => Promise<void>
+  mockupScaffold: (screenId: string, screenName: string, pageType: string, fields: Record<string, unknown>[]) => Promise<void>
+  mockupAiAnnotate: () => Promise<void>
+  mockupAiInterview: () => Promise<void>
+  mockupSubmitInterviewResult: (answers?: { no: number; answer: string }[], rawText?: string) => Promise<void>
+  mockupGenerateSpec: () => void
+  mockupGoToStep: (step: number) => void
+  resetMockup: () => void
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -304,6 +326,113 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set({ specMarkdown: text.trim(), specVersion: result.spec_version })
   },
 
+  // --- Mockup Pipeline State ---
+  specMode: 'text',
+  mockupState: null,
+  mockupLoading: false,
+  mockupError: null,
+
+  setSpecMode: (mode) => set({ specMode: mode }),
+
+  mockupAiGenerate: async (title, pageType, description) => {
+    set({ mockupLoading: true, mockupError: null })
+    try {
+      const result = await apiMockupAiGenerate(title, pageType, description)
+      set({
+        mockupState: {
+          screenId: title.replace(SCREEN_ID_INVALID_CHARS, '').slice(0, 10).toUpperCase() || 'SCR001',
+          screenName: title,
+          pageType,
+          fields: (result.fields as Record<string, unknown>[] | undefined) ?? [...(result.searchFields || []), ...(result.tableColumns || []), ...(result.formFields || [])],
+          vueCode: null, annotations: null, annotationMarkdown: null,
+          interviewQuestions: null, interviewAnswers: null, rawInterviewText: null, interviewNoteMd: null,
+          currentStep: 1,
+        },
+        mockupLoading: false,
+      })
+    } catch (e) {
+      set({ mockupError: e instanceof Error ? e.message : String(e), mockupLoading: false })
+    }
+  },
+
+  mockupScaffold: async (screenId, screenName, pageType, fields) => {
+    set({ mockupLoading: true, mockupError: null })
+    try {
+      const result = await apiMockupScaffold(screenId, screenName, pageType, fields)
+      set((state) => ({
+        mockupState: state.mockupState ? { ...state.mockupState, screenId, screenName, pageType, fields, vueCode: result.vue_code, currentStep: 2 } : null,
+        mockupLoading: false,
+      }))
+    } catch (e) {
+      set({ mockupError: e instanceof Error ? e.message : String(e), mockupLoading: false })
+    }
+  },
+
+  mockupAiAnnotate: async () => {
+    set({ mockupLoading: true, mockupError: null })
+    try {
+      const result = await apiMockupAiAnnotate()
+      set((state) => ({
+        mockupState: state.mockupState ? { ...state.mockupState, annotationMarkdown: result.annotation_markdown, currentStep: 3 } : null,
+        mockupLoading: false,
+      }))
+    } catch (e) {
+      set({ mockupError: e instanceof Error ? e.message : String(e), mockupLoading: false })
+    }
+  },
+
+  mockupAiInterview: async () => {
+    set({ mockupLoading: true, mockupError: null })
+    try {
+      const result = await apiMockupAiInterview()
+      set((state) => ({
+        mockupState: state.mockupState ? { ...state.mockupState, interviewQuestions: result.questions, currentStep: 4 } : null,
+        mockupLoading: false,
+      }))
+    } catch (e) {
+      set({ mockupError: e instanceof Error ? e.message : String(e), mockupLoading: false })
+    }
+  },
+
+  mockupSubmitInterviewResult: async (answers, rawText) => {
+    set({ mockupLoading: true, mockupError: null })
+    try {
+      const result = await apiMockupInterviewResult(answers, rawText)
+      set((state) => ({
+        mockupState: state.mockupState ? { ...state.mockupState, interviewAnswers: answers || null, rawInterviewText: rawText || null, interviewNoteMd: result.interview_note_md, currentStep: 5 } : null,
+        specVersion: result.spec_version,
+        mockupLoading: false,
+      }))
+    } catch (e) {
+      set({ mockupError: e instanceof Error ? e.message : String(e), mockupLoading: false })
+    }
+  },
+
+  mockupGenerateSpec: () => {
+    set({ isGenerating: true, statusMessage: 'Generating spec from interview results...', specMarkdown: null })
+    apiMockupGenerateSpec((event) => {
+      if (event.type === 'status') {
+        set({ statusMessage: event.content ?? event.message ?? null })
+      } else if ((event.type === 'chunk' || event.type === 'text') && event.content) {
+        set((state) => ({ specMarkdown: (state.specMarkdown ?? '') + event.content }))
+      } else if (event.type === 'complete') {
+        set((state) => ({
+          isGenerating: false, statusMessage: null,
+          specVersion: event.spec_version ?? state.specVersion + 1,
+          mockupState: state.mockupState ? { ...state.mockupState, currentStep: 6 } : null,
+        }))
+      } else if (event.type === 'error') {
+        set({ isGenerating: false, statusMessage: event.content ?? event.message ?? 'An error occurred' })
+      }
+    })
+  },
+
+  mockupGoToStep: (step) => set((state) => ({
+    mockupState: state.mockupState ? { ...state.mockupState, currentStep: step } : null,
+  })),
+
+  resetMockup: () => set({ mockupState: null, mockupLoading: false, mockupError: null }),
+
   reset: () => {
     get()._codegenAbort?.abort()
     const cg = get().codeGen
@@ -323,6 +452,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       showCompare: false,
       codeGen: { ...initialCodeGen },
       _codegenAbort: null,
+      specMode: 'text',
+      mockupState: null,
+      mockupLoading: false,
+      mockupError: null,
     })
   },
 }))

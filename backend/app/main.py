@@ -9,6 +9,7 @@ from app.routers import chat as chat_router
 from app.routers import codegen as codegen_router
 from app.routers import export as export_router
 from app.routers import input as input_router
+from app.routers import mockup as mockup_router
 from app.routers import session as session_router
 from app.routers import spec as spec_router
 from app.routers import validate as validate_router
@@ -58,6 +59,7 @@ app.include_router(chat_router.router, prefix="/api")
 app.include_router(validate_router.router, prefix="/api")
 app.include_router(export_router.router, prefix="/api")
 app.include_router(codegen_router.router, prefix="/api")
+app.include_router(mockup_router.router, prefix="/api")
 
 
 @app.get("/health")

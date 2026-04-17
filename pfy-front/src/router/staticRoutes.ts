@@ -92,14 +92,7 @@ export const staticRoutes: RouteRecordRaw[] = [
   },
   // ──────────────────────────────────────────────────────────────────────────
   // Mockup 미리보기 라우트 (로그인 없이 접근 가능 - 고객 시연/검토 용도)
-  // 사용법: pnpm dev 실행 후 아래 URL로 접근
-  //   http://localhost:8082/mockup/ethics-report  →  윤리경영 부정제보 신고 관리
   // ──────────────────────────────────────────────────────────────────────────
-  {
-    path: '/mockup/ethics-report',
-    name: 'MockupEthicsReport',
-    component: () => import('../../mockup/EthicsReportMockup.vue'),
-  },
   {
     path: '/mockup/builder',
     name: 'MockupBuilder',
@@ -147,6 +140,12 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { generated: true },
         component: () => import('@/pages/generated/EduProgList.vue'),
       },
+    {
+      path: '/SCR001',
+      name: 'SCR001',
+      meta: { menuId: 'SCR001', generated: true },
+      component: () => import('@/pages/generated/scr001/index.vue'),
+    },
     {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
