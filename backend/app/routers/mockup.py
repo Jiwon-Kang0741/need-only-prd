@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -13,6 +16,11 @@ from sse_starlette.sse import EventSourceResponse
 from app.llm.mockup_pipeline import mockup_pipeline
 from app.models import MockupState
 from app.session import get_session_id, session_store
+
+# pfy-front 프로젝트 경로 (Vue dev server가 hot-reload할 디렉토리)
+_PFY_FRONT_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "pfy-front"
+_PFY_PAGES_GENERATED = _PFY_FRONT_ROOT / "src" / "pages" / "generated"
+_PFY_STATIC_ROUTES = _PFY_FRONT_ROOT / "src" / "router" / "staticRoutes.ts"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mockup", tags=["mockup"])
@@ -57,6 +65,136 @@ def _sse_msg(type: str, **kwargs) -> dict:
     return {"event": "message", "data": json.dumps({"type": type, **kwargs})}
 
 
+def _infer_ui_type(data_type: str | None) -> str:
+    """DB dataType → UI type 매핑 (VARCHAR→text, NUMBER→number, DATETIME→date)."""
+    if not data_type:
+        return "text"
+    dt = data_type.upper()
+    if "NUM" in dt or "INT" in dt or "DEC" in dt:
+        return "number"
+    if "DATE" in dt or "TIME" in dt:
+        return "date"
+    return "text"
+
+
+def _parse_options_text(options_text: str | None) -> list[dict] | None:
+    """'Y:사용, N:미사용' 형식 → [{label, value}] 변환."""
+    if not options_text or not isinstance(options_text, str):
+        return None
+    items = []
+    for pair in options_text.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            value, label = pair.split(":", 1)
+            items.append({"value": value.strip(), "label": label.strip()})
+    return items or None
+
+
+def _normalize_ai_result(result: dict) -> list[dict]:
+    """LLM의 searchFields/tableColumns/formFields → FieldDef 리스트로 통합.
+
+    - searchFields → searchable=True
+    - tableColumns → listable=True, detailable=True, type은 dataType에서 추론
+    - formFields → editable=True, detailable=True
+    - 같은 key는 병합 (플래그 합침)
+    """
+    merged: dict[str, dict] = {}
+
+    for f in result.get("searchFields") or []:
+        key = f.get("key")
+        if not key:
+            continue
+        entry = merged.setdefault(key, {"key": key, "label": f.get("label", key)})
+        entry["type"] = f.get("type") or entry.get("type") or "text"
+        entry["searchable"] = True
+        opts = _parse_options_text(f.get("optionsText"))
+        if opts:
+            entry["options"] = opts
+
+    for f in result.get("tableColumns") or []:
+        key = f.get("key")
+        if not key:
+            continue
+        entry = merged.setdefault(key, {"key": key, "label": f.get("label", key)})
+        if "type" not in entry:
+            entry["type"] = _infer_ui_type(f.get("dataType"))
+        entry["listable"] = True
+        entry["detailable"] = True
+
+    for f in result.get("formFields") or []:
+        key = f.get("key")
+        if not key:
+            continue
+        entry = merged.setdefault(key, {"key": key, "label": f.get("label", key)})
+        entry["type"] = f.get("type") or entry.get("type") or "text"
+        entry["editable"] = True
+        entry["detailable"] = True
+        if f.get("required"):
+            entry["required"] = True
+        opts = _parse_options_text(f.get("optionsText"))
+        if opts:
+            entry["options"] = opts
+
+    return list(merged.values())
+
+
+def _write_vue_to_pfy_front(screen_id: str, vue_code: str) -> str | None:
+    """pfy-front/src/pages/generated/ 에 Vue 파일 저장 + staticRoutes.ts에 경로 등록."""
+    try:
+        sid = screen_id.lower()
+        page_dir = _PFY_PAGES_GENERATED / sid
+        page_dir.mkdir(parents=True, exist_ok=True)
+
+        # Vue 파일 저장
+        vue_file = page_dir / "index.vue"
+        vue_file.write_text(vue_code, encoding="utf-8")
+
+        # 메타 저장
+        meta = {
+            "screenId": screen_id.upper(),
+            "screenName": screen_id,
+            "pageType": "list-detail",
+            "routePath": f"/{screen_id.upper()}",
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        meta_file = page_dir / "scaffold-meta.json"
+        meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        # staticRoutes.ts에 라우트 추가 (NotFound 앞에 삽입)
+        route_path = f"/{screen_id.upper()}"
+        route_name = screen_id.upper()
+
+        if _PFY_STATIC_ROUTES.exists():
+            content = _PFY_STATIC_ROUTES.read_text(encoding="utf-8")
+            # 이미 등록되어 있으면 스킵
+            if f"name: '{route_name}'" not in content:
+                route_entry = (
+                    f"    {{\n"
+                    f"      path: '{route_path}',\n"
+                    f"      name: '{route_name}',\n"
+                    f"      meta: {{ menuId: '{route_name}', generated: true }},\n"
+                    f"      component: () => import('@/pages/generated/{sid}/index.vue'),\n"
+                    f"    }},\n"
+                )
+                # NotFound 라우트 앞에 삽입
+                not_found_marker = "path: '/:pathMatch(.*)*'"
+                idx = content.find(not_found_marker)
+                if idx != -1:
+                    # 해당 객체 시작 위치 (여는 중괄호) 찾기
+                    brace_idx = content.rfind("{", 0, idx)
+                    if brace_idx != -1:
+                        # 앞의 공백 포함하여 삽입
+                        line_start = content.rfind("\n", 0, brace_idx) + 1
+                        content = content[:line_start] + route_entry + content[line_start:]
+                        _PFY_STATIC_ROUTES.write_text(content, encoding="utf-8")
+
+            logger.info("[scaffold] Wrote %s → %s, route: %s", vue_file, route_path, route_name)
+        return route_path
+    except Exception as e:
+        logger.warning("[scaffold] Failed to write to pfy-front: %s", e)
+        return None
+
+
 # ------------------------------------------------------------------ 1. AI Generate
 
 @router.post("/ai-generate")
@@ -74,8 +212,8 @@ async def ai_generate(
         description=body.description,
     )
 
-    # Initialise MockupState from AI result
-    fields = result.get("fields", [])
+    # Initialise MockupState from AI result — normalize search/table/form into FieldDef list
+    normalized_fields = _normalize_ai_result(result)
     tabs = result.get("tabs", None)
     screen_id = result.get("screen_id", body.title.lower().replace(" ", "_"))
     screen_name = result.get("screen_name", body.title)
@@ -84,7 +222,7 @@ async def ai_generate(
         screen_id=screen_id,
         screen_name=screen_name,
         page_type=body.page_type,
-        fields=fields,
+        fields=normalized_fields,
         tabs=tabs,
         current_step=1,
     )
@@ -95,7 +233,7 @@ async def ai_generate(
         "screen_id": screen_id,
         "screen_name": screen_name,
         "page_type": body.page_type,
-        "fields": fields,
+        "fields": normalized_fields,
         "tabs": tabs,
         **{k: v for k, v in result.items() if k not in ("screen_id", "screen_name", "fields", "tabs")},
     }
@@ -111,11 +249,20 @@ async def scaffold(
     """필드 정의 → Vue 코드 생성 (LLM 없음) 후 세션 저장."""
     session = _get_session(session_id)
 
+    # 방어: 필드에 'type' 키가 없으면 dataType으로부터 추론 (정규화되지 않은 필드 방어)
+    safe_fields = [
+        {
+            **f,
+            "type": f.get("type") or _infer_ui_type(f.get("dataType")),
+        }
+        for f in body.fields
+    ]
+
     vue_code = mockup_pipeline.scaffold(
         screen_id=body.screen_id,
         screen_name=body.screen_name,
         page_type=body.page_type,
-        fields=body.fields,
+        fields=safe_fields,
         tabs=body.tabs,
     )
 
@@ -125,7 +272,7 @@ async def scaffold(
             screen_id=body.screen_id,
             screen_name=body.screen_name,
             page_type=body.page_type,
-            fields=body.fields,
+            fields=safe_fields,
             tabs=None,
             current_step=2,
         )
@@ -133,14 +280,19 @@ async def scaffold(
         session.mockup_state.screen_id = body.screen_id
         session.mockup_state.screen_name = body.screen_name
         session.mockup_state.page_type = body.page_type
-        session.mockup_state.fields = body.fields
+        session.mockup_state.fields = safe_fields
         session.mockup_state.current_step = 2
 
     session.mockup_state.vue_code = vue_code
     session.spec_source = "mockup"
     session_store.save(session_id)
 
-    return {"vue_code": vue_code}
+    # pfy-front에 Vue 파일 저장 + 라우터 등록 (Vue dev server가 hot-reload)
+    route_path = None
+    if _PFY_FRONT_ROOT.exists():
+        route_path = _write_vue_to_pfy_front(body.screen_id, vue_code)
+
+    return {"vue_code": vue_code, "route_path": route_path}
 
 
 # ------------------------------------------------------------------ 3. AI Annotate

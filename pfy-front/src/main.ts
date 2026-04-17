@@ -17,7 +17,6 @@ import { useLocale } from '@/composables/useLocale';
 import safeHtml from '@/directives/safeHtml';
 import i18n from '@/plugins/i18n';
 import { router } from '@/router';
-import { useUserStore } from '@/stores/userStore';
 
 if (import.meta.env.VITE_MOCK === 'true') {
   const { worker } = await import('./mocks/browser');
@@ -26,41 +25,10 @@ if (import.meta.env.VITE_MOCK === 'true') {
 
 
 async function initializeUserSettings() {
-  const userStore = useUserStore();
+  // need-only-prd에서는 pfy-front를 Mockup 렌더링 런타임으로만 사용한다.
+  // 따라서 인증/로그인은 불필요 — 항상 MOCKUP 로케일로 초기화한다.
   const { changeLocale } = useLocale();
-
-  const currentPath = window.location.pathname;
-
-  const { user } = userStore;
-  if (!user) {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      /** 개발용 템플릿 미리보기 — 토큰 없이 단독 접근 허용 */
-      const templatePaths = ['/template-a', '/template-b', '/template-c', '/template-d'];
-      if (templatePaths.includes(currentPath)) {
-        await changeLocale('ko-KR', 'TEMPLATE');
-        return;
-      }
-      /** Mockup 미리보기 — 로그인 없이 고객 시연용 접근 허용 */
-      if (currentPath.startsWith('/mockup/')) {
-        await changeLocale('ko-KR', 'MOCKUP');
-        return;
-      }
-      /** 자동 생성 목업 페이지 — 로그인 없이 접근 허용 */
-      if (currentPath.startsWith('/generated/') || currentPath === '/mockup/builder') {
-        await changeLocale('ko-KR', 'MOCKUP');
-        return;
-      }
-      await router.push('/auth/login');
-      return;
-    }
-
-    console.warn('사용자 정보 API(@/api/auth) 없음 — MockUp 전용 모드');
-    await changeLocale('ko-KR', 'MOCKUP');
-    return;
-  } else {
-    await changeLocale(user.langCd);
-  }
+  await changeLocale('ko-KR', 'MOCKUP');
 }
 
 async function bootstrap() {

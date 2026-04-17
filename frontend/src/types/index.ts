@@ -106,6 +106,9 @@ export interface CodeGenState {
 
 // --- Mockup Pipeline Types ---
 
+/** screenId 는 영문/숫자/언더스코어만 허용 (backend _PFY_FRONT 경로 안전성 보장) */
+export const SCREEN_ID_INVALID_CHARS = /[^A-Za-z0-9_]/g
+
 export interface FieldOption {
   label: string
   value: string
@@ -151,6 +154,7 @@ export interface MockupState {
 export interface AiGenerateResult {
   success: boolean
   domain?: string
+  fields?: Record<string, unknown>[]
   searchFields?: Record<string, unknown>[]
   tableColumns?: Record<string, unknown>[]
   mockRows?: Record<string, unknown>[]

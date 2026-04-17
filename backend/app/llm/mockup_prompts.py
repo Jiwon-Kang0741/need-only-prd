@@ -37,7 +37,7 @@ def ai_generate_prompt(
 
     desc_line = f"\n화면 설명: {description.strip()}" if description and description.strip() else ""
 
-    if page_type == "list":
+    if page_type in ("list", "list-detail", "tab-detail"):
         user = (
             f"당신은 한국 엔터프라이즈 UI를 설계하는 시니어 개발자 및 DB 아키텍트입니다.\n"
             f"아래 화면 정보를 보고 목록(List) 화면 설계 정보를 응답하세요.\n\n"

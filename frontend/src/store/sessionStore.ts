@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ChatMessage, CodeGenState, ValidationResult, MockupState } from '../types'
+import { SCREEN_ID_INVALID_CHARS } from '../types'
 import {
   generateSpec as apiGenerateSpec,
   sendChat as apiSendChat,
@@ -339,10 +340,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const result = await apiMockupAiGenerate(title, pageType, description)
       set({
         mockupState: {
-          screenId: title.replace(/[^A-Za-z0-9_]/g, '').slice(0, 10).toUpperCase() || 'SCR001',
+          screenId: title.replace(SCREEN_ID_INVALID_CHARS, '').slice(0, 10).toUpperCase() || 'SCR001',
           screenName: title,
           pageType,
-          fields: [...(result.searchFields || []), ...(result.tableColumns || [])],
+          fields: (result.fields as Record<string, unknown>[] | undefined) ?? [...(result.searchFields || []), ...(result.tableColumns || []), ...(result.formFields || [])],
           vueCode: null, annotations: null, annotationMarkdown: null,
           interviewQuestions: null, interviewAnswers: null, rawInterviewText: null, interviewNoteMd: null,
           currentStep: 1,
