@@ -1,7 +1,7 @@
 import { useSession } from './hooks/useSession'
 import { useSessionStore } from './store/sessionStore'
 import Layout from './components/Layout'
-import InputPanel from './components/InputPanel'
+import SpecModeSelector from './components/SpecModeSelector'
 import SpecViewer from './components/SpecViewer'
 import ChatPanel from './components/ChatPanel'
 import CompareView from './components/CompareView'
@@ -56,7 +56,7 @@ function App() {
       )}
 
       {!showSpec && !showOverlay ? (
-        <InputPanel />
+        <SpecModeSelector />
       ) : showSpec ? (
         <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           {/* Left: Spec + Chat (Refine) */}

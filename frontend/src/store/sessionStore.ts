@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ChatMessage, CodeGenState, ValidationResult, MockupState, InterviewQuestion } from '../types'
+import type { ChatMessage, CodeGenState, ValidationResult, MockupState } from '../types'
 import {
   generateSpec as apiGenerateSpec,
   sendChat as apiSendChat,
