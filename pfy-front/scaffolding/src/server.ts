@@ -1,7 +1,13 @@
 import path from 'path';
 import dotenv from 'dotenv';
-// .env 위치를 server.ts 기준으로 명시 (실행 디렉터리에 무관하게 로드)
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+// 루트 .env 우선, 없으면 scaffolding/.env (override 없이 fallback)
+// need-only-prd 통합: 모든 LLM 설정은 프로젝트 루트 .env에서 관리한다.
+//   __dirname = pfy-front/scaffolding/src → 루트는 4레벨 위
+const ROOT_ENV = path.join(__dirname, '..', '..', '..', '.env');
+const LOCAL_ENV = path.join(__dirname, '..', '.env');
+dotenv.config({ path: ROOT_ENV });
+dotenv.config({ path: LOCAL_ENV });  // 기존 로컬 env는 fallback 용도
 
 import express from 'express';
 import cors from 'cors';
