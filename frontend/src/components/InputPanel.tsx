@@ -194,7 +194,7 @@ export default function InputPanel() {
       {/* Feature cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
         <div className="p-6 bg-surface-container-low rounded-xl flex flex-col gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center">
             <span className="material-symbols-outlined text-primary">psychology</span>
           </div>
           <span className="font-bold font-headline text-on-surface">AI Extraction</span>
@@ -203,7 +203,7 @@ export default function InputPanel() {
           </p>
         </div>
         <div className="p-6 bg-surface-container-low rounded-xl flex flex-col gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center">
             <span className="material-symbols-outlined text-primary">architecture</span>
           </div>
           <span className="font-bold font-headline text-on-surface">Structured Output</span>
@@ -212,7 +212,7 @@ export default function InputPanel() {
           </p>
         </div>
         <div className="p-6 bg-surface-container-low rounded-xl flex flex-col gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center">
             <span className="material-symbols-outlined text-primary">history_edu</span>
           </div>
           <span className="font-bold font-headline text-on-surface">Smart Context</span>

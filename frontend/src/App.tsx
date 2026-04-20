@@ -26,30 +26,31 @@ function App() {
     <Layout onNewSession={reset}>
       {/* Full-screen generating overlay */}
       {showOverlay && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-on-surface/40 backdrop-blur-sm">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-5 max-w-sm mx-4">
-            <div className="w-14 h-14 rounded-xl bg-primary-fixed/30 flex items-center justify-center">
+        <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-5 max-w-sm mx-4" style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+            <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ background: 'rgba(244,130,31,0.15)' }}>
               <svg
-                className="w-8 h-8 animate-spin text-primary"
+                className="w-8 h-8 animate-spin"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
+                style={{ color: '#f4821f' }}
               >
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
             </div>
             <div className="text-center">
-              <h3 className="text-lg font-bold font-headline text-on-surface mb-1">Generating Specification</h3>
-              <p className="text-sm text-secondary">
+              <h3 className="text-lg font-bold font-headline text-white mb-1">Generating Specification</h3>
+              <p className="text-sm" style={{ color: '#888888' }}>
                 <StreamingText
                   text={statusMessage ?? 'Analyzing requirements...'}
                   isStreaming={true}
                 />
               </p>
             </div>
-            <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '60%' }} />
+            <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: '#2a2a2a' }}>
+              <div className="h-full rounded-full animate-pulse" style={{ width: '60%', background: '#f4821f' }} />
             </div>
           </div>
         </div>

@@ -147,6 +147,24 @@ export const staticRoutes: RouteRecordRaw[] = [
       component: () => import('@/pages/generated/scr001/index.vue'),
     },
     {
+      path: '/SCR002',
+      name: 'SCR002',
+      meta: { menuId: 'SCR002', generated: true },
+      component: () => import('@/pages/generated/scr002/index.vue'),
+    },
+    {
+      path: '/SCR003',
+      name: 'SCR003',
+      meta: { menuId: 'SCR003', generated: true },
+      component: () => import('@/pages/generated/scr003/index.vue'),
+    },
+    {
+      path: '/SCR004',
+      name: 'SCR004',
+      meta: { menuId: 'SCR004', generated: true },
+      component: () => import('@/pages/generated/scr004/index.vue'),
+    },
+    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/pages/_system/notFound/index.vue'),

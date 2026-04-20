@@ -79,15 +79,15 @@ export default function SpecViewer() {
 
       <div
         ref={contentRef}
-        className="overflow-y-auto p-8 prose prose-slate max-w-none no-scrollbar"
+        className="overflow-y-auto p-8 max-w-none no-scrollbar bg-zinc-900 text-white prose prose-invert prose-headings:text-white prose-p:text-white prose-li:text-white prose-strong:text-white prose-a:text-sky-300 prose-code:text-amber-200 prose-pre:bg-zinc-950 prose-pre:text-zinc-100 prose-th:text-white prose-td:text-zinc-200"
         style={{ maxHeight: '70vh' }}
       >
         {specMarkdown ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{specMarkdown}</ReactMarkdown>
         ) : (
           !isGenerating && (
-            <p className="text-outline text-sm">
-              Your generated specification will appear here.
+            <p className="text-zinc-400 text-sm">
+              생성된 spec.md가 여기에 표시됩니다.
             </p>
           )
         )}

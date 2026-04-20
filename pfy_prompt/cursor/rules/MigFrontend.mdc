@@ -1450,7 +1450,7 @@ export default defineConfig((configEnv: ConfigEnv) => {
 
   const isMock = env.VITE_USE_MOCK === 'true';
   const baseURL = isMock
-    ? env.VITE_MOCK_BASE_URL || 'http://localhost:8081'
+    ? env.VITE_MOCK_BASE_URL || 'http://localhost:8085'
     : env.VITE_API_BASE_URL || 'http://localhost:8888';  // ← 기본값 필수!
 
   return {

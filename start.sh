@@ -7,7 +7,7 @@ mkdir -p logs
 # ──────────────────────────────────────────────────────────────
 # 0. 포트 정리 (기존 프로세스가 점유 중이면 종료)
 # ──────────────────────────────────────────────────────────────
-for port in 8001 5173 8081; do
+for port in 8001 5173 8085; do
   pid=$(lsof -ti ":$port" 2>/dev/null || true)
   if [ -n "$pid" ]; then
     echo "Port $port was busy (PID $pid) — killing"
@@ -69,7 +69,7 @@ if [ -d "pfy-front" ]; then
     echo "  → 설치 완료 (logs/pfy-front-install.log)"
   fi
 
-  echo "  → Starting pfy-front Vite on :8081..."
+  echo "  → Starting pfy-front Vite on :8085..."
   npm run dev > ../logs/pfy-front.log 2>&1 &
   PFY_PID=$!
   cd ..
@@ -88,7 +88,7 @@ echo " Services Running"
 echo "═══════════════════════════════════════════════════════════"
 echo "  Backend    http://localhost:8001   (PID $BACKEND_PID)"
 echo "  Frontend   http://localhost:5173   (PID $FRONTEND_PID)"
-[ -n "$PFY_PID" ] && echo "  pfy-front  http://localhost:8081   (PID $PFY_PID)"
+[ -n "$PFY_PID" ] && echo "  pfy-front  http://localhost:8085   (PID $PFY_PID)"
 echo ""
 echo "  Logs:      tail -f logs/<backend|frontend|pfy-front>.log"
 echo "  Stop:      ./stop.sh"

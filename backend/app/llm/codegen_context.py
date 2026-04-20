@@ -213,6 +213,7 @@ def get_table_info() -> str:
 
 _POM_DEPENDENCIES: str | None = None
 _ALLOWED_PREFIXES: set[str] | None = None
+_POM_GROUP_IDS: set[str] | None = None
 
 # groupId → actual Java package prefix override.
 # Most libraries: groupId == package prefix, but some differ.
@@ -289,11 +290,12 @@ def get_pom_dependencies() -> str:
 
     In pfy mode reads C:/workspace_pfy/PFY/pfy/pom.xml; in docker mode reads skeleton/backend/pom.xml.
     """
-    global _POM_DEPENDENCIES
+    global _POM_DEPENDENCIES, _POM_GROUP_IDS
     if _POM_DEPENDENCIES is not None:
         return _POM_DEPENDENCIES
 
-    lines, _ = _parse_pom_xml()
+    lines, group_ids = _parse_pom_xml()
+    _POM_GROUP_IDS = group_ids
     _POM_DEPENDENCIES = "\n".join(lines)
     return _POM_DEPENDENCIES
 
@@ -304,12 +306,17 @@ def get_allowed_import_prefixes() -> set[str]:
     Returns a set of package prefixes (e.g., {"java", "javax", "org.springframework",
     "aondev", "biz", "lombok", "com.common", "com.fasterxml"}).
     Any import not starting with one of these prefixes is from a library NOT in pom.xml.
+
+    Note: Two-segment groupId heuristics (e.g. org.apache from org.apache.maven) are too broad;
+    static_check applies extra rules (e.g. org.apache.poi) so those imports still fail unless
+    the matching Maven coordinate is present.
     """
-    global _ALLOWED_PREFIXES
+    global _ALLOWED_PREFIXES, _POM_GROUP_IDS
     if _ALLOWED_PREFIXES is not None:
         return _ALLOWED_PREFIXES
 
     _, group_ids = _parse_pom_xml()
+    _POM_GROUP_IDS = group_ids
     prefixes: set[str] = set(_ALWAYS_ALLOWED)
 
     for gid in group_ids:
@@ -330,11 +337,20 @@ def get_allowed_import_prefixes() -> set[str]:
     return _ALLOWED_PREFIXES
 
 
+def get_pom_group_ids() -> set[str]:
+    """Maven groupId values from the active pom.xml (direct deps + parent)."""
+    global _POM_GROUP_IDS
+    if _POM_GROUP_IDS is None:
+        _, _POM_GROUP_IDS = _parse_pom_xml()
+    return _POM_GROUP_IDS
+
+
 def invalidate_pom_cache() -> None:
     """Force re-read of pom.xml on next access."""
-    global _POM_DEPENDENCIES, _ALLOWED_PREFIXES
+    global _POM_DEPENDENCIES, _ALLOWED_PREFIXES, _POM_GROUP_IDS
     _POM_DEPENDENCIES = None
     _ALLOWED_PREFIXES = None
+    _POM_GROUP_IDS = None
 
 
 # ---------------------------------------------------------------------------

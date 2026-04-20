@@ -21,6 +21,7 @@ from app.llm.codegen_context import (
     get_parent_class_fields,
     get_parent_class_source_block,
     get_pom_dependencies,
+    get_pom_group_ids,
     get_table_info,
     get_workspace_class_map,
 )
@@ -64,6 +65,13 @@ _BACKEND_CHECKS = [
     (re.compile(r'log\.(error|warn)\s*\([^;]+\);\s*\n\s*throw\s+(?:HscException|new\s+HscException)', re.MULTILINE),
      "log.error()/log.warn() immediately before throw HscException — remove the log call entirely. "
      "Just use: throw HscException.systemError(\"...\", e); The framework already logs thrown exceptions."),
+    # HscException.systemError called with only a string literal (no Exception e as 2nd arg)
+    (re.compile(r'HscException\.systemError\(\s*"[^"]*"\s*\)'),
+     "HscException.systemError() called with only a String argument — WRONG. "
+     "throw HscException.systemError() MUST ALWAYS be inside a try-catch block "
+     "and MUST pass the caught exception as the second argument. "
+     "WRONG: throw HscException.systemError(\"msg\"); "
+     "CORRECT: try { ... } catch (Exception e) { throw HscException.systemError(\"msg\", e); }"),
     # UUID usage
     (re.compile(r'UUID\s*\.\s*randomUUID\s*\('),
      "UUID.randomUUID() found — NEVER use java.util.UUID. "
@@ -72,6 +80,32 @@ _BACKEND_CHECKS = [
     (re.compile(r'CommonUtils\s*\.\s*getUuid\s*\('),
      "CommonUtils.getUuid() found — NEVER use CommonUtils.getUuid(). "
      "ID values come from DB sequence or are already in the DTO. Remove the getUuid() usage entirely."),
+    # CommonUtils invented methods — specific known non-existent methods
+    (re.compile(r'CommonUtils\s*\.\s*(?:convertArrayToList|convertList|toList|parseList|mapList|toArray|listToArray)\s*\('),
+     "CommonUtils.xxx() called with a method that does NOT exist in the framework. "
+     "ONLY call CommonUtils methods that are actually defined in com.common.sy.CommonUtils. "
+     "The documented method is filterByStatus(List, GridStatus...). "
+     "For array/list conversion use standard Java: Arrays.asList(), List.of(), stream().collect(Collectors.toList()). "
+     "NEVER invent new CommonUtils methods — they will cause compilation errors."),
+    # Date / LocalDate / LocalDateTime as DTO field type — must always be String
+    (re.compile(r'private\s+(?:java\.util\.Date|Date|LocalDate|LocalDateTime)\s+\w+\s*;'),
+     "DTO field declared with type Date/LocalDate/LocalDateTime — WRONG. "
+     "ALL date/datetime fields in ReqDto and ResDto MUST be String (e.g. 'private String educationDate;'). "
+     "Never use java.util.Date, LocalDate, or LocalDateTime for DTO fields. "
+     "Consequence: param.setEducationDate(request.getEducationDate()) must pass String→String, "
+     "and validateDate(request.getEducationDate(), '교육일자') also accepts String, String."),
+    # List<...> as DTO field type — causes Service type mismatch when used as String
+    (re.compile(r'private\s+List\s*<[^>]+>\s+\w+\s*;'),
+     "DTO field declared with type List<...> — WRONG. "
+     "DTO fields MUST ONLY use simple scalar types: String, int, long, Integer, Long, BigDecimal, Boolean, boolean. "
+     "NEVER declare List, Map, Date, LocalDate, LocalDateTime, or any complex type as a DTO field. "
+     "If you need to pass multiple values (e.g. a list of IDs), use a comma-separated String field instead. "
+     "Service/DAO handle collections (List<ResDto>) at the method parameter/return level — not inside the DTO."),
+    # Map<...> as DTO field type — same issue
+    (re.compile(r'private\s+Map\s*<[^>]+>\s+\w+\s*;'),
+     "DTO field declared with type Map<...> — WRONG. "
+     "DTO fields MUST ONLY use simple scalar types: String, int, long, Integer, Long, BigDecimal, Boolean, boolean. "
+     "NEVER declare Map or any complex collection type as a DTO field."),
     # Manual audit field setting (AuditBaseDto handles these automatically)
     (re.compile(r'\.\s*set(?:FstCretDtm|FstCrtrId|LastMdfcDtm|LastMdfrId)\s*\('),
      "Manual audit field setting found (setFstCretDtm/setFstCrtrId/setLastMdfcDtm/setLastMdfrId) — "
@@ -166,8 +200,9 @@ _FRONTEND_CHECKS = [
 def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
     """Dynamically detect imports from libraries NOT in pom.xml.
 
-    No hardcoded library list — allowed prefixes are derived entirely from pom.xml at runtime.
-    Any import whose groupId-prefix is absent from pom.xml <dependencies> is reported.
+    Allowed prefixes are derived from pom.xml groupIds (plus java/javax/biz/hsc/aondev).
+    Extra rules block imports that share a broad prefix with an unrelated dependency
+    (e.g. org.apache.poi when only org.apache.maven.* is declared).
     """
     if gf.layer != "backend" or not gf.file_path.endswith(".java"):
         return []
@@ -178,7 +213,7 @@ def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
 
     for match in _IMPORT_RE.finditer(gf.content):
         fqcn = match.group(2)
-        if _is_import_allowed(fqcn, allowed):
+        if _java_import_allowed_under_pom(fqcn, allowed):
             continue
         pkg = fqcn.rsplit(".", 1)[0] if "." in fqcn else fqcn
         if pkg in seen_packages:
@@ -728,6 +763,183 @@ def _check_dto_layer_conventions(files: list[GeneratedFile]) -> list[dict]:
     return issues
 
 
+def _check_java_class_structure(files: list[GeneratedFile]) -> list[dict]:
+    """Check Java class name matches file name and package declaration matches directory path.
+
+    Both mismatches cause 'class X is public, should be declared in a file named X.java'
+    and 'package Y does not match expected package Z' compilation errors.
+    """
+    issues: list[dict] = []
+    _class_decl_re = re.compile(r'\bpublic\s+class\s+(\w+)')
+    _package_re = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.MULTILINE)
+
+    for gf in files:
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+
+        file_name = gf.file_path.split("/")[-1].replace(".java", "")
+
+        # 1) Class name must match file name
+        class_m = _class_decl_re.search(gf.content)
+        if class_m:
+            declared_class = class_m.group(1)
+            if declared_class != file_name:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": (
+                        f"[STATIC] Java class name '{declared_class}' does NOT match file name "
+                        f"'{file_name}.java'. Java requires the public class name to exactly match "
+                        f"the file name — this is a compilation error."
+                    ),
+                    "fix_instruction": (
+                        f"Rename the class declaration from 'public class {declared_class}' to "
+                        f"'public class {file_name}'. Also update all import statements and references "
+                        f"in other generated files that reference this class."
+                    ),
+                })
+
+        # 2) Package declaration must match directory structure
+        pkg_m = _package_re.search(gf.content)
+        if pkg_m:
+            declared_pkg = pkg_m.group(1)
+            parts = gf.file_path.replace("\\", "/").split("/")
+            if "java" in parts:
+                java_idx = len(parts) - 1 - parts[::-1].index("java")
+                expected_pkg_parts = parts[java_idx + 1:-1]
+                expected_pkg = ".".join(expected_pkg_parts)
+                if expected_pkg and declared_pkg != expected_pkg:
+                    issues.append({
+                        "file_path": gf.file_path,
+                        "issue": (
+                            f"[STATIC] Package declaration 'package {declared_pkg};' does NOT match "
+                            f"directory structure (expected 'package {expected_pkg};'). "
+                            f"This causes a compilation error."
+                        ),
+                        "fix_instruction": (
+                            f"Change the first line from 'package {declared_pkg};' to "
+                            f"'package {expected_pkg};'. The package must always match the directory path."
+                        ),
+                    })
+
+    return issues
+
+
+def _check_dao_service_return_types(files: list[GeneratedFile]) -> list[dict]:
+    """Check that ServiceImpl assignment types match DaoImpl declared return types.
+
+    Detects obvious type mismatches like:
+      int count = daoImpl.selectXxxList(req);   ← DAO returns List but assigned to int
+      List<Dto> list = daoImpl.selectXxxCount(req);  ← DAO returns int but assigned to List
+    """
+    issues: list[dict] = []
+
+    # Build DaoImpl method signature map
+    _pub_sig_re = re.compile(
+        r'public\s+([\w<>?,\[\] ]+?)\s+(\w+)\s*\(([^)]*)\)',
+        re.MULTILINE,
+    )
+    dao_sigs: dict[str, dict[str, str]] = {}  # {ClassName: {method: return_type}}
+    dao_simple_map: dict[str, str] = {}       # {simpleVarName: ClassName}
+
+    for gf in files:
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+        cname = gf.file_path.split("/")[-1].replace(".java", "")
+        if "DaoImpl" not in cname:
+            continue
+        sigs: dict[str, str] = {}
+        for m in _pub_sig_re.finditer(gf.content):
+            ret = m.group(1).strip()
+            mname = m.group(2)
+            if mname != cname:  # skip constructor
+                sigs[mname] = ret
+        dao_sigs[cname] = sigs
+        # Register camelCase and without-Impl variants
+        simple = cname[0].lower() + cname[1:]
+        dao_simple_map[simple] = cname
+        if cname.endswith("Impl"):
+            dao_simple_map[simple[:-4]] = cname  # without "Impl" suffix
+
+    # Scan ServiceImpl for assignments of the form: TypeName varName = daoVar.method(...)
+    _assign_dao_re = re.compile(
+        r'([\w<>?,\[\] ]+?)\s+\w+\s*=\s*(\w+Dao(?:Impl)?)\s*\.\s*(\w+)\s*\(',
+        re.MULTILINE,
+    )
+
+    def _is_list(t: str) -> bool:
+        return "List<" in t or t.strip() == "List"
+
+    def _is_scalar_num(t: str) -> bool:
+        return t.strip() in {"int", "Integer", "long", "Long"}
+
+    def _is_void(t: str) -> bool:
+        return t.strip() == "void"
+
+    for gf in files:
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+        cname = gf.file_path.split("/")[-1].replace(".java", "")
+        if "ServiceImpl" not in cname:
+            continue
+
+        for m in _assign_dao_re.finditer(gf.content):
+            assigned_type = m.group(1).strip()
+            dao_var = m.group(2)
+            called_method = m.group(3)
+
+            # Find which DaoImpl this variable refers to
+            dao_class = dao_simple_map.get(dao_var) or dao_simple_map.get(
+                dao_var[:-4] if dao_var.endswith("Impl") else dao_var
+            )
+            if not dao_class:
+                continue
+            sigs = dao_sigs.get(dao_class, {})
+            if called_method not in sigs:
+                continue  # already caught by method-existence check
+
+            declared_ret = sigs[called_method]
+
+            # Detect obvious mismatches
+            mismatch_desc = ""
+            if _is_list(assigned_type) and not _is_list(declared_ret) and not _is_void(declared_ret):
+                mismatch_desc = (
+                    f"ServiceImpl assigns result to List but DaoImpl returns '{declared_ret}' (not a List)"
+                )
+            elif _is_scalar_num(assigned_type) and _is_list(declared_ret):
+                mismatch_desc = (
+                    f"ServiceImpl assigns result to '{assigned_type}' but DaoImpl returns '{declared_ret}' (a List)"
+                )
+            elif (
+                "Dto" in assigned_type and "Dto" in declared_ret
+                and not _is_list(assigned_type) and not _is_list(declared_ret)
+                and assigned_type.strip() != declared_ret.strip()
+            ):
+                mismatch_desc = (
+                    f"ServiceImpl assigns result to '{assigned_type}' but DaoImpl returns '{declared_ret}'"
+                )
+
+            if mismatch_desc:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": (
+                        f"[STATIC] Return type mismatch for {dao_var}.{called_method}(): "
+                        f"{mismatch_desc}. This is a compilation error."
+                    ),
+                    "fix_instruction": (
+                        f"Fix the type mismatch for {dao_var}.{called_method}().\n"
+                        f"  DaoImpl declares: public {declared_ret} {called_method}(...)\n"
+                        f"  ServiceImpl assigns to: {assigned_type}\n"
+                        f"Options:\n"
+                        f"  1. Change the variable type in ServiceImpl to match DaoImpl's return type '{declared_ret}'\n"
+                        f"  2. OR change DaoImpl's return type to '{assigned_type}' and update "
+                        f"     super.selectList()/selectOne() accordingly\n"
+                        f"The two sides MUST match exactly."
+                    ),
+                })
+
+    return issues
+
+
 def static_check(files: list[GeneratedFile]) -> list[dict]:
     """Run regex-based static checks + pom.xml import validation on generated files."""
     issues: list[dict] = []
@@ -744,6 +956,8 @@ def static_check(files: list[GeneratedFile]) -> list[dict]:
 
     issues.extend(_check_dto_layer_conventions(files))
     issues.extend(_check_cross_file_consistency(files))
+    issues.extend(_check_java_class_structure(files))
+    issues.extend(_check_dao_service_return_types(files))
     return issues
 
 
@@ -777,6 +991,16 @@ def _is_import_allowed(fqcn: str, allowed_prefixes: set[str]) -> bool:
         if fqcn.startswith(prefix + ".") or fqcn == prefix:
             return True
     return False
+
+
+def _java_import_allowed_under_pom(fqcn: str, allowed_prefixes: set[str]) -> bool:
+    """POM-based import allowlist with fixes for two-segment groupId false positives.
+
+    e.g. org.apache.maven.surefire → allowed prefix org.apache, which must NOT imply POI.
+    """
+    if fqcn.startswith("org.apache.poi"):
+        return "org.apache.poi" in get_pom_group_ids()
+    return _is_import_allowed(fqcn, allowed_prefixes)
 
 
 def organize_imports(content: str) -> str:
@@ -849,7 +1073,7 @@ def organize_imports(content: str) -> str:
                 )
                 fqcn = correct_fqcn
 
-        if not _is_import_allowed(fqcn, allowed_prefixes):
+        if not _java_import_allowed_under_pom(fqcn, allowed_prefixes):
             continue
 
         simple_name = fqcn.rsplit(".", 1)[-1] if "." in fqcn else fqcn
@@ -1648,6 +1872,27 @@ class BackendEngineerAgent:
         system = (
             "You are a senior Backend Engineer specializing in PFY Spring Boot + MyBatis projects.\n"
             "You generate Java source files following PFY coding patterns strictly.\n\n"
+            "╔══════════════════════════════════════════════════════════════════════════╗\n"
+            "║  RULE 0 — THE MOST FUNDAMENTAL RULE (applies to EVERY line you write)  ║\n"
+            "╚══════════════════════════════════════════════════════════════════════════╝\n"
+            "BEFORE writing any import, @Autowired field, method call, or variable assignment:\n"
+            "  (a) VERIFY IT EXISTS: The class, method, or field you are about to use MUST actually\n"
+            "      exist in the codebase. Check the Dependencies section below for generated DTOs/DAOs.\n"
+            "      Check pom.xml for available libraries. If you cannot confirm it exists — DO NOT USE IT.\n"
+            "  (b) MATCH THE TYPES EXACTLY:\n"
+            "      - Every method call MUST pass arguments whose types exactly match the method signature.\n"
+            "      - Every variable that receives a return value MUST have the exact return type of the method.\n"
+            "      - WRONG: validateDate(request.getEducationDate(), \"교육일자\")  ← if getEducationDate() returns Date but validateDate(String,String)\n"
+            "      - CORRECT: declare all DTO date fields as String so getEducationDate() returns String\n"
+            "  (c) NEVER INVENT METHODS: Do NOT call a method on any utility/library that you are not\n"
+            "      100% certain exists. Invented method calls compile to 'method not found' errors.\n"
+            "      WRONG: CommonUtils.convertArrayToList(ids, Dto.class, \"id\")  ← invented, does not exist\n"
+            "      WRONG: CommonUtils.toList(array)                              ← invented, does not exist\n"
+            "      CORRECT: use documented methods only — e.g. CommonUtils.filterByStatus(list, GridStatus.INSERTED)\n"
+            "  (d) IMPORTS: Every import MUST correspond to a class that exists in pom.xml dependencies.\n"
+            "      NEVER import a class you invented or that is not in the pom.xml library list.\n\n"
+            "This rule exists because type mismatches and non-existent method calls are the #1 cause of\n"
+            "compilation failures in generated code. Think before every line: 'Does this exist? Do the types match?'\n\n"
             "╔══════════════════════════════════════════════════════════╗\n"
             "║  TOP-PRIORITY RULES — VIOLATING ANY = REJECTED CODE    ║\n"
             "╚══════════════════════════════════════════════════════════╝\n"
@@ -1655,9 +1900,22 @@ class BackendEngineerAgent:
             "   NEVER write: private static final Logger log = LoggerFactory.getLogger(Xxx.class);\n"
             "   NEVER import org.slf4j.Logger or org.slf4j.LoggerFactory.\n"
             "   EVERY public method MUST start with log.debug(\"Service Method : {methodName}, Input Param={}\", param.toString());\n\n"
-            "2. EXCEPTION: NEVER log.error()/log.warn() before throw HscException.\n"
-            "   WRONG:   log.error(\"msg\", e); throw HscException.systemError(\"msg\", e);\n"
-            "   CORRECT: throw HscException.systemError(\"msg\", e);\n\n"
+            "2. EXCEPTION HANDLING — ABSOLUTE RULES:\n"
+            "   a) NEVER log.error()/log.warn() before throw HscException.\n"
+            "      WRONG:   log.error(\"msg\", e); throw HscException.systemError(\"msg\", e);\n"
+            "      CORRECT: throw HscException.systemError(\"msg\", e);\n"
+            "   b) throw HscException.systemError() MUST ALWAYS be inside a try-catch block.\n"
+            "      The second argument MUST be the caught Exception variable (e).\n"
+            "      WRONG (bare throw, no e):   throw HscException.systemError(\"msg\");\n"
+            "      WRONG (outside try-catch):  if (x == null) throw HscException.systemError(\"msg\");\n"
+            "      CORRECT:\n"
+            "          try {\n"
+            "              // ... business logic ...\n"
+            "          } catch (Exception e) {\n"
+            "              throw HscException.systemError(\"msg\", e);\n"
+            "          }\n"
+            "   c) For validation (null checks, invalid values), throw IllegalArgumentException or\n"
+            "      wrap the validating block in try-catch and use HscException.systemError(\"msg\", e).\n\n"
             "3. DAO METHOD NAMES: NEVER bare CRUD verb. Always append domain noun.\n"
             "   WRONG:  public int insert(...)       CORRECT: public int insertEduPgm(...)\n"
             "   WRONG:  public List select(...)      CORRECT: public List selectEduPgmList(...)\n\n"
@@ -1669,6 +1927,37 @@ class BackendEngineerAgent:
             "   WRONG:  request.setId(UUID.randomUUID().toString());\n"
             "   WRONG:  request.setId(CommonUtils.getUuid());\n"
             "   CORRECT: ID values come from DB sequence or are already in the DTO.\n\n"
+            "5a. CommonUtils — ONLY CALL METHODS THAT ACTUALLY EXIST in com.common.sy.CommonUtils.\n"
+            "   NEVER invent CommonUtils methods that are not documented — they cause compilation errors.\n"
+            "   KNOWN non-existent methods (DO NOT call these):\n"
+            "     CommonUtils.convertArrayToList(...)  ← DOES NOT EXIST\n"
+            "     CommonUtils.convertList(...)          ← DOES NOT EXIST\n"
+            "     CommonUtils.toList(...)               ← DOES NOT EXIST\n"
+            "     CommonUtils.getUuid()                 ← DOES NOT EXIST\n"
+            "   For array/list conversion use standard Java:\n"
+            "     Arrays.asList(array)  /  List.of(...)  /  stream().collect(Collectors.toList())\n"
+            "   When calling any CommonUtils method, VERIFY the parameter types match the method signature exactly.\n\n"
+            "5b. DTO FIELD TYPES — STRICT WHITELIST (NEVER use anything outside this list):\n"
+            "   ALLOWED DTO field types (ReqDto + ResDto):\n"
+            "     String    ← use for ALL text, dates, datetimes, IDs, codes, flags, comma-separated values\n"
+            "     int / Integer\n"
+            "     long / Long\n"
+            "     BigDecimal  ← ONLY for monetary/decimal amounts\n"
+            "     boolean / Boolean\n"
+            "   ABSOLUTELY FORBIDDEN as DTO field types:\n"
+            "     Date, java.util.Date, LocalDate, LocalDateTime   → ALWAYS use String instead\n"
+            "     List<...>, ArrayList<...>                        → NEVER in DTO; handled at Service/DAO level\n"
+            "     Map<...>, HashMap<...>                           → NEVER in DTO\n"
+            "     Object, any custom class, any enum               → NEVER in DTO\n"
+            "   WRONG:  private Date educationDate;         → causes type mismatch everywhere\n"
+            "   WRONG:  private LocalDate educationDate;    → causes type mismatch everywhere\n"
+            "   WRONG:  private List<String> codeList;      → Service treats as List but caller sends String\n"
+            "   WRONG:  private List<ResDto> children;      → NEVER embed lists inside DTO\n"
+            "   WRONG:  private Map<String,Object> extra;   → NEVER put Map in DTO\n"
+            "   CORRECT: private String educationDate;      → DB stores VARCHAR; pass as String everywhere\n"
+            "   CORRECT: private String codeList;           → comma-separated '01,02,03' as String\n"
+            "   REASON: If a DTO field is not a simple scalar, the Service cannot call getter/setter\n"
+            "           with consistent types. The framework handles collections at the Service/DAO boundary.\n\n"
             "6. SAVE METHOD: ServiceImpl save() MUST accept List<ResDto>, NOT single ReqDto.\n"
             "   Use ResDto.getStatus() + CommonUtils.filterByStatus() + GridStatus pattern.\n"
             "   WRONG:  public void save(ReqDto request) { if(status==\"I\") dao.insert(request); }\n"
@@ -1700,7 +1989,13 @@ class BackendEngineerAgent:
             "   When writing ServiceImpl, for each daoImpl.xxx() call:\n"
             "     a) Verify the method EXISTS in DaoImpl. If not, you MUST also add it to DaoImpl.\n"
             "     b) Use the EXACT same parameter type DaoImpl declares.\n"
-            "     c) Assign the result to a variable of the EXACT return type DaoImpl declares.\n\n"
+            "     c) Assign the result to a variable of the EXACT return type DaoImpl declares.\n"
+            "   TYPE CHAIN RULE — FOLLOW THE DECLARED TYPE END-TO-END:\n"
+            "     DTO field 'private String eduDate;' → getter returns String → pass as String everywhere.\n"
+            "     NEVER coerce or cast a getter return value to a different type.\n"
+            "     If you find yourself needing to cast (e.g. (Date) dto.getEduDate()), STOP:\n"
+            "       — the DTO field type is wrong. Change the DTO field to String instead.\n"
+            "     ALL DTO fields that represent dates, codes, or IDs must be String in the DTO.\n\n"
             "10. GRID STATUS: NEVER use getSortDirection() or manual String comparison for CRUD status.\n"
             "   Use ResDto.getStatus() with GridStatus enum + CommonUtils.filterByStatus().\n"
             "   WRONG:  String status = request.getSortDirection(); if(\"D\".equals(status))...\n"
@@ -1709,6 +2004,10 @@ class BackendEngineerAgent:
             f"--- pom.xml DEPENDENCIES (ONLY these are available — do NOT import anything else) ---\n{get_pom_dependencies()}\n--- END ---\n\n"
             "IMPORT RULES — NEVER VIOLATE (wrong imports = compilation failure):\n"
             "- ONLY import from libraries listed in pom.xml above. Any import from a library NOT in pom.xml will fail.\n"
+            "- NEVER import org.apache.poi.* — Apache POI is NOT in pom.xml and WILL cause compilation failure.\n"
+            "  If the spec requires Excel export, do NOT use POI. Instead, return List<ResDto> from the service\n"
+            "  and let the frontend handle Excel generation via the browser (PrimeVue DataTable export).\n"
+            "  The service method signature for export should be identical to the search method.\n"
             "- Key imports from pom.xml libraries (aondev-framework):\n"
             "    aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport  (aondev-framework-dao)\n"
             "    aondev.framework.annotation.ServiceId, aondev.framework.annotation.ServiceName (aondev-framework-core)\n"
@@ -1892,22 +2191,37 @@ class BackendEngineerAgent:
             "- DO NOT use inconsistent package paths — package must exactly match directory path.\n"
             "\n"
             "╔══════════════════════════════════════════════════════════╗\n"
-            "║  REMINDER — CHECK BEFORE EVERY FILE OUTPUT              ║\n"
+            "║  FINAL CHECKLIST — VERIFY EVERY ITEM BEFORE OUTPUT     ║\n"
             "╚══════════════════════════════════════════════════════════╝\n"
+            "★ TYPE & EXISTENCE CHECK (RULE 0) ★\n"
+            "□ Every import → class exists in pom.xml? (no invented imports)\n"
+            "□ Every @Autowired field → class exists and is a real Spring bean?\n"
+            "□ Every method call → method ACTUALLY EXISTS with that name on that class?\n"
+            "   - CommonUtils: only call methods confirmed to exist (e.g. filterByStatus). NEVER invent new ones.\n"
+            "   - DaoImpl: only call methods you generated in DaoImpl — no invented DAO methods.\n"
+            "□ Every method call → argument types EXACTLY match method parameter types?\n"
+            "   - If method signature is (String, String), pass (String, String) — NOT (Date, String)\n"
+            "   - If DTO date field is String, getter returns String — use as String everywhere\n"
+            "□ Every variable receiving a return value → type matches the method's declared return type?\n"
+            "□ ALL DTO date fields are String? (NEVER Date/LocalDate/LocalDateTime — 'private String xxxDate;')\n"
+            "□ DaoImpl parameter type is the ACTUAL DTO class name (e.g. CpmsXxxReqDto)?\n"
+            "   FORBIDDEN: request, response, dto, reqDto, resDto, saveDto, param, item, row, Object\n"
+            "   WRONG:   public Integer selectXxxCount(request param)     → 'request' is NOT a class\n"
+            "   CORRECT: public Integer selectXxxCount(CpmsXxxReqDto param)\n"
+            "\n"
+            "★ STANDARD RULES ★\n"
             "□ @Slf4j? (NO LoggerFactory, NO import org.slf4j.*)\n"
             "□ log.debug(\"Service Method : xxx\") as FIRST line in every public method?\n"
             "□ NO log.error/warn before throw?\n"
             "□ DaoImpl method name → domain noun? (NEVER bare insert/select/update/delete)\n"
             "□ ServiceImpl DAO call → full wrapper name? (NEVER daoImpl.insert())\n"
-            "□ NO java.util.UUID, NO CommonUtils.getUuid() — use String, ID from DB sequence\n"
+            "□ NO java.util.UUID, NO CommonUtils.getUuid()\n"
             "□ save() takes List<ResDto>? (NOT single ReqDto)\n"
             "□ GridStatus + CommonUtils.filterByStatus()? (NOT getSortDirection())\n"
             "□ NO manual fstCretDtm/lastMdfcDtm/fstCrtrId/lastMdfrId setting?\n"
             "□ NO DateTimeFormatter/LocalDateTime.now().format() in ServiceImpl?\n"
-            "□ EVERY dto.getXxx()/dto.setXxx() — field 'xxx' declared in the DTO? (see AVAILABLE DTO FIELDS above)\n"
-            "   If not declared → ADD the field to the DTO class FIRST, then use it.\n"
-            "□ ServiceImpl ONLY uses DTO fields and DAO methods that actually exist? (NO invented methods/fields)\n"
-            "□ NO CommonUtils.getUuid()?\n"
+            "□ EVERY dto.getXxx()/dto.setXxx() — field 'xxx' declared in the DTO?\n"
+            "□ ServiceImpl ONLY uses DTO fields and DAO methods that actually exist?\n"
         )
 
         results: list[GeneratedFile] = []
@@ -3105,7 +3419,14 @@ class BackendQAAgent:
             "- NEVER use CommonUtils.getUuid() — ID values come from DB sequence, not generated in code\n"
             "- ServiceImpl MUST ONLY use DTO fields and DAO methods that actually exist — no invented methods or fields\n"
             "- ServiceImpl = DTO + DAO ONLY: no new wrapper DTOs, no helper methods bypassing DAO, no extra arguments\n"
-            "- Mapper XML: all parameter properties must have matching javaType if not String (avoid jdbcType=null errors)\n\n"
+            "- Mapper XML: all parameter properties must have matching javaType if not String (avoid jdbcType=null errors)\n"
+            "- DTO FIELD TYPE WHITELIST — flag any DTO field that is NOT one of the allowed types:\n"
+            "    ALLOWED: String, int, Integer, long, Long, BigDecimal, boolean, Boolean\n"
+            "    FORBIDDEN: Date, LocalDate, LocalDateTime, List<...>, Map<...>, Object, any class/enum\n"
+            "    e.g. 'private List<String> codeList;' in a DTO is a BUG — use 'private String codeList;' (comma-separated)\n"
+            "    e.g. 'private Date eduDate;' in a DTO is a BUG — use 'private String eduDate;'\n"
+            "- TYPE CHAIN CONSISTENCY: if DTO field is String, ALL usages (getter calls, method args) must treat it as String.\n"
+            "    Flag any cast or conversion that indicates a type mismatch between DTO declaration and usage.\n\n"
             'Output JSON: {"issues": [{"file_path": "...", "issue": "description of problem", "fix_instruction": "how to fix"}]}\n'
             'If no issues: {"issues": []}\n'
             "Output ONLY JSON.\n"
@@ -3281,11 +3602,34 @@ class FixAgent:
                 "LOGGING RULES:\n"
                 "- ALWAYS use @Slf4j (Lombok) class annotation — NEVER declare Logger field with LoggerFactory.getLogger().\n"
                 "- NEVER call log.error()/log.warn() immediately before throw HscException.\n\n"
+                "EXCEPTION HANDLING RULES:\n"
+                "- throw HscException.systemError() MUST ALWAYS be inside a try-catch block.\n"
+                "- The second argument MUST be the caught Exception variable (e).\n"
+                "- WRONG: throw HscException.systemError(\"msg\");  ← no exception arg = compile error at runtime\n"
+                "- WRONG: if (x == null) throw HscException.systemError(\"msg\");  ← outside try-catch = forbidden\n"
+                "- CORRECT: try { ... } catch (Exception e) { throw HscException.systemError(\"msg\", e); }\n"
+                "- If the original code has bare validation throws (without try-catch), wrap the method body in try-catch.\n\n"
+                "POM.XML COMPLIANCE RULES:\n"
+                "- ONLY import from libraries declared in pom.xml. Any other import = compilation failure.\n"
+                "- NEVER import org.apache.poi.* — Apache POI is NOT in pom.xml.\n"
+                "  If fixing an Excel-related method: remove all POI code, change the method to return List<ResDto>\n"
+                "  (same as the search method), and remove the Excel-specific DTO fields (fileName, fileContent, rowCount).\n"
+                "  The frontend handles Excel export via PrimeVue DataTable — the backend only provides the data.\n\n"
                 "DTO FIELD CONSISTENCY RULES:\n"
                 "- NEVER call getter/setter for a field that is not declared in the DTO class.\n"
                 "- If a fix says to add a field to a DTO: add 'private <Type> fieldName;' inside the DTO class body.\n"
                 "- When fixing a DTO issue, output the UPDATED DTO file (not the ServiceImpl) with the new field added.\n"
-                "- NEVER just remove the getter/setter call — always ADD the missing field to the DTO instead.\n\n"
+                "- NEVER just remove the getter/setter call — always ADD the missing field to the DTO instead.\n"
+                "DTO FIELD TYPE WHITELIST — when adding or fixing DTO fields, ONLY these types are allowed:\n"
+                "  ALLOWED: String, int, Integer, long, Long, BigDecimal, boolean, Boolean\n"
+                "  FORBIDDEN: Date, LocalDate, LocalDateTime → use String instead\n"
+                "  FORBIDDEN: List<...>, Map<...>, Object, any complex type → use String (comma-separated) instead\n"
+                "  NEVER introduce a List or Date typed field into a DTO, even if the issue says to add it.\n"
+                "  If the issue involves a date field, declare it as 'private String fieldName;'.\n"
+                "  If the issue involves a list/collection field, declare it as 'private String fieldName;' (comma-separated).\n"
+                "TYPE CHAIN: once a DTO field is declared as String, ALL code that calls its getter must treat it as String.\n"
+                "  If ServiceImpl does 'String x = dto.getEduDate()' → that is correct (String→String).\n"
+                "  If ServiceImpl does 'Date x = dto.getEduDate()' → WRONG, must be 'String x = dto.getEduDate()'.\n\n"
                 "DAO METHOD CALL RULES:\n"
                 "- ServiceImpl MUST call the full wrapper method names defined in DaoImpl.\n"
                 "- NEVER call bare insert()/select()/update()/delete()/selectOne()/selectList() on a DAO variable.\n"
@@ -3324,11 +3668,16 @@ class FixAgent:
                 f"=== ALL BACKEND FILES (cross-reference for compile consistency) ===\n"
                 f"{all_backend_context}\n"
                 f"=== END ALL BACKEND FILES ===\n\n"
-                f"IMPORTANT: Before outputting the fixed file, mentally verify:\n"
+                f"IMPORTANT: Before outputting the fixed file, mentally verify ALL of the following:\n"
                 f"  1. Every DAO method called in ServiceImpl exists in the DaoImpl file above\n"
                 f"  2. Every DTO getter/setter called in ServiceImpl has a matching field in the DTO file above\n"
                 f"  3. No CommonUtils.getUuid() or UUID.randomUUID() anywhere\n"
-                f"  4. No invented methods or fields that don't exist in DTO/DAO\n\n"
+                f"  4. No invented methods or fields that don't exist in DTO/DAO\n"
+                f"  5. COMPILE CHECK — Every import must be from a library in pom.xml (no org.apache.poi.*, etc.)\n"
+                f"  6. COMPILE CHECK — Every HscException.systemError() call has TWO args: (\"msg\", e)\n"
+                f"     and is inside a catch block. Single-arg calls like systemError(\"msg\") are compile errors.\n"
+                f"  7. COMPILE CHECK — Every class, method, and field referenced in the file actually exists.\n"
+                f"     No phantom classes, no missing imports, no undefined variables.\n\n"
                 f"Output the complete fixed file."
             )
 

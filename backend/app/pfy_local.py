@@ -137,12 +137,26 @@ def _extract_module_names(generated_files: list[GeneratedFile]) -> set[str]:
 
 
 def _rmtree_dir(target: Path, deleted: list[str], failed: list[str]) -> None:
-    """Remove target directory tree, collecting results into deleted/failed lists."""
+    """Remove target directory tree, collecting results into deleted/failed lists.
+
+    On Windows, files may be read-only (e.g. .class files from Maven, IDE index files).
+    The onerror handler clears the read-only attribute and retries the removal.
+    """
     if not target.exists():
         logger.debug("[DELETE-SOURCE] Dir not found, skipping: %s", target)
         return
+
+    def _force_remove(func, path, exc_info):
+        """onerror handler: clear read-only bit and retry."""
+        import stat
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception as retry_exc:
+            logger.warning("[DELETE-SOURCE] Force-remove failed for %s: %s", path, retry_exc)
+
     try:
-        shutil.rmtree(target)
+        shutil.rmtree(target, onerror=_force_remove)
         deleted.append(target.as_posix())
         logger.info("[DELETE-SOURCE] Removed dir %s", target)
     except Exception as exc:

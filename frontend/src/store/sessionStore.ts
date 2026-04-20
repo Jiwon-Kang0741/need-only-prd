@@ -311,9 +311,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       if (total === 0) {
         alert('삭제할 파일이 없습니다. (세션에 생성된 파일 정보가 없습니다)')
       } else if (result.failed.length > 0) {
-        alert(`파일 삭제 완료: ${result.deleted}개 삭제, ${result.not_found.length}개 없음, ${result.failed.length}개 실패\n실패: ${result.failed.join('\n')}`)
+        alert(`소스 삭제 부분 완료: ${result.deleted}개 성공, ${result.failed.length}개 실패\n실패 경로: ${result.failed.join('\n')}\n\n다른 프로그램(IDE, 빌드 서버)이 파일을 사용 중일 수 있습니다.\n해당 프로그램을 종료 후 다시 시도하세요.`)
+      } else if (result.deleted > 0) {
+        alert(`소스 삭제 완료: ${result.deleted}개 디렉토리가 삭제되었습니다.`)
       } else if (result.deleted === 0 && result.not_found.length > 0) {
-        alert(`파일이 이미 삭제되었거나 경로를 찾을 수 없습니다.\n대상 경로: ${result.not_found.slice(0, 3).join('\n')}${result.not_found.length > 3 ? '\n...' : ''}`)
+        alert(`삭제할 파일이 이미 없습니다.\n대상 경로: ${result.not_found.slice(0, 3).join('\n')}${result.not_found.length > 3 ? '\n...' : ''}`)
       }
       set({ codeGen: { ...initialCodeGen } })
     } catch (e) {

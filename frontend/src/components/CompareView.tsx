@@ -24,11 +24,11 @@ export default function CompareView() {
           <div className="px-4 py-2 bg-surface-container-low border-b border-outline-variant/15 text-xs font-bold text-on-surface-variant uppercase tracking-widest">
             Generated Spec
           </div>
-          <div className="overflow-y-auto p-6 prose prose-sm max-w-none no-scrollbar">
+          <div className="overflow-y-auto p-6 prose prose-sm prose-invert max-w-none no-scrollbar bg-zinc-900 text-white prose-headings:text-white prose-p:text-white prose-li:text-white prose-strong:text-white prose-a:text-sky-300 prose-code:text-amber-200 prose-pre:bg-zinc-950">
             {specMarkdown ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{specMarkdown}</ReactMarkdown>
             ) : (
-              <p className="text-outline text-sm italic">No spec generated yet.</p>
+              <p className="text-zinc-400 text-sm italic">아직 생성된 스펙이 없습니다.</p>
             )}
           </div>
         </div>

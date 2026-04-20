@@ -9,7 +9,7 @@ const isMock = import.meta.env.VITE_MOCK === 'true';
 
 /**
  * Mock 모드: MSW 서비스워커는 '같은 오리진' 요청만 가로챔.
- * 절대 URL(http://localhost:8081)을 쓰면 Vite 포트가 달라질 때 CORS 에러.
+ * 절대 URL(http://localhost:8085)을 쓰면 Vite 포트가 달라질 때 CORS 에러.
  * → Mock 시에는 반드시 빈 문자열(상대 URL) 사용.
  */
 const baseURL = isMock ? '' : (import.meta.env.VITE_API_BASE_URL || '');

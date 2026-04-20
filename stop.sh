@@ -11,8 +11,8 @@ if [ -f .pids ]; then
   rm .pids
 fi
 
-# Kill any remaining processes on the ports (8001 backend, 5173 frontend, 8081 pfy-front)
-for port in 8001 5173 8081; do
+# Kill any remaining processes on the ports (8001 backend, 5173 frontend, 8085 pfy-front)
+for port in 8001 5173 8085; do
   pid=$(lsof -ti ":$port" 2>/dev/null)
   if [ -n "$pid" ]; then
     kill "$pid" 2>/dev/null

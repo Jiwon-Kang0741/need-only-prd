@@ -18,22 +18,17 @@ export default function SpecModeSelector() {
 
   function handleTabClick(mode: 'text' | 'mockup') {
     if (mode === specMode) return
-
-    // If mockup pipeline is in progress, confirm before switching
     const mockupInProgress = mockupState !== null || mockupLoading
     if (specMode === 'mockup' && mockupInProgress && mode === 'text') {
       setPendingMode(mode)
       setShowConfirm(true)
       return
     }
-
     setSpecMode(mode)
   }
 
   function confirmSwitch() {
-    if (pendingMode) {
-      setSpecMode(pendingMode)
-    }
+    if (pendingMode) setSpecMode(pendingMode)
     setShowConfirm(false)
     setPendingMode(null)
   }
@@ -43,59 +38,107 @@ export default function SpecModeSelector() {
     setPendingMode(null)
   }
 
+  if (specMode === 'mockup') {
+    return (
+      <div className="flex flex-col" style={{ background: '#0f0f0f' }}>
+        {/* Mode tabs (above mockup pipeline) */}
+        <div
+          className="flex items-center gap-1 px-6 py-2"
+          style={{ borderBottom: '1px solid #1e1e1e' }}
+        >
+          {TABS.map((tab) => {
+            const isActive = specMode === tab.mode
+            return (
+              <button
+                key={tab.mode}
+                type="button"
+                onClick={() => handleTabClick(tab.mode)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: isActive ? 'rgba(244,130,31,0.12)' : 'transparent',
+                  color: isActive ? '#f4821f' : '#666666',
+                  border: isActive ? '1px solid rgba(244,130,31,0.25)' : '1px solid transparent',
+                }}
+              >
+                <span className="material-symbols-outlined text-[17px]">{tab.icon}</span>
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+        <MockupPipeline />
+        {showConfirm && <ConfirmDialog onConfirm={confirmSwitch} onCancel={cancelSwitch} />}
+      </div>
+    )
+  }
+
   return (
-    <div className="py-6 px-4">
-      {/* Tab bar */}
-      <div className="flex justify-center mb-8">
-        <div className="flex gap-1 p-1 bg-surface-container rounded-xl">
-          {TABS.map((tab) => (
+    <div style={{ background: '#0f0f0f', minHeight: '100%' }}>
+      {/* Mode tabs */}
+      <div
+        className="flex items-center gap-1 px-6 py-2"
+        style={{ borderBottom: '1px solid #1e1e1e' }}
+      >
+        {TABS.map((tab) => {
+          const isActive = specMode === tab.mode
+          return (
             <button
               key={tab.mode}
               type="button"
               onClick={() => handleTabClick(tab.mode)}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                specMode === tab.mode
-                  ? 'bg-primary text-on-primary shadow-md'
-                  : 'text-on-surface-variant hover:bg-surface-container-high'
-              }`}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: isActive ? 'rgba(244,130,31,0.12)' : 'transparent',
+                color: isActive ? '#f4821f' : '#666666',
+                border: isActive ? '1px solid rgba(244,130,31,0.25)' : '1px solid transparent',
+              }}
             >
-              <span className="material-symbols-outlined text-[20px]">{tab.icon}</span>
+              <span className="material-symbols-outlined text-[17px]">{tab.icon}</span>
               {tab.label}
             </button>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
-      {/* Content */}
-      {specMode === 'text' ? <InputPanel /> : <MockupPipeline />}
+      <div className="py-6 px-4">
+        <InputPanel />
+      </div>
 
-      {/* Confirmation dialog */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-on-surface/40 backdrop-blur-sm">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl px-8 py-6 max-w-sm mx-4 space-y-4">
-            <h3 className="text-lg font-bold font-headline text-on-surface">모드 전환</h3>
-            <p className="text-sm text-on-surface-variant leading-relaxed">
-              Mockup 파이프라인이 진행 중입니다. 텍스트 입력 모드로 전환하면 현재 진행 상태가 유지됩니다. 전환하시겠습니까?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={cancelSwitch}
-                className="px-4 py-2 rounded-lg text-sm font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={confirmSwitch}
-                className="px-4 py-2 rounded-lg text-sm font-bold bg-primary text-on-primary hover:bg-primary-container transition-colors"
-              >
-                전환
-              </button>
-            </div>
-          </div>
+      {showConfirm && <ConfirmDialog onConfirm={confirmSwitch} onCancel={cancelSwitch} />}
+    </div>
+  )
+}
+
+function ConfirmDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div
+        className="rounded-2xl shadow-2xl px-8 py-6 max-w-sm mx-4 space-y-4"
+        style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
+      >
+        <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>모드 전환</h3>
+        <p className="text-sm leading-relaxed" style={{ color: '#888888' }}>
+          Mockup 파이프라인이 진행 중입니다. 텍스트 입력 모드로 전환하면 현재 진행 상태가 유지됩니다. 전환하시겠습니까?
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+            style={{ background: '#252525', color: '#888888' }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+            style={{ background: '#f4821f', color: '#ffffff' }}
+          >
+            전환
+          </button>
         </div>
-      )}
+      </div>
     </div>
   )
 }
