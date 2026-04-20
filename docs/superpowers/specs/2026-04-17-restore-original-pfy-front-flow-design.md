@@ -19,6 +19,7 @@
 | UI 단계 수 | 4단계 스텝퍼 (Brief/Mockup/Interview/Spec) |
 | 다중 화면 미리보기 | 단일 Vue 파일 + 내부 `v-if` 전환 (원본 mockupPrompt 규칙) |
 | 원본 리소스 경로 | `/Users/g1_kang/Downloads/pfy-front/` |
+| Mockup 파이프라인 LLM | **원본 pfy-front 사내 게이트웨이 (gpt-5.2)** — 전용 `MockupLLMClient` |
 
 ---
 
@@ -69,11 +70,112 @@ backend/app/
 ├── llm/
 │   ├── mockup_pipeline.py      # [대체] 4단계 오케스트레이션
 │   ├── mockup_prompts.py       # [대체] brief/mockupPrompt/InterviewParser 포팅
+│   ├── mockup_client.py        # [신규] 원본 pfy-front AOAI 게이트웨이 호출 전용 클라이언트
 │   └── vue_generator.py        # [삭제] LLM이 생성하므로 불필요
 ├── routers/
 │   └── mockup.py               # [대체] 5개 엔드포인트로 교체
+├── config.py                   # [수정] MOCKUP_AOAI_* 환경변수 추가
 └── models.py                   # [수정] MockupState 재정의
 ```
+
+### 2.1.1 MockupLLMClient (신규)
+
+원본 pfy-front가 사용하던 사내 AOAI 게이트웨이를 호출하기 위한 경량 클라이언트. 표준 Azure OpenAI SDK와 다른 인증 방식(`X-Api-Key` 헤더)과 고정 엔드포인트를 사용.
+
+```python
+# backend/app/llm/mockup_client.py
+import httpx
+from collections.abc import AsyncIterator
+from app.config import settings
+
+
+class MockupLLMClient:
+    """pfy-front 원본 AOAI 게이트웨이 호환 클라이언트.
+
+    원본 /Users/g1_kang/Downloads/pfy-front/scaffolding/src/utils/llmClient.ts 포팅.
+    - endpoint 고정 (MOCKUP_AOAI_ENDPOINT)
+    - X-Api-Key 헤더 인증
+    - OpenAI chat completions 요청/응답 포맷
+    - 스트리밍은 청크 단위 yield 지원 (게이트웨이가 SSE stream 지원 시)
+    """
+    def __init__(self) -> None:
+        self._endpoint = settings.MOCKUP_AOAI_ENDPOINT
+        self._api_key = settings.MOCKUP_AOAI_API_KEY
+        self._model = settings.MOCKUP_AOAI_DEPLOYMENT
+
+    async def complete(
+        self,
+        system: str,
+        user: str,
+        stream: bool = False,
+        max_tokens: int = 8000,
+        temperature: float = 0.35,
+    ) -> str | AsyncIterator[str]:
+        if not self._endpoint or not self._api_key:
+            raise RuntimeError(
+                "MOCKUP_AOAI_ENDPOINT / MOCKUP_AOAI_API_KEY 가 .env에 설정되지 않았습니다."
+            )
+
+        body = {
+            "model": self._model,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": stream,
+        }
+        headers = {"Content-Type": "application/json", "X-Api-Key": self._api_key}
+
+        if not stream:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=30.0), verify=False) as c:
+                r = await c.post(self._endpoint, json=body, headers=headers)
+                r.raise_for_status()
+                data = r.json()
+                return data["choices"][0]["message"]["content"]
+
+        # Streaming: OpenAI SSE 포맷 파싱
+        async def _stream() -> AsyncIterator[str]:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=30.0), verify=False) as c:
+                async with c.stream("POST", self._endpoint, json=body, headers=headers) as r:
+                    r.raise_for_status()
+                    async for line in r.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        payload = line[6:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            import json as _json
+                            obj = _json.loads(payload)
+                            delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            continue
+
+        return _stream()
+
+
+mockup_client = MockupLLMClient()
+```
+
+**스트리밍 폴백**: 게이트웨이가 `stream: true`에서 OpenAI SSE 포맷을 반환하지 않는다면, 구현 시 **비스트리밍 호출 + 청크 단위 에뮬레이션**(응답 전체를 받은 후 줄 단위로 yield)으로 폴백한다. 첫 실행 시 게이트웨이 응답 확인 후 결정하며, 폴백 로직은 `mockup_pipeline.py`의 `generate_mockup_streaming`에 삽입한다.
+
+### 2.1.2 config.py 환경변수 추가
+
+```python
+# app/config.py
+class Settings(BaseSettings):
+    # ... 기존 필드 유지 ...
+
+    # --- Mockup Pipeline 전용 (원본 pfy-front 호환) ---
+    MOCKUP_AOAI_ENDPOINT: str = ""
+    MOCKUP_AOAI_API_KEY: str = ""
+    MOCKUP_AOAI_DEPLOYMENT: str = "gpt-5.2"
+    MOCKUP_AOAI_MAX_TOKENS: int = 8000
+```
+
+`.env.example`에도 관련 변수 추가.
 
 ### 2.2 세션 모델 재정의
 
@@ -143,26 +245,39 @@ def master_spec_prompt(brief_md: str, mockup_vue: str, interview_notes_md: str) 
 
 ### 2.6 mockup_pipeline.py
 
+**중요**: Mockup 파이프라인의 모든 LLM 호출은 기존 `llm_client`(gpt-5.4)가 아니라 **신규 `mockup_client`(gpt-5.2, 원본 pfy-front 게이트웨이)** 를 사용한다.
+
 ```python
+from app.llm.mockup_client import mockup_client  # ← llm_client 아님
+
 class MockupPipeline:
     async def generate_mockup_streaming(self, brief_md: str) -> AsyncIterator[str]:
         catalog = _load_component_catalog()
         system, user = mockup_generation_prompt(brief_md, catalog)
-        stream = await llm_client.complete(system, user, stream=True)
-        async for chunk in stream:
-            yield chunk
+        result = await mockup_client.complete(system, user, stream=True)
+        if hasattr(result, "__aiter__"):
+            async for chunk in result:
+                yield chunk
+        else:
+            # 게이트웨이가 스트리밍 미지원 시 폴백: 전체 응답을 줄 단위로 에뮬레이션
+            for line in str(result).splitlines(keepends=True):
+                yield line
 
     async def parse_interview(self, mockup_vue: str, raw_text: str) -> str:
         system, user = interview_parser_prompt(mockup_vue, raw_text)
-        return await llm_client.complete(system, user, stream=False)
+        return await mockup_client.complete(system, user, stream=False)
 
     async def generate_spec_streaming(
         self, brief_md: str, mockup_vue: str, interview_notes_md: str,
     ) -> AsyncIterator[str]:
         system, user = master_spec_prompt(brief_md, mockup_vue, interview_notes_md)
-        stream = await llm_client.complete(system, user, stream=True)
-        async for chunk in stream:
-            yield chunk
+        result = await mockup_client.complete(system, user, stream=True)
+        if hasattr(result, "__aiter__"):
+            async for chunk in result:
+                yield chunk
+        else:
+            for line in str(result).splitlines(keepends=True):
+                yield line
 
 
 mockup_pipeline = MockupPipeline()
@@ -326,9 +441,11 @@ Step 4: Spec 생성
 ### 5.4 리스크 대응
 - LLM 생성 Vue의 import 오류 → 프롬프트에 componentCatalog + 샘플 주입 + 정규식 사후 검증
 - v-if 전환 버튼 누락 → 프롬프트에 규칙 강조 + 생성 결과에 `v-if=` 존재 확인 경고
-- LLM 출력 토큰 초과 → `stream=True` 청크 수신
+- LLM 출력 토큰 초과 → `stream=True` 청크 수신 또는 `MOCKUP_AOAI_MAX_TOKENS` 상향
 - 구 세션 호환 → MockupState에 `model_config = ConfigDict(extra="ignore")`
 - 탭 전환 시 잔여 상태 → reset 시 MockupState 함께 초기화
+- **사내 게이트웨이 접근 불가 (VPN/네트워크)** → 명확한 에러 메시지("MOCKUP_AOAI_ENDPOINT 접근 실패") + `MOCKUP_AOAI_*` 미설정 시 탭 비활성화 안내
+- **게이트웨이 스트리밍 미지원** → `stream=True` 시도 → 응답이 SSE 포맷 아니면 폴백(비스트리밍 호출 후 줄 단위 에뮬레이션). 첫 구현 시 실제 응답 확인 필요
 
 ---
 
