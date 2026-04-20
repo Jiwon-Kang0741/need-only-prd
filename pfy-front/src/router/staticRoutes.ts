@@ -147,6 +147,12 @@ export const staticRoutes: RouteRecordRaw[] = [
       component: () => import('@/pages/generated/scr001/index.vue'),
     },
     {
+      path: '/generated/member-list',
+      name: 'generated-MemberList',
+      meta: { generated: true },
+      component: () => import('@/pages/generated/MemberList.vue'),
+    },
+    {
       path: '/SCR002',
       name: 'SCR002',
       meta: { menuId: 'SCR002', generated: true },

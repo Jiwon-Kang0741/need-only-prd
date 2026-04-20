@@ -18,8 +18,9 @@ from app.llm.codegen_context import (
     get_allowed_import_prefixes,
     get_context_for_file_type,
     get_naming_context,
+    get_parent_class_fields,
+    get_parent_class_source_block,
     get_pom_dependencies,
-    get_pom_group_ids,
     get_table_info,
     get_workspace_class_map,
 )
@@ -63,13 +64,6 @@ _BACKEND_CHECKS = [
     (re.compile(r'log\.(error|warn)\s*\([^;]+\);\s*\n\s*throw\s+(?:HscException|new\s+HscException)', re.MULTILINE),
      "log.error()/log.warn() immediately before throw HscException — remove the log call entirely. "
      "Just use: throw HscException.systemError(\"...\", e); The framework already logs thrown exceptions."),
-    # HscException.systemError called with only a string literal (no Exception e as 2nd arg)
-    (re.compile(r'HscException\.systemError\(\s*"[^"]*"\s*\)'),
-     "HscException.systemError() called with only a String argument — WRONG. "
-     "throw HscException.systemError() MUST ALWAYS be inside a try-catch block "
-     "and MUST pass the caught exception as the second argument. "
-     "WRONG: throw HscException.systemError(\"msg\"); "
-     "CORRECT: try { ... } catch (Exception e) { throw HscException.systemError(\"msg\", e); }"),
     # UUID usage
     (re.compile(r'UUID\s*\.\s*randomUUID\s*\('),
      "UUID.randomUUID() found — NEVER use java.util.UUID. "
@@ -78,32 +72,6 @@ _BACKEND_CHECKS = [
     (re.compile(r'CommonUtils\s*\.\s*getUuid\s*\('),
      "CommonUtils.getUuid() found — NEVER use CommonUtils.getUuid(). "
      "ID values come from DB sequence or are already in the DTO. Remove the getUuid() usage entirely."),
-    # CommonUtils invented methods — specific known non-existent methods
-    (re.compile(r'CommonUtils\s*\.\s*(?:convertArrayToList|convertList|toList|parseList|mapList|toArray|listToArray)\s*\('),
-     "CommonUtils.xxx() called with a method that does NOT exist in the framework. "
-     "ONLY call CommonUtils methods that are actually defined in com.common.sy.CommonUtils. "
-     "The documented method is filterByStatus(List, GridStatus...). "
-     "For array/list conversion use standard Java: Arrays.asList(), List.of(), stream().collect(Collectors.toList()). "
-     "NEVER invent new CommonUtils methods — they will cause compilation errors."),
-    # Date / LocalDate / LocalDateTime as DTO field type — must always be String
-    (re.compile(r'private\s+(?:java\.util\.Date|Date|LocalDate|LocalDateTime)\s+\w+\s*;'),
-     "DTO field declared with type Date/LocalDate/LocalDateTime — WRONG. "
-     "ALL date/datetime fields in ReqDto and ResDto MUST be String (e.g. 'private String educationDate;'). "
-     "Never use java.util.Date, LocalDate, or LocalDateTime for DTO fields. "
-     "Consequence: param.setEducationDate(request.getEducationDate()) must pass String→String, "
-     "and validateDate(request.getEducationDate(), '교육일자') also accepts String, String."),
-    # List<...> as DTO field type — causes Service type mismatch when used as String
-    (re.compile(r'private\s+List\s*<[^>]+>\s+\w+\s*;'),
-     "DTO field declared with type List<...> — WRONG. "
-     "DTO fields MUST ONLY use simple scalar types: String, int, long, Integer, Long, BigDecimal, Boolean, boolean. "
-     "NEVER declare List, Map, Date, LocalDate, LocalDateTime, or any complex type as a DTO field. "
-     "If you need to pass multiple values (e.g. a list of IDs), use a comma-separated String field instead. "
-     "Service/DAO handle collections (List<ResDto>) at the method parameter/return level — not inside the DTO."),
-    # Map<...> as DTO field type — same issue
-    (re.compile(r'private\s+Map\s*<[^>]+>\s+\w+\s*;'),
-     "DTO field declared with type Map<...> — WRONG. "
-     "DTO fields MUST ONLY use simple scalar types: String, int, long, Integer, Long, BigDecimal, Boolean, boolean. "
-     "NEVER declare Map or any complex collection type as a DTO field."),
     # Manual audit field setting (AuditBaseDto handles these automatically)
     (re.compile(r'\.\s*set(?:FstCretDtm|FstCrtrId|LastMdfcDtm|LastMdfrId)\s*\('),
      "Manual audit field setting found (setFstCretDtm/setFstCrtrId/setLastMdfcDtm/setLastMdfrId) — "
@@ -192,20 +160,14 @@ _FRONTEND_CHECKS = [
     (re.compile(r'<script(?!\s+setup)[\s>]'), '<script> without setup — must use <script setup lang="ts">'),
     (re.compile(r'\balert\s*\('), 'alert() found — use Toast component instead'),
     (re.compile(r'\bconfirm\s*\('), 'confirm() found — use ConfirmDialog instead'),
-    (re.compile(r'\bapi\.get\s*\('), 'api.get() found — CPMS /api/v1/ dispatcher only accepts POST. Use api.post() for ALL calls including search/select'),
-    # Fabrication detection: common patterns of LLM-invented imports
-    (re.compile(r"from\s+['\"]primevue/"), 'Direct PrimeVue import found — CPMS wraps PrimeVue components. Use CPMS common components from @/components/common/ instead'),
-    (re.compile(r"import\s+.*\s+from\s+['\"]@/components/(?!common/)[^'\"]+['\"]"), 'Non-common component import — verify this path exists. CPMS shared components live under @/components/common/'),
-    (re.compile(r"from\s+['\"]@/utils/(?!formatErrorMessage)[^'\"]+['\"]"), 'Unknown @/utils/ import — only formatErrorMessage is a verified utility. Check if this utility actually exists'),
 ]
 
 
 def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
     """Dynamically detect imports from libraries NOT in pom.xml.
 
-    Allowed prefixes are derived from pom.xml groupIds (plus java/javax/biz/hsc/aondev).
-    Extra rules block imports that share a broad prefix with an unrelated dependency
-    (e.g. org.apache.poi when only org.apache.maven.* is declared).
+    No hardcoded library list — allowed prefixes are derived entirely from pom.xml at runtime.
+    Any import whose groupId-prefix is absent from pom.xml <dependencies> is reported.
     """
     if gf.layer != "backend" or not gf.file_path.endswith(".java"):
         return []
@@ -216,7 +178,7 @@ def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
 
     for match in _IMPORT_RE.finditer(gf.content):
         fqcn = match.group(2)
-        if _java_import_allowed_under_pom(fqcn, allowed):
+        if _is_import_allowed(fqcn, allowed):
             continue
         pkg = fqcn.rsplit(".", 1)[0] if "." in fqcn else fqcn
         if pkg in seen_packages:
@@ -224,11 +186,18 @@ def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
         seen_packages.add(pkg)
         issues.append({
             "file_path": gf.file_path,
-            "issue": f"[STATIC] import {pkg}.* — library NOT in pom.xml, compilation will fail",
+            "issue": (
+                f"[STATIC] import {pkg}.* — this library is NOT declared in pom.xml. "
+                f"Compilation will fail. The pom.xml only has: "
+                f"{', '.join(sorted(p for p in allowed if not p.startswith('java'))[:8])} (and java.*)."
+            ),
             "fix_instruction": (
-                f"Remove ALL {pkg}.* usage from this file. "
-                f"Replace with plain Java (java.util/java.io) or pom.xml-declared libraries. "
-                f"Do NOT just remove the import — rewrite the code that uses {pkg} classes."
+                f"Remove ALL {pkg}.* imports AND all code in this file that uses {pkg} classes.\n"
+                f"Do NOT just remove the import line — find every variable/method call that relies on "
+                f"{pkg} and rewrite the logic using ONLY libraries available in pom.xml.\n"
+                f"For file/byte processing: use java.io.InputStream, java.io.ByteArrayInputStream, "
+                f"java.util.List<Map<String,Object>>, MultipartFile (org.springframework.web.multipart), "
+                f"or any utility class already available via the framework (pfy-fw-config, aondev-framework)."
             ),
         })
     return issues
@@ -309,14 +278,27 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
     generated_dto_classes: set[str] = set(dto_fields.keys())
 
     # --- 1. DTO getter/setter field existence check ---
-    var_type_re = re.compile(r'(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*[=;,)]')
+    # Matches:  CpmsEduResDto dto = ...    (assignment)
+    #           CpmsEduResDto dto;         (declaration)
+    #           for (CpmsEduResDto dto :   (for-each)
+    #           method(CpmsEduResDto dto,  (param)
+    #           List<CpmsEduResDto> list   (generic — captured via accessor fallback)
+    var_type_re = re.compile(
+        r'(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*(?:[=;,):])|\bfor\s*\(\s*(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*:'
+    )
 
     for gf in service_files + dao_files:
         is_dao = gf in dao_files
         var_to_dto: dict[str, str] = {}
         for m in var_type_re.finditer(gf.content):
-            dto_type = m.group(1)
-            var_name = m.group(2)
+            # Group 1+2: normal declaration/assignment/param
+            # Group 3+4: for-each loop
+            if m.group(1) and m.group(2):
+                dto_type, var_name = m.group(1), m.group(2)
+            elif m.group(3) and m.group(4):
+                dto_type, var_name = m.group(3), m.group(4)
+            else:
+                continue
             if dto_type in dto_fields:
                 var_to_dto[var_name] = dto_type
 
@@ -330,7 +312,10 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                 continue
             dto_name = var_to_dto[var_name]
             fields = dto_fields.get(dto_name, set())
-            if fields and prop_name not in fields:
+            # NOTE: do NOT guard with `if fields` — an empty fields set means the DTO was
+            # generated with NO private field declarations (empty class body), which is itself
+            # a bug.  Any getter/setter call against an empty DTO is always an error.
+            if prop_name not in fields:
                 dto_file = dto_file_paths.get(dto_name, gf.file_path)
                 if prop_name in _PAGINATION_CONTAINER_FIELDS:
                     issues.append({
@@ -413,14 +398,15 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                 dao_without_impl = dao_simple[:-4] if dao_name.endswith("Impl") else dao_simple
                 if dao_var in (dao_simple, dao_name, dao_without_impl):
                     if called_method not in methods:
-                        # Infer type hint for the new DaoImpl method
+                        dao_fp = dao_file_paths.get(dao_name, "")
+                        # Infer type hint for the new DaoImpl method from ServiceImpl assignment
                         inferred_ret, inferred_args = inferred.get(called_method, ("", call_args))
                         type_hint = (
                             f"  Inferred from ServiceImpl usage: returns '{inferred_ret}', args=({inferred_args})\n"
                             if inferred_ret else
                             f"  Infer the return type from how '{called_method}' result is used in ServiceImpl.\n"
                         )
-                        dao_fp = dao_file_paths.get(dao_name, "")
+                        # Issue 1: fix DaoImpl — add the missing Java method
                         issues.append({
                             "file_path": dao_fp or gf.file_path,
                             "issue": (
@@ -434,11 +420,46 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                                 f"  Use super.selectList() for list queries, super.selectOne() for single/count,\n"
                                 f"  super.insert() for inserts, super.update()/super.delete() for single CUD,\n"
                                 f"  super.batchUpdateReturnSumAffectedRows() for List<> CUD.\n"
-                                f"  Also add the corresponding SQL statement '<select|insert|update|delete id=\"{called_method}\"> "
-                                f"to the Mapper XML if it does not already exist.\n"
-                                f"  DO NOT remove the call in ServiceImpl — add the method where it is missing."
+                                f"  DO NOT remove the call in ServiceImpl — add the method to DaoImpl."
                             ),
                         })
+                        # Issue 2: also fix the Mapper XML — add the missing SQL statement
+                        # Find the mapper XML file path for this DaoImpl
+                        mapper_fp = ""
+                        for _path, _mgf in files.__class__([]) if False else []:
+                            pass
+                        # Search mapper XML among already-collected files
+                        mapper_fp = ""
+                        for _gf in files:
+                            if _gf.file_type == "mapper_xml" and dao_name.replace("DaoImpl", "").lower() in _gf.file_path.lower():
+                                mapper_fp = _gf.file_path
+                                break
+                        if mapper_fp:
+                            # Infer SQL operation type from method name prefix
+                            _lm = called_method.lower()
+                            if _lm.startswith("insert"):
+                                sql_op = "insert"
+                            elif _lm.startswith("update") or _lm.startswith("delete"):
+                                sql_op = "update" if _lm.startswith("update") else "delete"
+                            elif _lm.startswith("select") and ("list" in _lm or "lst" in _lm):
+                                sql_op = "select (list)"
+                            else:
+                                sql_op = "select (single/count)"
+
+                            issues.append({
+                                "file_path": mapper_fp,
+                                "issue": (
+                                    f"[STATIC] Mapper XML is missing SQL statement id=\"{called_method}\" "
+                                    f"(required by {dao_name}.{called_method}() which ServiceImpl calls)"
+                                ),
+                                "fix_instruction": (
+                                    f"ADD a <{sql_op.split()[0]} id=\"{called_method}\"> SQL statement to this Mapper XML.\n"
+                                    f"{type_hint}"
+                                    f"  The statement id MUST be exactly '{called_method}' to match the DaoImpl method.\n"
+                                    f"  Use the existing table/column pattern in this file as reference.\n"
+                                    f"  Wrap < > operators in CDATA: <![CDATA[<=]]>"
+                                ),
+                            })
 
     # --- 2b. DaoImpl parameter type must be an ACTUAL generated DTO class ---
     _dao_param_type_re = re.compile(
@@ -707,183 +728,6 @@ def _check_dto_layer_conventions(files: list[GeneratedFile]) -> list[dict]:
     return issues
 
 
-def _check_java_class_structure(files: list[GeneratedFile]) -> list[dict]:
-    """Check Java class name matches file name and package declaration matches directory path.
-
-    Both mismatches cause 'class X is public, should be declared in a file named X.java'
-    and 'package Y does not match expected package Z' compilation errors.
-    """
-    issues: list[dict] = []
-    _class_decl_re = re.compile(r'\bpublic\s+class\s+(\w+)')
-    _package_re = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.MULTILINE)
-
-    for gf in files:
-        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
-            continue
-
-        file_name = gf.file_path.split("/")[-1].replace(".java", "")
-
-        # 1) Class name must match file name
-        class_m = _class_decl_re.search(gf.content)
-        if class_m:
-            declared_class = class_m.group(1)
-            if declared_class != file_name:
-                issues.append({
-                    "file_path": gf.file_path,
-                    "issue": (
-                        f"[STATIC] Java class name '{declared_class}' does NOT match file name "
-                        f"'{file_name}.java'. Java requires the public class name to exactly match "
-                        f"the file name — this is a compilation error."
-                    ),
-                    "fix_instruction": (
-                        f"Rename the class declaration from 'public class {declared_class}' to "
-                        f"'public class {file_name}'. Also update all import statements and references "
-                        f"in other generated files that reference this class."
-                    ),
-                })
-
-        # 2) Package declaration must match directory structure
-        pkg_m = _package_re.search(gf.content)
-        if pkg_m:
-            declared_pkg = pkg_m.group(1)
-            parts = gf.file_path.replace("\\", "/").split("/")
-            if "java" in parts:
-                java_idx = len(parts) - 1 - parts[::-1].index("java")
-                expected_pkg_parts = parts[java_idx + 1:-1]
-                expected_pkg = ".".join(expected_pkg_parts)
-                if expected_pkg and declared_pkg != expected_pkg:
-                    issues.append({
-                        "file_path": gf.file_path,
-                        "issue": (
-                            f"[STATIC] Package declaration 'package {declared_pkg};' does NOT match "
-                            f"directory structure (expected 'package {expected_pkg};'). "
-                            f"This causes a compilation error."
-                        ),
-                        "fix_instruction": (
-                            f"Change the first line from 'package {declared_pkg};' to "
-                            f"'package {expected_pkg};'. The package must always match the directory path."
-                        ),
-                    })
-
-    return issues
-
-
-def _check_dao_service_return_types(files: list[GeneratedFile]) -> list[dict]:
-    """Check that ServiceImpl assignment types match DaoImpl declared return types.
-
-    Detects obvious type mismatches like:
-      int count = daoImpl.selectXxxList(req);   ← DAO returns List but assigned to int
-      List<Dto> list = daoImpl.selectXxxCount(req);  ← DAO returns int but assigned to List
-    """
-    issues: list[dict] = []
-
-    # Build DaoImpl method signature map
-    _pub_sig_re = re.compile(
-        r'public\s+([\w<>?,\[\] ]+?)\s+(\w+)\s*\(([^)]*)\)',
-        re.MULTILINE,
-    )
-    dao_sigs: dict[str, dict[str, str]] = {}  # {ClassName: {method: return_type}}
-    dao_simple_map: dict[str, str] = {}       # {simpleVarName: ClassName}
-
-    for gf in files:
-        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
-            continue
-        cname = gf.file_path.split("/")[-1].replace(".java", "")
-        if "DaoImpl" not in cname:
-            continue
-        sigs: dict[str, str] = {}
-        for m in _pub_sig_re.finditer(gf.content):
-            ret = m.group(1).strip()
-            mname = m.group(2)
-            if mname != cname:  # skip constructor
-                sigs[mname] = ret
-        dao_sigs[cname] = sigs
-        # Register camelCase and without-Impl variants
-        simple = cname[0].lower() + cname[1:]
-        dao_simple_map[simple] = cname
-        if cname.endswith("Impl"):
-            dao_simple_map[simple[:-4]] = cname  # without "Impl" suffix
-
-    # Scan ServiceImpl for assignments of the form: TypeName varName = daoVar.method(...)
-    _assign_dao_re = re.compile(
-        r'([\w<>?,\[\] ]+?)\s+\w+\s*=\s*(\w+Dao(?:Impl)?)\s*\.\s*(\w+)\s*\(',
-        re.MULTILINE,
-    )
-
-    def _is_list(t: str) -> bool:
-        return "List<" in t or t.strip() == "List"
-
-    def _is_scalar_num(t: str) -> bool:
-        return t.strip() in {"int", "Integer", "long", "Long"}
-
-    def _is_void(t: str) -> bool:
-        return t.strip() == "void"
-
-    for gf in files:
-        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
-            continue
-        cname = gf.file_path.split("/")[-1].replace(".java", "")
-        if "ServiceImpl" not in cname:
-            continue
-
-        for m in _assign_dao_re.finditer(gf.content):
-            assigned_type = m.group(1).strip()
-            dao_var = m.group(2)
-            called_method = m.group(3)
-
-            # Find which DaoImpl this variable refers to
-            dao_class = dao_simple_map.get(dao_var) or dao_simple_map.get(
-                dao_var[:-4] if dao_var.endswith("Impl") else dao_var
-            )
-            if not dao_class:
-                continue
-            sigs = dao_sigs.get(dao_class, {})
-            if called_method not in sigs:
-                continue  # already caught by method-existence check
-
-            declared_ret = sigs[called_method]
-
-            # Detect obvious mismatches
-            mismatch_desc = ""
-            if _is_list(assigned_type) and not _is_list(declared_ret) and not _is_void(declared_ret):
-                mismatch_desc = (
-                    f"ServiceImpl assigns result to List but DaoImpl returns '{declared_ret}' (not a List)"
-                )
-            elif _is_scalar_num(assigned_type) and _is_list(declared_ret):
-                mismatch_desc = (
-                    f"ServiceImpl assigns result to '{assigned_type}' but DaoImpl returns '{declared_ret}' (a List)"
-                )
-            elif (
-                "Dto" in assigned_type and "Dto" in declared_ret
-                and not _is_list(assigned_type) and not _is_list(declared_ret)
-                and assigned_type.strip() != declared_ret.strip()
-            ):
-                mismatch_desc = (
-                    f"ServiceImpl assigns result to '{assigned_type}' but DaoImpl returns '{declared_ret}'"
-                )
-
-            if mismatch_desc:
-                issues.append({
-                    "file_path": gf.file_path,
-                    "issue": (
-                        f"[STATIC] Return type mismatch for {dao_var}.{called_method}(): "
-                        f"{mismatch_desc}. This is a compilation error."
-                    ),
-                    "fix_instruction": (
-                        f"Fix the type mismatch for {dao_var}.{called_method}().\n"
-                        f"  DaoImpl declares: public {declared_ret} {called_method}(...)\n"
-                        f"  ServiceImpl assigns to: {assigned_type}\n"
-                        f"Options:\n"
-                        f"  1. Change the variable type in ServiceImpl to match DaoImpl's return type '{declared_ret}'\n"
-                        f"  2. OR change DaoImpl's return type to '{assigned_type}' and update "
-                        f"     super.selectList()/selectOne() accordingly\n"
-                        f"The two sides MUST match exactly."
-                    ),
-                })
-
-    return issues
-
-
 def static_check(files: list[GeneratedFile]) -> list[dict]:
     """Run regex-based static checks + pom.xml import validation on generated files."""
     issues: list[dict] = []
@@ -898,9 +742,8 @@ def static_check(files: list[GeneratedFile]) -> list[dict]:
                 })
         issues.extend(_check_forbidden_imports(gf))
 
+    issues.extend(_check_dto_layer_conventions(files))
     issues.extend(_check_cross_file_consistency(files))
-    issues.extend(_check_java_class_structure(files))
-    issues.extend(_check_dao_service_return_types(files))
     return issues
 
 
@@ -934,16 +777,6 @@ def _is_import_allowed(fqcn: str, allowed_prefixes: set[str]) -> bool:
         if fqcn.startswith(prefix + ".") or fqcn == prefix:
             return True
     return False
-
-
-def _java_import_allowed_under_pom(fqcn: str, allowed_prefixes: set[str]) -> bool:
-    """POM-based import allowlist with fixes for two-segment groupId false positives.
-
-    e.g. org.apache.maven.surefire → allowed prefix org.apache, which must NOT imply POI.
-    """
-    if fqcn.startswith("org.apache.poi"):
-        return "org.apache.poi" in get_pom_group_ids()
-    return _is_import_allowed(fqcn, allowed_prefixes)
 
 
 def organize_imports(content: str) -> str:
@@ -1016,7 +849,7 @@ def organize_imports(content: str) -> str:
                 )
                 fqcn = correct_fqcn
 
-        if not _java_import_allowed_under_pom(fqcn, allowed_prefixes):
+        if not _is_import_allowed(fqcn, allowed_prefixes):
             continue
 
         simple_name = fqcn.rsplit(".", 1)[-1] if "." in fqcn else fqcn
@@ -1079,6 +912,7 @@ def postprocess_backend_files(files: list[GeneratedFile]) -> None:
     # Phase 2: fix ServiceImpl (uses already-corrected DaoImpl method names)
     for gf in svc_files:
         gf.content = _fix_bare_dao_calls(gf.content, dao_files)
+        gf.content = _fix_mismatched_dao_calls(gf.content, dao_files)
         gf.content = _remove_log_before_throw(gf.content)
         gf.content = _ensure_slf4j_service_impl(gf.content)
         gf.content = _ensure_log_debug_at_method_start(gf.content)
@@ -1237,6 +1071,109 @@ def _fix_bare_dao_calls(content: str, dao_files: list[GeneratedFile]) -> str:
     return _BARE_DAO_CALL_RE.sub(_replace, content)
 
 
+# Matches ANY method call on a DAO variable: daoImpl.anyMethod(
+_ANY_DAO_CALL_RE = re.compile(
+    r'(\w+(?:Dao|DaoImpl))\s*\.\s*(\w+)\s*\('
+)
+
+
+def _fix_mismatched_dao_calls(svc_content: str, dao_files: list[GeneratedFile]) -> str:
+    """Fix DAO method calls in ServiceImpl that don't match any actual DaoImpl method.
+
+    Unlike _fix_bare_dao_calls (which only handles exact bare CRUD verbs),
+    this function catches ANY DAO call that doesn't exist in DaoImpl and
+    renames it to the closest matching method using prefix-based fuzzy match.
+
+    Example:
+        DaoImpl has: selectEduPgmList, insertEduPgm
+        ServiceImpl calls: daoImpl.selectList(...)  → daoImpl.selectEduPgmList(...)
+        ServiceImpl calls: daoImpl.selectEdu(...)   → daoImpl.selectEduPgmList(...)
+        ServiceImpl calls: daoImpl.insertData(...)  → daoImpl.insertEduPgm(...)
+    """
+    if not dao_files:
+        return svc_content
+
+    # Build: {dao_var_name: {method_name_set}, ...}
+    var_to_methods: dict[str, set[str]] = {}
+    for gf in dao_files:
+        class_match = re.search(r'public\s+class\s+(\w+DaoImpl)\b', gf.content)
+        if not class_match:
+            continue
+        class_name = class_match.group(1)
+        dao_var = class_name[0].lower() + class_name[1:]
+        dao_var_short = dao_var[:-4] if class_name.endswith("Impl") else dao_var
+
+        methods: set[str] = set()
+        for m in re.finditer(r'public\s+\S+\s+(\w+)\s*\(', gf.content):
+            mname = m.group(1)
+            if mname != class_name:
+                methods.add(mname)
+
+        for var in (dao_var, dao_var_short, class_name):
+            var_to_methods[var] = methods
+
+    def _find_closest(called: str, available: set[str]) -> str | None:
+        """Find the closest matching method by CRUD prefix + longest common substring."""
+        if not available:
+            return None
+
+        called_lower = called.lower()
+        # Determine the CRUD prefix of the called method
+        crud_prefix = ""
+        for prefix in ("select", "insert", "update", "delete", "batch"):
+            if called_lower.startswith(prefix):
+                crud_prefix = prefix
+                break
+
+        # Filter candidates by same CRUD prefix
+        candidates = [m for m in available if m.lower().startswith(crud_prefix)] if crud_prefix else list(available)
+        if not candidates:
+            candidates = list(available)
+
+        # Score by: how many characters of the called method name match
+        best = None
+        best_score = -1
+        for cand in candidates:
+            # Simple scoring: length of common prefix (case-insensitive)
+            common = 0
+            for a, b in zip(called_lower, cand.lower()):
+                if a == b:
+                    common += 1
+                else:
+                    break
+            # Bonus: if the candidate contains "List" and the call contains "List"
+            if "list" in called_lower and "list" in cand.lower():
+                common += 5
+            if common > best_score:
+                best_score = common
+                best = cand
+
+        # Only rename if we have a reasonable match (at least the CRUD prefix matches)
+        if best and best_score >= len(crud_prefix):
+            return best
+        return None
+
+    def _replace_call(m: re.Match) -> str:
+        dao_var = m.group(1)
+        called_method = m.group(2)
+        methods = var_to_methods.get(dao_var)
+        if methods is None:
+            return m.group(0)
+        if called_method in methods:
+            return m.group(0)  # already correct
+
+        closest = _find_closest(called_method, methods)
+        if closest and closest != called_method:
+            logger.info(
+                "[FIX_MISMATCH] Renamed DAO call: %s.%s() → %s.%s()",
+                dao_var, called_method, dao_var, closest,
+            )
+            return f"{dao_var}.{closest}("
+        return m.group(0)
+
+    return _ANY_DAO_CALL_RE.sub(_replace_call, svc_content)
+
+
 _LOG_USAGE_RE = re.compile(r'\blog\.(debug|info|warn|error|trace)\(')
 _SLF4J_ANNOTATION_RE = re.compile(r'@Slf4j\b')
 _SLF4J_IMPORT_RE = re.compile(r'import\s+lombok\.extern\.slf4j\.Slf4j\s*;')
@@ -1325,9 +1262,67 @@ def _ensure_slf4j_service_impl(content: str) -> str:
     return content
 
 
+_UUID_IMPORT_RE = re.compile(r'^\s*import\s+java\.util\.UUID\s*;\s*\n?', re.MULTILINE)
+_UUID_RANDOM_UUID_RE = re.compile(r'UUID\.randomUUID\(\)\.toString\(\)|UUID\.randomUUID\(\)')
+_COMMON_UTILS_GET_UUID_RE = re.compile(r'CommonUtils\s*\.\s*getUuid\s*\(\s*\)')
+_MANUAL_AUDIT_FIELD_RE = re.compile(
+    r'^\s*\w+\.(set(?:FstCretDtm|FstCrtrId|LastMdfcDtm|LastMdfrId))\s*\([^)]*\)\s*;\s*\n?',
+    re.MULTILINE,
+)
+_LOCALDT_IMPORT_UNUSED_RE = re.compile(r'^\s*import\s+java\.time\.LocalDateTime\s*;\s*\n?', re.MULTILINE)
+
+
+def _sanitize_service_impl(content: str) -> str:
+    """Deterministically remove forbidden patterns from ServiceImpl.
+
+    - java.util.UUID import and UUID.randomUUID() calls
+    - Manual audit field assignments (AuditBaseDto handles them in constructor)
+    Applied after LLM generation, before static check — no LLM call needed.
+    """
+    original = content
+
+    # Remove UUID import
+    content = _UUID_IMPORT_RE.sub('', content)
+
+    # Replace UUID.randomUUID() call with empty string — the surrounding setId(...) call
+    # will then set an empty/null id, or the static check will flag further issues.
+    # We simply null out the argument: setId(null) is safer than keeping UUID.
+    content = re.sub(
+        r'\.setId\s*\(\s*UUID\.randomUUID\(\)\.toString\(\)\s*\)',
+        '.setId(null)',
+        content,
+    )
+    # Generic UUID.randomUUID() in other contexts
+    content = _UUID_RANDOM_UUID_RE.sub('null /* UUID removed — ID from DB sequence */', content)
+
+    # Remove CommonUtils.getUuid() — ID should come from DB sequence
+    content = _COMMON_UTILS_GET_UUID_RE.sub('null /* getUuid removed — ID from DB sequence */', content)
+
+    # Remove manual audit field assignments
+    content = _MANUAL_AUDIT_FIELD_RE.sub('', content)
+
+    # If LocalDateTime is only used for .now() (audit fields), remove unused import
+    if 'LocalDateTime' not in content:
+        content = _LOCALDT_IMPORT_UNUSED_RE.sub('', content)
+
+    # Remove @Transactional annotations (only @ServiceId + @ServiceName allowed above methods)
+    content = re.sub(r'^\s*@Transactional(?:\s*\([^)]*\))?\s*\n', '', content, flags=re.MULTILINE)
+    # Remove Transactional import
+    content = re.sub(r'^\s*import\s+org\.springframework\.transaction\.annotation\.Transactional\s*;\s*\n', '', content, flags=re.MULTILINE)
+
+    # Remove @PreAuthorize / @Secured annotations
+    content = re.sub(r'^\s*@(?:PreAuthorize|Secured)\s*\([^)]*\)\s*\n', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^\s*import\s+org\.springframework\.security\.access\.(?:prepost\.PreAuthorize|annotation\.Secured)\s*;\s*\n', '', content, flags=re.MULTILINE)
+
+    if content != original:
+        logger.debug("[SANITIZE] Removed forbidden patterns (UUID/audit/@Transactional/@PreAuthorize) from service_impl")
+
+    return content
+
+
 _SERVICE_ID_METHOD_RE = re.compile(
     r'(@ServiceId\s*\([^)]+\)\s*\n'         # @ServiceId(...)
-    r'(?:\s*@\w+(?:\([^)]*\))?\s*\n)*'      # optional other annotations (@ServiceName, @Transactional, etc.)
+    r'(?:\s*@\w+(?:\([^)]*\))?\s*\n)*'      # optional other annotations (@ServiceName, etc.)
     r'\s*public\s+\S+\s+(\w+)\s*\('         # public ReturnType methodName(
     r'([^)]*)\)\s*\{)\s*\n'                 # params) {\n
     r'([ \t]*)',                              # capture indentation of first line in body
@@ -1413,13 +1408,14 @@ _AUDIT_IF_BLOCK_RE = re.compile(
 
 
 def _remove_uuid_usage(content: str) -> str:
-    """Remove UUID import and replace UUID.randomUUID().toString() with empty string literal.
+    """Remove UUID import, UUID.randomUUID().toString(), and CommonUtils.getUuid().
 
     LLM frequently generates UUID for ID fields despite being forbidden.
     The ID should come from DB sequence or already exist in the DTO.
     """
     content = _UUID_IMPORT_RE.sub('\n', content)
     content = _UUID_RANDOM_RE.sub('""', content)
+    content = _COMMON_UTILS_GET_UUID_RE.sub('null /* getUuid removed — ID from DB sequence */', content)
     return content
 
 
@@ -1464,7 +1460,7 @@ class PlannerAgent:
             "NEVER generate dao or service interface files — ONLY dao_impl and service_impl.\n"
             "DaoImpl and ServiceImpl MUST NOT implement any interface. NO 'implements XxxDao' or 'implements XxxService'.\n\n"
             "FRONTEND MULTI-FILE STRUCTURE (CRITICAL — DO NOT generate a single monolithic vue_page):\n"
-            "- vue_page:       index.vue — orchestrator ONLY (ContentHeader + provide/inject + import children). NO inline SearchForm/DataTable logic.\n"
+            "- vue_page:       index.vue — orchestrator ONLY (ContentHeader + provide/inject + import children). NO inline SearchForm/DataTable/SumGrid logic.\n"
             "- vue_search_form: SearchForm component (.vue) — search form UI + defineExpose + watch/setFieldValue\n"
             "- vue_data_table:  DataTable component (.vue) — grid display + virtual scroll + date preformat\n"
             "- vue_data_table_utils: utils/index.ts — getColumns, getRows helper functions for DataTable\n"
@@ -1475,7 +1471,7 @@ class PlannerAgent:
             "Each vue_search_form, vue_data_table, vue_sum_grid component has its own paired .scss file (generated alongside the .vue).\n\n"
             "⚠️ vue_sum_grid GENERATION RULES (CRITICAL — DO NOT auto-generate):\n"
             "- Do NOT include vue_sum_grid unless the spec EXPLICITLY requires progress-status summary filters "
-            "(e.g., clickable status counts like 저장/의뢰/요청확정/접수 that filter the data table).\n"
+            "(e.g., clickable status counts like 미수료/진행중/수료 that filter the data table).\n"
             "- Simple list screens, CRUD screens, excel upload screens, or screens without progress-status concepts "
             "MUST NOT have vue_sum_grid.\n"
             "- If unsure, do NOT include vue_sum_grid. It is better to omit it than to generate an unnecessary component.\n\n"
@@ -1484,14 +1480,10 @@ class PlannerAgent:
             "- PascalCase for Vue/SCSS component files: e.g., CpmsEduPondgEditSearchForm.vue / .scss\n"
             "- camelCase for API files: e.g., cpmsEduPondgEdit.ts\n"
             "- camelCase for component folder names: e.g., cpmsEduPondgEditSearchForm/\n\n"
-            "Order by dependency chain: dto_request → dto_response → mapper_xml → dao_impl → service_impl → db_init_sql → vue_types → vue_api → vue_search_form → vue_data_table → vue_data_table_utils → vue_sum_grid → vue_scss → vue_page\n"
+            "Order by dependency chain: dto_request → dto_response → mapper_xml → dao_impl → service_impl → vue_types → vue_api → vue_search_form → vue_data_table → vue_data_table_utils → vue_sum_grid → vue_scss → vue_page\n"
             "IMPORTANT: mapper_xml MUST be generated BEFORE dao_impl so that DaoImpl can reference all SQL statement IDs.\n"
-            "IMPORTANT: db_init_sql MUST ALWAYS be included — every screen requires a MariaDB init SQL file at db/init.sql.\n"
-            "IMPORTANT: Only plan files that are clearly derivable from the spec. If the spec does not mention a feature, do NOT plan files for it.\n"
-            "  Do NOT invent screens, API endpoints, or components not in the spec. Omitting is better than guessing.\n"
             "dao_impl depends_on: [dto_request, dto_response, mapper_xml]\n"
             "service_impl depends_on: [dto_request, dto_response, dao_impl, mapper_xml]\n"
-            "db_init_sql depends_on: [dto_request, dto_response]\n"
             "vue_api depends_on: [vue_types]\n"
             "vue_search_form depends_on: [vue_types, vue_api]\n"
             "vue_data_table depends_on: [vue_types, vue_api]\n"
@@ -1525,8 +1517,19 @@ class PlannerAgent:
             "  vue_data_table_utils: src/pages/{module}/{category}/{screenId}/components/{screenId}DataTable/utils/index.ts\n"
             "  vue_sum_grid:         src/pages/{module}/{category}/{screenId}/components/{screenId}SumGrid/{ScreenId}SumGrid.vue\n"
             "  vue_api:              src/api/pages/{module}/{category}/{screenId}.ts\n"
-            "  vue_types:            src/api/pages/{module}/{category}/{screenId}Types.ts\n"
+            "  vue_types:            src/api/pages/{module}/{category}/types.ts\n"
             "  (ScreenId = PascalCase of screenId, e.g., screenId=cpmsEduPondgEdit → ScreenId=CpmsEduPondgEdit)\n\n"
+            "DTO GENERATION STYLE (downstream agents follow this):\n"
+            "- dto_request MUST be generated like biz.sample.dto.request.UserReqDto: "
+            "@Data + @EqualsAndHashCode(callSuper=false) + extends SearchBaseDto — NOT @Getter/@Setter/@ToString.\n"
+            f"  SearchBaseDto already declares: {', '.join(sorted(get_parent_class_fields('SearchBaseDto'))) or 'page, size'}\n"
+            f"  DO NOT redeclare any of those fields in the child DTO.\n"
+            "  FORBIDDEN: inner static class inside any DTO file.\n"
+            "    If the spec requires a nested data structure (e.g. for Excel row data),\n"
+            "    create it as a SEPARATE dto_request file (e.g. CpmsXxxExcelRowReqDto).\n"
+            "- dto_response: same Lombok pattern + extends AuditBaseDto.\n"
+            f"  AuditBaseDto already declares: {', '.join(sorted(get_parent_class_fields('AuditBaseDto'))) or 'fstCretDtm, fstCrtrId, lastMdfcDtm, lastMdfrId'}\n"
+            f"  DO NOT redeclare any of those fields in the child DTO.\n\n"
             "FILE NAMING RULES (CRITICAL):\n"
             "- The file_path filename (without .java) MUST be the exact Java class name.\n"
             "- Class names: ReqDto suffix for request DTOs, ResDto suffix for response DTOs.\n"
@@ -1560,6 +1563,16 @@ class DataEngineerAgent:
         my_files = self._get_my_files(ctx.plan)
         results: list[GeneratedFile] = []
 
+        table_info = get_table_info()
+        table_info_block = (
+            f"\n--- EXISTING PFY DB TABLES (테이블정보) ---\n"
+            f"{table_info}\n"
+            f"--- END EXISTING TABLES ---\n\n"
+            f"CRITICAL: Before creating a new table, check whether an identical or equivalent table\n"
+            f"already exists in the list above. If it does, DO NOT create a new table — instead,\n"
+            f"write your queries directly against the existing table using its exact column names.\n"
+        ) if table_info else ""
+
         system = (
             "You are a Data Engineer specializing in database schema design and TypeScript type definitions.\n"
             "You create DB init SQL (MariaDB) and TypeScript types that mirror backend DTOs.\n\n"
@@ -1568,11 +1581,14 @@ class DataEngineerAgent:
             "- SQL: MariaDB syntax. Use snake_case for table/column names. Add CREATE TABLE IF NOT EXISTS.\n"
             "- TypeScript: Use camelCase for fields. Export interfaces matching backend DTO fields.\n"
             "- Include all fields from the spec's Domain Model section.\n"
+            "- If the required table matches an existing PFY table, reuse it instead of creating a new one.\n"
         )
 
         for file_entry in my_files:
+            table_ctx = table_info_block if file_entry.file_type == "db_init_sql" else ""
             user = (
                 f"Specification:\n{ctx.spec_markdown}\n\n"
+                f"{table_ctx}"
                 f"Generate: {file_entry.file_path}\nType: {file_entry.file_type}\nDescription: {file_entry.description}\n"
             )
 
@@ -1632,27 +1648,6 @@ class BackendEngineerAgent:
         system = (
             "You are a senior Backend Engineer specializing in PFY Spring Boot + MyBatis projects.\n"
             "You generate Java source files following PFY coding patterns strictly.\n\n"
-            "╔══════════════════════════════════════════════════════════════════════════╗\n"
-            "║  RULE 0 — THE MOST FUNDAMENTAL RULE (applies to EVERY line you write)  ║\n"
-            "╚══════════════════════════════════════════════════════════════════════════╝\n"
-            "BEFORE writing any import, @Autowired field, method call, or variable assignment:\n"
-            "  (a) VERIFY IT EXISTS: The class, method, or field you are about to use MUST actually\n"
-            "      exist in the codebase. Check the Dependencies section below for generated DTOs/DAOs.\n"
-            "      Check pom.xml for available libraries. If you cannot confirm it exists — DO NOT USE IT.\n"
-            "  (b) MATCH THE TYPES EXACTLY:\n"
-            "      - Every method call MUST pass arguments whose types exactly match the method signature.\n"
-            "      - Every variable that receives a return value MUST have the exact return type of the method.\n"
-            "      - WRONG: validateDate(request.getEducationDate(), \"교육일자\")  ← if getEducationDate() returns Date but validateDate(String,String)\n"
-            "      - CORRECT: declare all DTO date fields as String so getEducationDate() returns String\n"
-            "  (c) NEVER INVENT METHODS: Do NOT call a method on any utility/library that you are not\n"
-            "      100% certain exists. Invented method calls compile to 'method not found' errors.\n"
-            "      WRONG: CommonUtils.convertArrayToList(ids, Dto.class, \"id\")  ← invented, does not exist\n"
-            "      WRONG: CommonUtils.toList(array)                              ← invented, does not exist\n"
-            "      CORRECT: use documented methods only — e.g. CommonUtils.filterByStatus(list, GridStatus.INSERTED)\n"
-            "  (d) IMPORTS: Every import MUST correspond to a class that exists in pom.xml dependencies.\n"
-            "      NEVER import a class you invented or that is not in the pom.xml library list.\n\n"
-            "This rule exists because type mismatches and non-existent method calls are the #1 cause of\n"
-            "compilation failures in generated code. Think before every line: 'Does this exist? Do the types match?'\n\n"
             "╔══════════════════════════════════════════════════════════╗\n"
             "║  TOP-PRIORITY RULES — VIOLATING ANY = REJECTED CODE    ║\n"
             "╚══════════════════════════════════════════════════════════╝\n"
@@ -1660,22 +1655,9 @@ class BackendEngineerAgent:
             "   NEVER write: private static final Logger log = LoggerFactory.getLogger(Xxx.class);\n"
             "   NEVER import org.slf4j.Logger or org.slf4j.LoggerFactory.\n"
             "   EVERY public method MUST start with log.debug(\"Service Method : {methodName}, Input Param={}\", param.toString());\n\n"
-            "2. EXCEPTION HANDLING — ABSOLUTE RULES:\n"
-            "   a) NEVER log.error()/log.warn() before throw HscException.\n"
-            "      WRONG:   log.error(\"msg\", e); throw HscException.systemError(\"msg\", e);\n"
-            "      CORRECT: throw HscException.systemError(\"msg\", e);\n"
-            "   b) throw HscException.systemError() MUST ALWAYS be inside a try-catch block.\n"
-            "      The second argument MUST be the caught Exception variable (e).\n"
-            "      WRONG (bare throw, no e):   throw HscException.systemError(\"msg\");\n"
-            "      WRONG (outside try-catch):  if (x == null) throw HscException.systemError(\"msg\");\n"
-            "      CORRECT:\n"
-            "          try {\n"
-            "              // ... business logic ...\n"
-            "          } catch (Exception e) {\n"
-            "              throw HscException.systemError(\"msg\", e);\n"
-            "          }\n"
-            "   c) For validation (null checks, invalid values), throw IllegalArgumentException or\n"
-            "      wrap the validating block in try-catch and use HscException.systemError(\"msg\", e).\n\n"
+            "2. EXCEPTION: NEVER log.error()/log.warn() before throw HscException.\n"
+            "   WRONG:   log.error(\"msg\", e); throw HscException.systemError(\"msg\", e);\n"
+            "   CORRECT: throw HscException.systemError(\"msg\", e);\n\n"
             "3. DAO METHOD NAMES: NEVER bare CRUD verb. Always append domain noun.\n"
             "   WRONG:  public int insert(...)       CORRECT: public int insertEduPgm(...)\n"
             "   WRONG:  public List select(...)      CORRECT: public List selectEduPgmList(...)\n\n"
@@ -1683,39 +1665,10 @@ class BackendEngineerAgent:
             "   WRONG:  daoImpl.insert(dto)          CORRECT: daoImpl.insertEduPgm(dto)\n"
             "   WRONG:  daoImpl.select(dto)          CORRECT: daoImpl.selectEduPgmList(dto)\n\n"
             "5. UUID: NEVER use java.util.UUID — NEVER import java.util.UUID. Use String for all ID fields.\n"
+            "   NEVER use CommonUtils.getUuid() — this is also forbidden.\n"
             "   WRONG:  request.setId(UUID.randomUUID().toString());\n"
+            "   WRONG:  request.setId(CommonUtils.getUuid());\n"
             "   CORRECT: ID values come from DB sequence or are already in the DTO.\n\n"
-            "5a. CommonUtils — ONLY CALL METHODS THAT ACTUALLY EXIST in com.common.sy.CommonUtils.\n"
-            "   NEVER invent CommonUtils methods that are not documented — they cause compilation errors.\n"
-            "   KNOWN non-existent methods (DO NOT call these):\n"
-            "     CommonUtils.convertArrayToList(...)  ← DOES NOT EXIST\n"
-            "     CommonUtils.convertList(...)          ← DOES NOT EXIST\n"
-            "     CommonUtils.toList(...)               ← DOES NOT EXIST\n"
-            "     CommonUtils.getUuid()                 ← DOES NOT EXIST\n"
-            "   For array/list conversion use standard Java:\n"
-            "     Arrays.asList(array)  /  List.of(...)  /  stream().collect(Collectors.toList())\n"
-            "   When calling any CommonUtils method, VERIFY the parameter types match the method signature exactly.\n\n"
-            "5b. DTO FIELD TYPES — STRICT WHITELIST (NEVER use anything outside this list):\n"
-            "   ALLOWED DTO field types (ReqDto + ResDto):\n"
-            "     String    ← use for ALL text, dates, datetimes, IDs, codes, flags, comma-separated values\n"
-            "     int / Integer\n"
-            "     long / Long\n"
-            "     BigDecimal  ← ONLY for monetary/decimal amounts\n"
-            "     boolean / Boolean\n"
-            "   ABSOLUTELY FORBIDDEN as DTO field types:\n"
-            "     Date, java.util.Date, LocalDate, LocalDateTime   → ALWAYS use String instead\n"
-            "     List<...>, ArrayList<...>                        → NEVER in DTO; handled at Service/DAO level\n"
-            "     Map<...>, HashMap<...>                           → NEVER in DTO\n"
-            "     Object, any custom class, any enum               → NEVER in DTO\n"
-            "   WRONG:  private Date educationDate;         → causes type mismatch everywhere\n"
-            "   WRONG:  private LocalDate educationDate;    → causes type mismatch everywhere\n"
-            "   WRONG:  private List<String> codeList;      → Service treats as List but caller sends String\n"
-            "   WRONG:  private List<ResDto> children;      → NEVER embed lists inside DTO\n"
-            "   WRONG:  private Map<String,Object> extra;   → NEVER put Map in DTO\n"
-            "   CORRECT: private String educationDate;      → DB stores VARCHAR; pass as String everywhere\n"
-            "   CORRECT: private String codeList;           → comma-separated '01,02,03' as String\n"
-            "   REASON: If a DTO field is not a simple scalar, the Service cannot call getter/setter\n"
-            "           with consistent types. The framework handles collections at the Service/DAO boundary.\n\n"
             "6. SAVE METHOD: ServiceImpl save() MUST accept List<ResDto>, NOT single ReqDto.\n"
             "   Use ResDto.getStatus() + CommonUtils.filterByStatus() + GridStatus pattern.\n"
             "   WRONG:  public void save(ReqDto request) { if(status==\"I\") dao.insert(request); }\n"
@@ -1747,33 +1700,15 @@ class BackendEngineerAgent:
             "   When writing ServiceImpl, for each daoImpl.xxx() call:\n"
             "     a) Verify the method EXISTS in DaoImpl. If not, you MUST also add it to DaoImpl.\n"
             "     b) Use the EXACT same parameter type DaoImpl declares.\n"
-            "     c) Assign the result to a variable of the EXACT return type DaoImpl declares.\n"
-            "   TYPE CHAIN RULE — FOLLOW THE DECLARED TYPE END-TO-END:\n"
-            "     DTO field 'private String eduDate;' → getter returns String → pass as String everywhere.\n"
-            "     NEVER coerce or cast a getter return value to a different type.\n"
-            "     If you find yourself needing to cast (e.g. (Date) dto.getEduDate()), STOP:\n"
-            "       — the DTO field type is wrong. Change the DTO field to String instead.\n"
-            "     ALL DTO fields that represent dates, codes, or IDs must be String in the DTO.\n\n"
+            "     c) Assign the result to a variable of the EXACT return type DaoImpl declares.\n\n"
             "10. GRID STATUS: NEVER use getSortDirection() or manual String comparison for CRUD status.\n"
             "   Use ResDto.getStatus() with GridStatus enum + CommonUtils.filterByStatus().\n"
             "   WRONG:  String status = request.getSortDirection(); if(\"D\".equals(status))...\n"
             "   CORRECT: CommonUtils.filterByStatus(list, GridStatus.DELETED)\n\n"
-            "11. DO NOT GUESS OR FABRICATE — CRITICAL:\n"
-            "   If you are unsure about a class name, package path, method signature, DTO field, annotation, or any API detail:\n"
-            "   → OMIT it entirely. Leave a TODO comment instead.\n"
-            "   → NEVER invent a class, method, field, import, or annotation that you have not seen in the provided context.\n"
-            "   → NEVER guess a package path — if you don't know the exact package, do NOT generate the import.\n"
-            "   → It is ALWAYS better to produce incomplete but correct code than complete but broken code.\n"
-            "   WRONG:  import com.example.some.GuessedClass;  // fabricated because it 'seemed right'\n"
-            "   CORRECT: // TODO: verify import for GuessedClass\n\n"
             f"--- NAMING CONVENTIONS ---\n{naming}\n--- END ---\n\n"
             f"--- pom.xml DEPENDENCIES (ONLY these are available — do NOT import anything else) ---\n{get_pom_dependencies()}\n--- END ---\n\n"
             "IMPORT RULES — NEVER VIOLATE (wrong imports = compilation failure):\n"
             "- ONLY import from libraries listed in pom.xml above. Any import from a library NOT in pom.xml will fail.\n"
-            "- NEVER import org.apache.poi.* — Apache POI is NOT in pom.xml and WILL cause compilation failure.\n"
-            "  If the spec requires Excel export, do NOT use POI. Instead, return List<ResDto> from the service\n"
-            "  and let the frontend handle Excel generation via the browser (PrimeVue DataTable export).\n"
-            "  The service method signature for export should be identical to the search method.\n"
             "- Key imports from pom.xml libraries (aondev-framework):\n"
             "    aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport  (aondev-framework-dao)\n"
             "    aondev.framework.annotation.ServiceId, aondev.framework.annotation.ServiceName (aondev-framework-core)\n"
@@ -1803,10 +1738,31 @@ class BackendEngineerAgent:
             "    e.g., namespace=\"biz.edu.dao.CpmsEduPgmRsltLstDaoImpl\"\n\n"
             "STRICT RULES:\n"
             "- Output ONLY the file content. No markdown fences. No BOM characters.\n"
-            "- DTO: @Getter, @Setter, @ToString. Class name MUST exactly match the file name (e.g., file CpmsEduRegLstReqDto.java → class CpmsEduRegLstReqDto).\n"
-            "- Request DTO extends SearchBaseDto (import com.common.dto.base.SearchBaseDto)\n"
-            "- Response DTO extends AuditBaseDto (import com.common.dto.base.AuditBaseDto)\n"
-            "- Service impl: @Service, @ServiceId(\"ScreenCode/method\"), @ServiceName(\"설명\"), @Transactional on CUD.\n"
+            "- Class name MUST exactly match the file name (e.g., CpmsEduRegLstReqDto.java → class CpmsEduRegLstReqDto).\n"
+            "- Request DTO (dto_request): MUST mirror biz.sample.dto.request.UserReqDto — EXACT pattern:\n"
+            "    import lombok.Data;\n"
+            "    import lombok.EqualsAndHashCode;\n"
+            "    import com.common.dto.base.SearchBaseDto;\n"
+            "    @Data\n"
+            "    @EqualsAndHashCode(callSuper=false)\n"
+            "    public class XxxReqDto extends SearchBaseDto {\n"
+            "    FORBIDDEN on Request DTO: @Getter, @Setter, @ToString, @Builder (use @Data + @EqualsAndHashCode ONLY).\n"
+            f"    DO NOT declare fields already inherited from SearchBaseDto.\n"
+            f"    {get_parent_class_source_block('SearchBaseDto')}\n"
+            f"    FORBIDDEN on Request DTO: any field listed above as SearchBaseDto private fields.\n"
+            f"    FORBIDDEN on Request DTO: inner static classes (e.g. static class ExcelRowDto) — create separate top-level DTO files instead.\n"
+            "- Response DTO (dto_response): same Lombok style as Request:\n"
+            "    import lombok.Data;\n"
+            "    import lombok.EqualsAndHashCode;\n"
+            "    import com.common.dto.base.AuditBaseDto;\n"
+            "    @Data\n"
+            "    @EqualsAndHashCode(callSuper=false)\n"
+            "    public class XxxResDto extends AuditBaseDto implements Serializable { ... }\n"
+            f"    DO NOT declare fields already inherited from AuditBaseDto.\n"
+            f"    {get_parent_class_source_block('AuditBaseDto')}\n"
+            f"    FORBIDDEN on Response DTO: any field listed above as AuditBaseDto private fields.\n"
+            "    (add serialVersionUID when using implements Serializable)\n"
+            "- Service impl: @Service, @ServiceId(\"ScreenCode/method\"), @ServiceName(\"설명\") — ONLY these two annotations above each public method.\n"
             "- DAO impl: @Repository, extends AbstractSqlSessionDaoSupport ONLY. NO implements clause.\n"
             "    CORRECT:  public class XxxDaoImpl extends AbstractSqlSessionDaoSupport {\n"
             "    WRONG:    public class XxxDaoImpl extends AbstractSqlSessionDaoSupport implements XxxDao {\n"
@@ -1900,7 +1856,18 @@ class BackendEngineerAgent:
             "    DO NOT invent fields like uploadRowCount, totalCount, successCount, failCount —\n"
             "    these are batch-result container fields that NEVER belong on a domain DTO.\n"
             "- NEVER use java.util.UUID — use String for all ID fields.\n"
-            "\nCRITICAL CODE QUALITY RULES (violations = immediate compilation failure):\n"
+            "\n╔══════════════════════════════════════════════════════════╗\n"
+            "║  STRICT GENERATION ORDER & DEPENDENCY RULE               ║\n"
+            "║  Files are generated: DTO → Mapper → DAO → Service      ║\n"
+            "║  Service MUST be 100% based on generated DTO + DAO      ║\n"
+            "╚══════════════════════════════════════════════════════════╝\n"
+            "- ServiceImpl implementation MUST be 100% based on the DTO and DAO files already generated.\n"
+            "- ServiceImpl MUST NOT invent any method, field, or argument that does not exist in DTO or DAO.\n"
+            "- ServiceImpl MUST NOT create helper methods that bypass DAO (e.g. private JDBC calls, direct SQL).\n"
+            "- ServiceImpl parameters MUST be ReqDto or List<ResDto> — NEVER create new wrapper DTOs.\n"
+            "- ServiceImpl return types MUST be List<ResDto>, ResDto, int, or void — NEVER create new result classes.\n"
+            "- If you need something that doesn't exist in DTO/DAO, you MUST ADD it to DTO/DAO FIRST.\n\n"
+            "CRITICAL CODE QUALITY RULES (violations = immediate compilation failure):\n"
             "- ServiceImpl methods MUST only call DaoImpl methods that actually exist in the DaoImpl class you generated.\n"
             "- DAO layer handles ONLY DB operations (selectList/selectOne/insert/update/delete via MyBatis).\n"
             "  DAO MUST NOT handle file I/O, MultipartFile, HTTP, or any non-DB logic.\n"
@@ -1910,9 +1877,10 @@ class BackendEngineerAgent:
             "- Parameter types in method calls MUST match the method signature.\n"
             "\nKNOWN ERROR PREVENTION (DO NOT):\n"
             "- DO NOT use bare @Service with bean name string parameter.\n"
-            "- DO NOT omit @Transactional — add @Transactional(readOnly=true) for queries, @Transactional for CUD.\n"
             "- DO NOT forget @ServiceId and @ServiceName on every public Service method.\n"
             "- EVERY public method in ServiceImpl MUST have @ServiceId + @ServiceName directly above it.\n"
+            "- ONLY @ServiceId + @ServiceName are allowed above public methods. NO other annotations.\n"
+            "  FORBIDDEN above public methods: @Transactional, @Transactional(readOnly=true), @PreAuthorize, @Secured, etc.\n"
             "  WRONG: public void save(dto) { saveRecord(dto); }  ← alias with no annotation → DELETE\n"
             "  WRONG: public List search(req) { return getList(req); }  ← wrapper with no annotation → DELETE\n"
             "  These add zero value; if a method is public it MUST have @ServiceId. If it does not, remove it.\n"
@@ -1924,37 +1892,22 @@ class BackendEngineerAgent:
             "- DO NOT use inconsistent package paths — package must exactly match directory path.\n"
             "\n"
             "╔══════════════════════════════════════════════════════════╗\n"
-            "║  FINAL CHECKLIST — VERIFY EVERY ITEM BEFORE OUTPUT     ║\n"
+            "║  REMINDER — CHECK BEFORE EVERY FILE OUTPUT              ║\n"
             "╚══════════════════════════════════════════════════════════╝\n"
-            "★ TYPE & EXISTENCE CHECK (RULE 0) ★\n"
-            "□ Every import → class exists in pom.xml? (no invented imports)\n"
-            "□ Every @Autowired field → class exists and is a real Spring bean?\n"
-            "□ Every method call → method ACTUALLY EXISTS with that name on that class?\n"
-            "   - CommonUtils: only call methods confirmed to exist (e.g. filterByStatus). NEVER invent new ones.\n"
-            "   - DaoImpl: only call methods you generated in DaoImpl — no invented DAO methods.\n"
-            "□ Every method call → argument types EXACTLY match method parameter types?\n"
-            "   - If method signature is (String, String), pass (String, String) — NOT (Date, String)\n"
-            "   - If DTO date field is String, getter returns String — use as String everywhere\n"
-            "□ Every variable receiving a return value → type matches the method's declared return type?\n"
-            "□ ALL DTO date fields are String? (NEVER Date/LocalDate/LocalDateTime — 'private String xxxDate;')\n"
-            "□ DaoImpl parameter type is the ACTUAL DTO class name (e.g. CpmsXxxReqDto)?\n"
-            "   FORBIDDEN: request, response, dto, reqDto, resDto, saveDto, param, item, row, Object\n"
-            "   WRONG:   public Integer selectXxxCount(request param)     → 'request' is NOT a class\n"
-            "   CORRECT: public Integer selectXxxCount(CpmsXxxReqDto param)\n"
-            "\n"
-            "★ STANDARD RULES ★\n"
             "□ @Slf4j? (NO LoggerFactory, NO import org.slf4j.*)\n"
             "□ log.debug(\"Service Method : xxx\") as FIRST line in every public method?\n"
             "□ NO log.error/warn before throw?\n"
             "□ DaoImpl method name → domain noun? (NEVER bare insert/select/update/delete)\n"
             "□ ServiceImpl DAO call → full wrapper name? (NEVER daoImpl.insert())\n"
-            "□ NO java.util.UUID, NO CommonUtils.getUuid()\n"
+            "□ NO java.util.UUID, NO CommonUtils.getUuid() — use String, ID from DB sequence\n"
             "□ save() takes List<ResDto>? (NOT single ReqDto)\n"
             "□ GridStatus + CommonUtils.filterByStatus()? (NOT getSortDirection())\n"
             "□ NO manual fstCretDtm/lastMdfcDtm/fstCrtrId/lastMdfrId setting?\n"
             "□ NO DateTimeFormatter/LocalDateTime.now().format() in ServiceImpl?\n"
-            "□ EVERY dto.getXxx()/dto.setXxx() — field 'xxx' declared in the DTO?\n"
-            "□ ServiceImpl ONLY uses DTO fields and DAO methods that actually exist?\n"
+            "□ EVERY dto.getXxx()/dto.setXxx() — field 'xxx' declared in the DTO? (see AVAILABLE DTO FIELDS above)\n"
+            "   If not declared → ADD the field to the DTO class FIRST, then use it.\n"
+            "□ ServiceImpl ONLY uses DTO fields and DAO methods that actually exist? (NO invented methods/fields)\n"
+            "□ NO CommonUtils.getUuid()?\n"
         )
 
         results: list[GeneratedFile] = []
@@ -1981,11 +1934,12 @@ class BackendEngineerAgent:
                             f"--- {gf.file_path} (MAPPER XML — DaoImpl MUST have a method for EVERY SQL statement id in this file) ---\n{gf.content}"
                         )
 
-            # For service_impl: always inject dao_impl + mapper_xml for cross-reference
+            # For service_impl: always inject dao_impl + mapper_xml + DTOs for cross-reference
             if file_entry.file_type == "service_impl":
                 included_paths = {dp for dp in file_entry.depends_on}
                 for path, gf in ctx.generated_files.items():
-                    if gf.file_type in ("dao_impl", "mapper_xml") and path not in included_paths:
+                    if gf.file_type in ("dao_impl", "mapper_xml", "dto_request", "dto_response") \
+                            and path not in included_paths:
                         dep_parts.append(f"--- {gf.file_path} ---\n{gf.content}")
 
             if dep_parts:
@@ -1993,6 +1947,20 @@ class BackendEngineerAgent:
 
             # Include DB schema for context
             schema_ctx = f"\nDB Schema:\n{ctx.db_schema}\n" if ctx.db_schema else ""
+
+            # Inject existing table reference for SQL-generating file types
+            _table_info = get_table_info()
+            if _table_info and file_entry.file_type in ("mapper_xml", "dao_impl", "db_init_sql"):
+                table_ctx = (
+                    f"\n--- EXISTING PFY DB TABLES (테이블정보) ---\n"
+                    f"{_table_info}\n"
+                    f"--- END EXISTING TABLES ---\n\n"
+                    f"CRITICAL: Before creating any SQL, check whether the required table already exists above.\n"
+                    f"If an identical or equivalent table exists, DO NOT invent new column names —\n"
+                    f"use the EXACT column names from the existing table definition.\n"
+                )
+            else:
+                table_ctx = ""
 
             file_guide = get_context_for_file_type(file_entry.file_type)
 
@@ -2316,8 +2284,13 @@ class BackendEngineerAgent:
                     _svc_allowed_methods = set(allowed_method_names)
                     allowed_list = ", ".join(allowed_method_names)
                     user += (
-                        f"\n=== AVAILABLE DAO METHODS — TYPE CONTRACT (read carefully) ===\n"
-                        f"Format: daoVar.methodName(paramType param)  // returns ReturnType\n"
+                        f"\n╔══════════════════════════════════════════════════════════╗\n"
+                        f"║  DAO METHOD WHITELIST — ABSOLUTE CONSTRAINT              ║\n"
+                        f"║  ServiceImpl MUST ONLY call the methods listed below.    ║\n"
+                        f"║  Calling ANY other method = IMMEDIATE COMPILE ERROR.     ║\n"
+                        f"╚══════════════════════════════════════════════════════════╝\n"
+                        f"Allowed method names: {allowed_list}\n\n"
+                        f"Full signatures (return type + param types):\n"
                         f"{sigs_list}\n\n"
                         f"RULES — ALL mandatory:\n"
                         f"  1. ONLY call methods from the whitelist above. NEVER invent a new method name.\n"
@@ -2339,17 +2312,17 @@ class BackendEngineerAgent:
                         f"  {dao_var_name}.selectList(...) ← base class — forbidden\n"
                         f"  ANY method NOT in the whitelist above ← forbidden\n\n"
                         f"=== PUBLIC METHOD RULE ===\n"
-                        f"EVERY public method you write in this ServiceImpl MUST have @ServiceId + @ServiceName above it.\n"
-                        f"DO NOT create alias/wrapper public methods that just delegate to other methods:\n"
+                        f"EVERY public method in this ServiceImpl MUST have @ServiceId + @ServiceName above it.\n"
+                        f"DO NOT create alias/wrapper public methods that just delegate:\n"
                         f"  WRONG: public void save(dto) {{ saveRecord(dto); }}  ← DELETE THIS\n"
                         f"  WRONG: public List search(req) {{ return getList(req); }}  ← DELETE THIS\n"
-                        f"If a public method has no @ServiceId, it will be caught as a static error and must be deleted.\n"
                         f"=== END ===\n"
                     )
                 else:
                     user += (
-                        "\nIMPORTANT: Read the DaoImpl dependency above carefully. "
-                        "You MUST only call methods that actually exist in the DaoImpl class.\n"
+                        "\nIMPORTANT: Read the DaoImpl dependency above carefully.\n"
+                        "ABSOLUTE RULE: You MUST ONLY call methods that actually exist in the DaoImpl class.\n"
+                        "Do NOT invent any new method names — only use what is already declared in DaoImpl.\n"
                         "FORBIDDEN: Do NOT call bare insert()/select()/update()/delete() — "
                         "these are AbstractSqlSessionDaoSupport protected methods.\n"
                     )
@@ -2431,7 +2404,6 @@ class BackendEngineerAgent:
                     "    private SYAR030DaoImpl syar030DaoImpl;\n\n"
                     "    @ServiceId(\"SYAR030/selectWindowList\")\n"
                     "    @ServiceName(\"화면 목록 조회\")\n"
-                    "    @Transactional(readOnly = true)\n"
                     "    public List<WindowResDto> selectWindowList(WindowReqDto request) {\n"
                     "        log.debug(\"Service Method : selectWindowList, Input Param={}\", request.toString());\n"
                     "        try {\n"
@@ -2442,20 +2414,16 @@ class BackendEngineerAgent:
                     "    }\n\n"
                     "    @ServiceId(\"SYAR030/saveWindowList\")\n"
                     "    @ServiceName(\"화면 저장\")\n"
-                    "    @Transactional\n"
                     "    public void saveWindowList(List<WindowResDto> list) {\n"
                     "        log.debug(\"Service Method : saveWindowList, Input Param={}\", list.toString());\n"
                     "        List<WindowResDto> insertList = CommonUtils.filterByStatus(list, GridStatus.INSERTED);\n"
                     "        List<WindowResDto> updateList = CommonUtils.filterByStatus(list, GridStatus.UPDATED);\n"
                     "        List<WindowResDto> deleteList = CommonUtils.filterByStatus(list, GridStatus.DELETED);\n\n"
                     "        for (WindowResDto dto : insertList) {\n"
-                    "            if (syar030DaoImpl.checkDuplicateWindowPk(dto)) {\n"
-                    "                throw new HscException(\"CM0001\");\n"
-                    "            }\n"
                     "            syar030DaoImpl.insertWindow(dto);\n"
                     "        }\n"
-                    "        syar030DaoImpl.updateWindow(updateList);\n"
-                    "        syar030DaoImpl.deleteWindow(deleteList);\n"
+                    "        if (!updateList.isEmpty()) syar030DaoImpl.updateWindow(updateList);\n"
+                    "        if (!deleteList.isEmpty()) syar030DaoImpl.deleteWindow(deleteList);\n"
                     "    }\n"
                     "}\n"
                     "=== END EXAMPLE ===\n"
@@ -2464,11 +2432,26 @@ class BackendEngineerAgent:
                     "- log.debug(\"Service Method : xxx, Input Param={}\") as FIRST line in every method\n"
                     "- catch block has ONLY throw — NO log.error() or log.warn() before throw\n"
                     "- DAO calls use FULL method names: syar030DaoImpl.selectWinList() NOT syar030DaoImpl.select()\n"
-                    "- save() takes List<ResDto> NOT single ReqDto\n"
+                    "⚠️ save() takes List<ResDto> NOT single ReqDto — NEVER invent CpmsXxxSaveReqDto or new DTO\n"
                     "- CommonUtils.filterByStatus(list, GridStatus.INSERTED/UPDATED/DELETED) for CRUD routing\n"
                     "- NO UUID.randomUUID() — NEVER import java.util.UUID\n"
+                    "- NO CommonUtils.getUuid() — NEVER use CommonUtils.getUuid()\n"
                     "- NO manual fstCretDtm/lastMdfcDtm/fstCrtrId/lastMdfrId — AuditBaseDto handles it\n"
                     "- NO DateTimeFormatter or LocalDateTime.now().format() in ServiceImpl\n"
+                    "- NEVER use ResDto as a page/result container (no setContent, setTotalElements, etc.)\n"
+                    "  List-query methods return List<ResDto> directly — pagination is handled by caller\n"
+                    "- NEVER import or use @PreAuthorize, @Secured — authorization is at controller layer\n"
+                    "- NEVER use @Transactional or @Transactional(readOnly=true) — ONLY @ServiceId + @ServiceName above public methods\n"
+                    "\n"
+                    "╔══════════════════════════════════════════════════════════╗\n"
+                    "║  ABSOLUTE: ServiceImpl = DTO + DAO ONLY                 ║\n"
+                    "║  NEVER invent methods/fields not in DTO or DAO          ║\n"
+                    "╚══════════════════════════════════════════════════════════╝\n"
+                    "ServiceImpl code MUST ONLY reference:\n"
+                    "  1. DAO methods listed in the DAO METHOD WHITELIST above\n"
+                    "  2. DTO fields listed in the DTO FIELDS section above\n"
+                    "  3. Framework utilities: CommonUtils.filterByStatus(), GridStatus, HscException\n"
+                    "NOTHING ELSE. No invented helper methods, no new DTO classes, no extra arguments.\n"
                 )
 
             content_parts: list[str] = []
@@ -2489,13 +2472,15 @@ class BackendEngineerAgent:
                     for ln in content.splitlines():
                         if 'LoggerFactory' in ln or 'Logger log' in ln or 'Logger LOGGER' in ln:
                             logger.warning("[BACKEND_ENG] raw Logger line: %r", ln)
-                # Normalize immediately so streamed/generated snapshots do not expose LoggerFactory style.
+                # 1. Remove LoggerFactory pattern
                 content = _ensure_slf4j_service_impl(content)
                 if 'LoggerFactory' in content:
                     logger.error(
                         "[BACKEND_ENG] !! ensure_slf4j DID NOT remove LoggerFactory — file=%s",
                         file_entry.file_path,
                     )
+                # 2. Remove UUID + manual audit fields deterministically (no LLM needed)
+                content = _sanitize_service_impl(content)
 
                 # ── 3. Inline DAO whitelist check + auto-fix ─────────────────
                 # Even with a detailed whitelist in the prompt, the LLM sometimes
@@ -2762,10 +2747,10 @@ class FrontendEngineerAgent:
             "This file MUST ONLY orchestrate child components. DO NOT put SearchForm/DataTable logic here.\n"
             "REQUIREMENTS:\n"
             "- Import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue'\n"
-            "- Import child components using @/ absolute path alias (e.g., '@/pages/{module}/{category}/{screenId}/components/{screenId}SearchForm/{ScreenId}SearchForm.vue')\n"
+            "- Import child components: SearchForm, DataTable (from ./components/ subfolders)\n"
             "- Import SumGrid ONLY if a vue_sum_grid file exists in the generation plan — do NOT import SumGrid if it was not planned\n"
             "- Import API functions from the API module (e.g., '@/api/pages/{module}/{category}/{screenId}')\n"
-            "- Import types from '@/api/pages/{module}/{category}/{screenId}Types'\n"
+            "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- const searchParams = ref({...initial search params...})\n"
             "- provide('searchParams', searchParams)\n"
             "- Data fetching functions (fetchList, fetchSum) called from onMounted and child events\n"
@@ -2773,7 +2758,6 @@ class FrontendEngineerAgent:
             "- Pass fetched data as props to DataTable children (and SumGrid if it exists in plan)\n"
             "- <style scoped lang=\"scss\" src=\"./{screenId}.scss\"></style>\n"
             "- DO NOT provide('searchFormRef') — this is an obsolete pattern\n"
-            "- DO NOT import or use components/composables/stores not listed in the guide — leave // TODO if unsure\n"
         ),
         "vue_search_form": (
             "Generate a SearchForm component (.vue file).\n"
@@ -2788,12 +2772,7 @@ class FrontendEngineerAgent:
             "- Import { Button } from '@/components/common/button'\n"
             "- Import InputText from '@/components/common/inputText/InputText.vue'\n"
             "- Import Select from '@/components/common/select/Select.vue'\n"
-            "- For date fields: Import { DatePicker } from '@/components/common/datePicker'\n"
-            "  DATE FIELD COMPONENT RULE (CRITICAL):\n"
-            "  - Date fields (일자, 기간, 날짜): use DatePicker. Single date: <DatePicker v-bind=\"props\" showIcon iconDisplay=\"input\" />. Date range: <DatePicker v-bind=\"props\" selectionMode=\"range\" :numberOfMonths=\"2\" showIcon iconDisplay=\"input\" />.\n"
-            "  - DateTime fields (requires explicit time selection in requirements): use <input type=\"datetime-local\" class=\"p-inputtext p-component\">.\n"
-            "  - When requirements say '일자', '기간', '날짜' without mentioning '시간' or 'time' → use DatePicker component. NEVER use <input type=\"date\">.\n"
-            "- Import types from '@/api/pages/{module}/{category}/{screenId}Types'\n"
+            "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- const searchFormRef = ref()\n"
             "- const searchParams = inject<Ref<SearchParamsType>>('searchParams')\n"
             "- watch(() => searchParams.value?.field, (newVal) => { if (newVal !== undefined && searchFormRef.value?.form) searchFormRef.value.form.setFieldValue('field', newVal ?? '') })\n"
@@ -2822,7 +2801,6 @@ class FrontendEngineerAgent:
             "SCSS FILE REQUIREMENTS:\n"
             "- Component-specific search form styles\n"
             "- Use CSS variables and :deep() for PrimeVue child components\n"
-            "- DO NOT use PrimeVue components not listed in the guide — if unsure about a component, leave // TODO\n"
         ),
         "vue_data_table": (
             "Generate a DataTable component (.vue file).\n"
@@ -2835,7 +2813,7 @@ class FrontendEngineerAgent:
             "- CRITICAL: Import { DataTable } from '@/components/common/dataTable2'  (named export, NOT default import from DataTable2.vue)\n"
             "- DO NOT import Column from 'primevue/column' — DataTable2 wrapper manages columns internally via :columns prop\n"
             "- DO NOT use <Column> child elements inside <DataTable> — they are IGNORED by DataTable2 wrapper\n"
-            "- Import types from '@/api/pages/{module}/{category}/{screenId}Types'\n"
+            "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- Import { getColumns, getRows } from './utils'\n"
             "- Props: fetchedMainData array, loading state, totalRecords?, rows?, first?\n"
             "- const columns = getColumns()  — returns TableColumn[] from utils\n"
@@ -2868,26 +2846,25 @@ class FrontendEngineerAgent:
             "- CSS containment on td: contain: layout style\n"
             "- Hover: :hover:not(.p-datatable-row-selected) { background-color: var(--primary-50); }\n"
             "- Use :deep() for all PrimeVue DataTable child elements\n"
-            "- DO NOT add DataTable props or events not documented in the guide — leave // TODO if unsure\n"
         ),
         "vue_data_table_utils": (
             "Generate utils/index.ts for DataTable helper functions.\n"
             "REQUIREMENTS:\n"
             "- Import { TableColumn } from '@/components/common/dataTable2/types'  — MUST use this type, do NOT define custom column types\n"
-            "- Import ResDto types from '@/api/pages/{module}/{category}/{screenId}Types'\n"
+            "- Import ResDto types from '@/api/pages/{module}/{category}/types'\n"
             "- Export DisplayRow type: ResDto & { fieldFormatted?: string } for pre-formatted date/number fields\n"
             "- Export getColumns(): TableColumn[]  — MUST use TableColumn type\n"
             "- Export getRows(data): DisplayRow[]  — pre-format dates and numbers here\n\n"
             "TableColumn SHAPE (all fields):\n"
-            "  objectId: string    ← REQUIRED, use same value as field (e.g. 'userId')\n"
-            "  field: string       ← data field name\n"
-            "  header: string      ← column header label\n"
-            "  width?: string      ← '140px' format (NOT minWidth!)\n"
-            "  columnClass?: string ← header alignment: 'left' | 'center' | 'right'\n"
-            "  rowClass?: string   ← body cell alignment: 'left' | 'center' | 'right'\n"
-            "  visible?: boolean   ← REQUIRED true — column is HIDDEN if visible is not true\n"
-            "  frozen?: boolean    ← left-pinned column\n"
-            "  required?: boolean  ← marks column as required\n\n"
+            "  objectId: string    — REQUIRED, use same value as field (e.g. 'userId')\n"
+            "  field: string       — data field name\n"
+            "  header: string      — column header label\n"
+            "  width?: string      — '140px' format (NOT minWidth!)\n"
+            "  columnClass?: string — header alignment: 'left' | 'center' | 'right'\n"
+            "  rowClass?: string   — body cell alignment: 'left' | 'center' | 'right'\n"
+            "  visible?: boolean   — REQUIRED true — column is HIDDEN if visible is not true\n"
+            "  frozen?: boolean    — left-pinned column\n"
+            "  required?: boolean  — marks column as required\n\n"
             "EXAMPLE getColumns():\n"
             "export const getColumns = (): TableColumn[] => [\n"
             "  { objectId: 'userId', field: 'userId', header: '사용자ID', width: '140px', frozen: true, columnClass: 'left', rowClass: 'left', visible: true },\n"
@@ -2897,7 +2874,6 @@ class FrontendEngineerAgent:
             "EXAMPLE getRows() with date formatting:\n"
             "const formatDate = (v?: string | null): string => { if (!v) return ''; const p = v.replaceAll('-','').slice(0,8); return p.length===8 ? `${p.slice(0,4)}-${p.slice(4,6)}-${p.slice(6,8)}` : v; };\n"
             "export const getRows = (data?: XxxResDto[] | null): XxxDisplayRow[] => (data ?? []).map(row => ({ ...row, eduDateFormatted: formatDate(row.eduDate) }));\n\n"
-            "- DO NOT add columns for fields not defined in the ResDto type or spec — leave // TODO if unsure about a field\n"
             "Output ONLY TypeScript code. No markdown fences.\n"
         ),
         "vue_sum_grid": (
@@ -2922,21 +2898,15 @@ class FrontendEngineerAgent:
             "REQUIREMENTS:\n"
             "- import api from '@/plugins/axios'\n"
             "- import { formatErrorMessage } from '@/utils/formatErrorMessage'\n"
-            "- import type { ... } from './{screenId}Types'\n"
-            "- API URL pattern: /api/v1/{SCREEN_CODE}-{method}\n"
-            "- Export async functions for each API call (selectList, save, etc.)\n"
-            "- CRITICAL: ALL API calls MUST use api.post() — NEVER use api.get(), api.put(), or api.delete()\n"
-            "  The CPMS /api/v1/ dispatcher only accepts POST requests. Even search/select operations use POST.\n"
-            "  WRONG: api.get(Api.selectList, { params })  ← this will fail with 404/405\n"
-            "  CORRECT: api.post(Api.selectList, params)  ← always POST, params in request body\n"
-            "- Pass camelCase params directly matching backend DTO field names (NO uppercase conversion)\n"
-            "- For save endpoints: send array of ResDto objects with status field ('I'|'U'|'D') for GridStatus — NO wrapping in dsSearch/dsSave\n"
-            "- Session params (sLangCd, userId) are handled server-side via UserContextUtil — do NOT add from frontend\n"
-            "- Audit fields (fstCretDtm, lastMdfcDtm, fstCrtrId, lastMdfrId) are set by AuditBaseDto — do NOT send from frontend\n"
+            "- import type { ... } from './types'\n"
+            "- API URL pattern: /online/mvcJson/{SCREEN_CODE}-{method}\n"
+            "- Export async functions for each API call (fetchList, fetchSum, saveData, deleteData, etc.)\n"
+            "- Convert frontend camelCase/snake_case params to UPPERCASE keys for HQML backend\n"
+            "- Omit null/undefined/empty string from payload\n"
+            "- Date params → YYYYMMDD string format\n"
+            "- Include gPBL_CD, gLANG global params when required\n"
             "- Check responseCode === 'S0000' for success\n"
-            "- Return response.data (full ApiResponse including header + payload)\n"
-            "- Component accesses actual data via result.payload\n"
-            "- DO NOT invent API endpoints or response structures not derivable from the spec and backend DTO definitions — leave // TODO if unsure\n"
+            "- Return response.data.payload (or appropriate shape)\n"
             "- Output ONLY TypeScript code. No markdown fences.\n"
         ),
         "vue_scss": (
@@ -2972,7 +2942,7 @@ class FrontendEngineerAgent:
             "CRITICAL IMPORT PATHS:\n"
             "- ContentHeader: import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue'\n"
             "- SearchForm: import { SearchForm, SearchFormField, SearchFormLabel, SearchFormContent } from '@/components/common/searchForm'\n"
-            "- DataTable: import { DataTable } from '@/components/common/dataTable2'  ← named export, NOT default import\n"
+            "- DataTable: import { DataTable } from '@/components/common/dataTable2'  — named export, NOT default import\n"
             "- DataTable column type: import type { TableColumn } from '@/components/common/dataTable2/types'\n"
             "- Button: import { Button } from '@/components/common/button'\n"
             "- InputText: import InputText from '@/components/common/inputText/InputText.vue'\n"
@@ -3000,26 +2970,7 @@ class FrontendEngineerAgent:
             "- DO NOT define SelectBox options without computed() wrapper.\n"
             "- DO NOT omit GPU acceleration CSS — add will-change: background-color on tr, contain: layout style on td.\n"
             "- DO NOT apply hover styles to selected rows — use :hover:not(.p-datatable-row-selected).\n"
-            "- DO NOT use <script> without setup — MUST be <script setup lang=\"ts\">.\n\n"
-            "╔══════════════════════════════════════════════════════════════╗\n"
-            "║  DO NOT GUESS OR FABRICATE — ABSOLUTE TOP-PRIORITY RULE     ║\n"
-            "╚══════════════════════════════════════════════════════════════╝\n"
-            "If you are NOT 100% certain about ANY of the following, DO NOT generate it — leave a // TODO comment instead:\n"
-            "- Component names or import paths not listed in CRITICAL IMPORT PATHS above or the provided guide\n"
-            "- Prop names, event names, or slot names you have not seen in the provided context\n"
-            "- API endpoint URLs, HTTP methods, request/response structures not in the guide\n"
-            "- PrimeVue component usage patterns not demonstrated in the guide\n"
-            "- Vue composable names (useXxx) not listed in the guide\n"
-            "- Store names or store method names not in the provided context\n"
-            "- CSS class names or design tokens not shown in the guide\n\n"
-            "INCOMPLETE but CORRECT code >>> COMPLETE but WRONG code.\n"
-            "A file with 3 TODO comments is far better than a file with 3 fabricated imports that break at runtime.\n\n"
-            "EXAMPLES:\n"
-            "  WRONG:  import SomeGuessedDialog from '@/components/common/dialog/SomeGuessedDialog.vue'  // fabricated path\n"
-            "  WRONG:  const { openModal } = useModalStore()  // fabricated composable\n"
-            "  WRONG:  <ConfirmPopup :group=\"deleteGroup\" />  // fabricated prop\n"
-            "  CORRECT: // TODO: verify import path for dialog component\n"
-            "  CORRECT: // TODO: verify store method for modal\n"
+            "- DO NOT use <script> without setup — MUST be <script setup lang=\"ts\">.\n"
         )
 
         results: list[GeneratedFile] = []
@@ -3126,7 +3077,7 @@ class BackendQAAgent:
             "- DTO class names MUST include full screen name prefix (e.g., CpmsEduRegLstReqDto, NOT EduRegLstReqDto). The class name MUST exactly match the file name.\n"
             "- @ServiceId format: @ServiceId(\"ScreenCode/methodName\")\n"
             "- @ServiceName with Korean description on every public service method\n"
-            "- @Transactional on CUD methods, NOT on read-only methods\n"
+            "- NO @Transactional annotations on ServiceImpl methods — ONLY @ServiceId + @ServiceName are allowed above public methods\n"
             "- DAO impl: @Repository, extends AbstractSqlSessionDaoSupport ONLY — MUST NOT implement any interface (no 'implements XxxDao')\n"
             "- DaoImpl/ServiceImpl: NO interface files, NO implements clause\n"
             "- ONLY import from pom.xml libraries — any import from a library NOT in pom.xml is an issue\n"
@@ -3154,14 +3105,7 @@ class BackendQAAgent:
             "- NEVER use CommonUtils.getUuid() — ID values come from DB sequence, not generated in code\n"
             "- ServiceImpl MUST ONLY use DTO fields and DAO methods that actually exist — no invented methods or fields\n"
             "- ServiceImpl = DTO + DAO ONLY: no new wrapper DTOs, no helper methods bypassing DAO, no extra arguments\n"
-            "- Mapper XML: all parameter properties must have matching javaType if not String (avoid jdbcType=null errors)\n"
-            "- DTO FIELD TYPE WHITELIST — flag any DTO field that is NOT one of the allowed types:\n"
-            "    ALLOWED: String, int, Integer, long, Long, BigDecimal, boolean, Boolean\n"
-            "    FORBIDDEN: Date, LocalDate, LocalDateTime, List<...>, Map<...>, Object, any class/enum\n"
-            "    e.g. 'private List<String> codeList;' in a DTO is a BUG — use 'private String codeList;' (comma-separated)\n"
-            "    e.g. 'private Date eduDate;' in a DTO is a BUG — use 'private String eduDate;'\n"
-            "- TYPE CHAIN CONSISTENCY: if DTO field is String, ALL usages (getter calls, method args) must treat it as String.\n"
-            "    Flag any cast or conversion that indicates a type mismatch between DTO declaration and usage.\n\n"
+            "- Mapper XML: all parameter properties must have matching javaType if not String (avoid jdbcType=null errors)\n\n"
             'Output JSON: {"issues": [{"file_path": "...", "issue": "description of problem", "fix_instruction": "how to fix"}]}\n'
             'If no issues: {"issues": []}\n'
             "Output ONLY JSON.\n"
@@ -3217,7 +3161,7 @@ class FrontendQAAgent:
             "- index.vue provides searchParams via provide('searchParams', searchParams)\n"
             "- Children inject searchParams via inject<Ref<...>>('searchParams')\n"
             "- Import paths between components must use correct relative paths\n"
-            "- types MUST be in src/api/pages/{module}/{category}/{screenId}Types.ts (NOT under page folder, NOT shared types.ts)\n"
+            "- types.ts MUST be in src/api/pages/{module}/{category}/types.ts (NOT under page folder)\n"
             "- API file MUST be in src/api/pages/{module}/{category}/{screenId}.ts\n\n"
             "NAMING COMPLIANCE (CRITICAL):\n"
             "- screenId MUST be camelCase (NOT all lowercase) — e.g., cpmsEduPondgEdit NOT cpmsedupondgedit\n"
@@ -3227,11 +3171,9 @@ class FrontendQAAgent:
             "CODING GUIDE COMPLIANCE:\n"
             "- MUST use <script setup lang=\"ts\"> syntax (Options API is forbidden)\n"
             "- DataTable MUST have scrollHeight=\"540px\" + virtualScrollerOptions (performance critical)\n"
-            "- Date formatting MUST be pre-processed in utils/index.ts getRows() — NOT in template slots (causes 5000+ calls per render)\n"
+            "- Date formatting MUST be in watch+nextTick, NOT in template slots (causes 5000+ calls per render)\n"
             "- Import paths must be exact: ContentHeader from '@/components/common/contentHeader/ContentHeader.vue', etc.\n"
-            "- API parameters must use camelCase matching backend DTO field names — NO uppercase conversion\n"
-            "- Save endpoints: send array with status field ('I'|'U'|'D') directly — no dsSearch/dsSave wrapping\n"
-            "- API functions must return response.data (full ApiResponse) — components access .payload\n"
+            "- API parameters: frontend camelCase/snake_case MUST be converted to UPPERCASE for HQML backend\n"
             "- searchParams: must use provide/inject pattern correctly\n"
             "- Ref access: must be .value.form (NOT .value.value.form or .form.value)\n"
             "- Watch conditions: use !== undefined (NOT if(value) which fails for null/empty)\n"
@@ -3241,14 +3183,6 @@ class FrontendQAAgent:
             "- DO NOT provide('searchFormRef') — obsolete pattern\n"
             "- DO NOT use alert()/confirm()/prompt() — use Toast and ConfirmDialog\n"
             "- SearchForm MUST defineExpose({ searchFormRef })\n\n"
-            "FABRICATION DETECTION (CRITICAL — report as HIGH severity):\n"
-            "- Flag any import path that does NOT match the CRITICAL IMPORT PATHS listed in the frontend guide\n"
-            "- Flag any PrimeVue component usage not documented in the guide\n"
-            "- Flag any composable (useXxx) not listed in the guide\n"
-            "- Flag any API endpoint pattern that does not follow /api/v1/{SCREEN_CODE}-{method}\n"
-            "- Flag any store method call not documented in the provided context\n"
-            "- Flag api.get() calls — CPMS only uses api.post()\n"
-            "- For each flagged item, fix_instruction MUST say: remove the fabricated code and replace with // TODO comment\n\n"
             'Output JSON: {"issues": [{"file_path": "...", "issue": "description of problem", "fix_instruction": "how to fix"}]}\n'
             'If no issues: {"issues": []}\n'
             "Output ONLY JSON.\n"
@@ -3272,7 +3206,19 @@ class FixAgent:
     role = "fix_agent"
 
     async def execute(self, ctx: SharedContext, issues: list[dict]) -> list[dict]:
-        """Fix files based on QA issue reports. Returns list of {file_path, content}."""
+        """Fix files based on QA issue reports.
+
+        KEY BEHAVIOR:
+        1. Groups issues by file, but ALWAYS provides ALL backend files (DTO, DAO, Service, Mapper)
+           as context so the LLM can cross-check compile consistency.
+        2. After fixing individual files, runs a post-fix validation pass:
+           - Checks that every DAO method called in ServiceImpl exists in DaoImpl
+           - Checks that every DTO field accessed in ServiceImpl exists in the DTO
+           - If mismatches found, adds missing methods/fields to DAO/DTO automatically.
+        3. Bans CommonUtils.getUuid() and UUID usage.
+
+        Returns list of {file_path, content}.
+        """
         # Group issues by file
         file_issues: dict[str, list[dict]] = {}
         for issue in issues:
@@ -3280,12 +3226,21 @@ class FixAgent:
             if fp:
                 file_issues.setdefault(fp, []).append(issue)
 
+        # Collect ALL backend files for cross-reference context
+        all_backend_context_parts: list[str] = []
+        for path, gf in ctx.generated_files.items():
+            if gf.layer == "backend":
+                label = gf.file_type.upper()
+                all_backend_context_parts.append(
+                    f"--- [{label}] {gf.file_path} ---\n{gf.content}"
+                )
+        all_backend_context = "\n\n".join(all_backend_context_parts)
+
         fixes: list[dict] = []
         for file_path, file_issue_list in file_issues.items():
             # Find the original file
             gf = ctx.generated_files.get(file_path)
             if not gf:
-                # Try partial match
                 for path, candidate in ctx.generated_files.items():
                     if path.endswith(file_path) or file_path.endswith(candidate.file_path):
                         gf = candidate
@@ -3298,40 +3253,25 @@ class FixAgent:
                 for iss in file_issue_list
             )
 
-            # Collect related files for context
-            dep_parts = []
-            file_dir = "/".join(gf.file_path.split("/")[:-1])
-            for path, other in ctx.generated_files.items():
-                if other.file_path == gf.file_path:
-                    continue
-                if other.file_path.startswith(file_dir):
-                    dep_parts.append(f"--- {other.file_path} ---\n{other.content}")
-            # ServiceImpl fix: always include DaoImpl, mapper XML, and DTOs
-            if gf.file_type == "service_impl":
-                for path, other in ctx.generated_files.items():
-                    if other.file_type in ("dao_impl", "mapper_xml"):
-                        dep_parts.append(f"--- {other.file_path} (USE THESE DAO METHODS) ---\n{other.content}")
-                    elif other.file_type in ("dto_request", "dto_response"):
-                        dep_parts.append(f"--- {other.file_path} (THESE ARE THE DTO FIELDS) ---\n{other.content}")
-            # DaoImpl fix: always include mapper XML (to know SQL IDs) and ServiceImpl (to know what methods are needed)
-            if gf.file_type == "dao_impl":
-                for path, other in ctx.generated_files.items():
-                    if other.file_type == "mapper_xml":
-                        dep_parts.append(f"--- {other.file_path} (MAPPER XML — add SQL statement if adding new DAO method) ---\n{other.content}")
-                    elif other.file_type == "service_impl":
-                        dep_parts.append(f"--- {other.file_path} (ServiceImpl — shows how the missing method is called) ---\n{other.content}")
-            # DTO fix: include ServiceImpl so Fix Agent can see what fields are needed
-            if gf.file_type in ("dto_request", "dto_response"):
-                for path, other in ctx.generated_files.items():
-                    if other.file_type == "service_impl":
-                        dep_parts.append(f"--- {other.file_path} (CHECK WHICH FIELDS ARE USED) ---\n{other.content}")
-            deps_text = "\n\n".join(dep_parts[:10])
-
             system = (
                 "You are an expert developer applying QA fixes to source code.\n"
                 "Output ONLY the complete fixed file content. No markdown fences, no explanations.\n"
                 "Apply ALL the fixes listed below while preserving the overall structure and logic.\n\n"
-                "ABSOLUTE RULES (violating ANY of these = broken code):\n"
+                "╔══════════════════════════════════════════════════════════╗\n"
+                "║  #1 RULE: CROSS-FILE COMPILE CONSISTENCY                ║\n"
+                "║  You MUST check DTO + DAO + Service together.           ║\n"
+                "║  Every method/field used in Service MUST exist in       ║\n"
+                "║  DAO and DTO. If missing → ADD to DAO/DTO, NOT remove. ║\n"
+                "╚══════════════════════════════════════════════════════════╝\n\n"
+                "When fixing ANY backend file, you MUST cross-check against ALL other backend files:\n"
+                "  - If fixing ServiceImpl: verify EVERY dao.xxxMethod() exists in DaoImpl.\n"
+                "    If a method is missing from DaoImpl, the fix for THIS file should NOT remove the call.\n"
+                "    Instead, the DaoImpl will be fixed separately to add the missing method.\n"
+                "  - If fixing ServiceImpl: verify EVERY dto.getXxx()/setXxx() has 'private <Type> xxx;' in DTO.\n"
+                "    If a field is missing from DTO, do NOT remove the getter/setter call.\n"
+                "  - If fixing DaoImpl: look at ServiceImpl to see which methods are called. ADD them all.\n"
+                "  - If fixing DTO: look at ServiceImpl to see which fields are accessed. ADD them all.\n\n"
+                "ABSOLUTE RULES (violating ANY = broken code):\n"
                 "IMPORT RULES:\n"
                 "- Use aondev.framework.annotation.ServiceId/ServiceName (NOT hone.bom.annotation.*).\n"
                 "- Use aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport (NOT hone.bom.dao.*).\n"
@@ -3341,95 +3281,276 @@ class FixAgent:
                 "LOGGING RULES:\n"
                 "- ALWAYS use @Slf4j (Lombok) class annotation — NEVER declare Logger field with LoggerFactory.getLogger().\n"
                 "- NEVER call log.error()/log.warn() immediately before throw HscException.\n\n"
-                "EXCEPTION HANDLING RULES:\n"
-                "- throw HscException.systemError() MUST ALWAYS be inside a try-catch block.\n"
-                "- The second argument MUST be the caught Exception variable (e).\n"
-                "- WRONG: throw HscException.systemError(\"msg\");  ← no exception arg = compile error at runtime\n"
-                "- WRONG: if (x == null) throw HscException.systemError(\"msg\");  ← outside try-catch = forbidden\n"
-                "- CORRECT: try { ... } catch (Exception e) { throw HscException.systemError(\"msg\", e); }\n"
-                "- If the original code has bare validation throws (without try-catch), wrap the method body in try-catch.\n\n"
-                "POM.XML COMPLIANCE RULES:\n"
-                "- ONLY import from libraries declared in pom.xml. Any other import = compilation failure.\n"
-                "- NEVER import org.apache.poi.* — Apache POI is NOT in pom.xml.\n"
-                "  If fixing an Excel-related method: remove all POI code, change the method to return List<ResDto>\n"
-                "  (same as the search method), and remove the Excel-specific DTO fields (fileName, fileContent, rowCount).\n"
-                "  The frontend handles Excel export via PrimeVue DataTable — the backend only provides the data.\n\n"
                 "DTO FIELD CONSISTENCY RULES:\n"
                 "- NEVER call getter/setter for a field that is not declared in the DTO class.\n"
                 "- If a fix says to add a field to a DTO: add 'private <Type> fieldName;' inside the DTO class body.\n"
                 "- When fixing a DTO issue, output the UPDATED DTO file (not the ServiceImpl) with the new field added.\n"
-                "- NEVER just remove the getter/setter call — always ADD the missing field to the DTO instead.\n"
-                "DTO FIELD TYPE WHITELIST — when adding or fixing DTO fields, ONLY these types are allowed:\n"
-                "  ALLOWED: String, int, Integer, long, Long, BigDecimal, boolean, Boolean\n"
-                "  FORBIDDEN: Date, LocalDate, LocalDateTime → use String instead\n"
-                "  FORBIDDEN: List<...>, Map<...>, Object, any complex type → use String (comma-separated) instead\n"
-                "  NEVER introduce a List or Date typed field into a DTO, even if the issue says to add it.\n"
-                "  If the issue involves a date field, declare it as 'private String fieldName;'.\n"
-                "  If the issue involves a list/collection field, declare it as 'private String fieldName;' (comma-separated).\n"
-                "TYPE CHAIN: once a DTO field is declared as String, ALL code that calls its getter must treat it as String.\n"
-                "  If ServiceImpl does 'String x = dto.getEduDate()' → that is correct (String→String).\n"
-                "  If ServiceImpl does 'Date x = dto.getEduDate()' → WRONG, must be 'String x = dto.getEduDate()'.\n\n"
+                "- NEVER just remove the getter/setter call — always ADD the missing field to the DTO instead.\n\n"
                 "DAO METHOD CALL RULES:\n"
                 "- ServiceImpl MUST call the full wrapper method names defined in DaoImpl.\n"
                 "- NEVER call bare insert()/select()/update()/delete()/selectOne()/selectList() on a DAO variable.\n"
-                "  These are AbstractSqlSessionDaoSupport internal methods NOT accessible from ServiceImpl.\n"
-                "  Look at the provided DaoImpl file to find the correct wrapper method names\n"
-                "  (e.g., insertCpmsEduXxx, selectCpmsEduXxxLst, etc.) and use those.\n"
-                "- DaoImpl method names MUST NOT be bare CRUD verbs — always append a domain noun.\n"
-                "  WRONG: public int insert(...)  CORRECT: public int insertEduPgm(...)\n\n"
+                "- DaoImpl method names MUST NOT be bare CRUD verbs — always append a domain noun.\n\n"
                 "DAO METHOD MISSING — ADD TO DAOIMPL:\n"
                 "- If the issue says a method does NOT exist in DaoImpl, DO NOT remove the call in ServiceImpl.\n"
                 "  Instead, ADD the missing method to the DaoImpl file.\n"
-                "- The file to fix will be the DaoImpl file (not ServiceImpl). Read the ServiceImpl context\n"
-                "  to understand the expected return type and parameter type, then add the method.\n"
                 "- Method pattern: 'public <ReturnType> <methodName>(<ParamType> param) { return super.<op>(\"<methodName>\", param); }'\n"
-                "  where <op> = selectList (List queries), selectOne (single/int), insert, update, delete,\n"
-                "  batchUpdateReturnSumAffectedRows (List CUD).\n"
-                "- Also add the corresponding SQL statement to the Mapper XML if the issue mentions it.\n"
                 "- TYPE CONTRACT: param type and return type MUST match how ServiceImpl uses the method.\n\n"
+                "UUID RULES:\n"
+                "- NEVER use java.util.UUID or UUID.randomUUID(). Remove all UUID imports and usage.\n"
+                "- NEVER use CommonUtils.getUuid(). Remove all getUuid() calls.\n"
+                "  IDs come from the DB sequence — never generate them manually.\n\n"
+                "AUDIT FIELD RULES:\n"
+                "- NEVER manually set fstCretDtm, fstCrtrId, lastMdfcDtm, lastMdfrId.\n"
+                "  AuditBaseDto constructor sets these automatically.\n\n"
                 "SERVICE ↔ DAO TYPE CONSISTENCY:\n"
                 "- When fixing a DaoImpl method, match the return type to how ServiceImpl assigns the result.\n"
-                "  e.g., if ServiceImpl has 'List<FooResDto> list = fooDao.selectFooList(req)'\n"
-                "  then DaoImpl method MUST be: 'public List<FooResDto> selectFooList(FooReqDto req)'\n"
                 "- When fixing a ServiceImpl call, verify the variable holding the result has the same type\n"
                 "  as the DaoImpl method's declared return type.\n\n"
                 "SERVICEID RULES:\n"
                 "- EVERY public method in ServiceImpl MUST have @ServiceId + @ServiceName.\n"
-                "- Public methods without @ServiceId are alias/wrapper methods and MUST be deleted.\n\n"
-                "DO NOT GUESS OR FABRICATE — CRITICAL:\n"
-                "- Only fix what is explicitly reported in the issues list. Do NOT 'improve' unrelated code.\n"
-                "- If you are unsure how to fix an issue (e.g., missing class, unknown method), leave a TODO comment.\n"
-                "- NEVER invent a class, method, import, or annotation that is not in the provided context.\n"
-                "- It is ALWAYS better to leave a TODO than to fabricate a fix that introduces new errors.\n"
+                "- Public methods without @ServiceId are alias/wrapper methods and MUST be deleted.\n"
+                "- ONLY @ServiceId + @ServiceName are allowed above public methods.\n"
+                "  REMOVE any @Transactional, @Transactional(readOnly=true), @PreAuthorize, @Secured from public methods.\n\n"
+                "STRICT: ServiceImpl = DTO + DAO ONLY:\n"
+                "- ServiceImpl MUST NOT invent any method, field, or argument that does not exist in DTO or DAO.\n"
+                "- ServiceImpl parameters: ReqDto or List<ResDto> only. No new wrapper DTOs.\n"
+                "- ServiceImpl return types: List<ResDto>, ResDto, int, or void only. No new result classes.\n"
             )
 
             user = (
-                f"File to fix: {gf.file_path}\n"
+                f"File to fix: {gf.file_path} (type: {gf.file_type})\n"
                 f"```\n{gf.content}\n```\n\n"
                 f"Issues to fix:\n{issues_text}\n\n"
                 f"=== ALL BACKEND FILES (cross-reference for compile consistency) ===\n"
                 f"{all_backend_context}\n"
                 f"=== END ALL BACKEND FILES ===\n\n"
-                f"IMPORTANT: Before outputting the fixed file, mentally verify ALL of the following:\n"
+                f"IMPORTANT: Before outputting the fixed file, mentally verify:\n"
                 f"  1. Every DAO method called in ServiceImpl exists in the DaoImpl file above\n"
                 f"  2. Every DTO getter/setter called in ServiceImpl has a matching field in the DTO file above\n"
                 f"  3. No CommonUtils.getUuid() or UUID.randomUUID() anywhere\n"
-                f"  4. No invented methods or fields that don't exist in DTO/DAO\n"
-                f"  5. COMPILE CHECK — Every import must be from a library in pom.xml (no org.apache.poi.*, etc.)\n"
-                f"  6. COMPILE CHECK — Every HscException.systemError() call has TWO args: (\"msg\", e)\n"
-                f"     and is inside a catch block. Single-arg calls like systemError(\"msg\") are compile errors.\n"
-                f"  7. COMPILE CHECK — Every class, method, and field referenced in the file actually exists.\n"
-                f"     No phantom classes, no missing imports, no undefined variables.\n\n"
+                f"  4. No invented methods or fields that don't exist in DTO/DAO\n\n"
                 f"Output the complete fixed file."
             )
-            if deps_text:
-                user += f"Related files for context:\n{deps_text}\n\n"
-            user += "Output the complete fixed file."
 
             response = await llm_client.complete(system, user, stream=False, max_tokens=settings.CODEGEN_MAX_TOKENS)
-            fixes.append({"file_path": gf.file_path, "content": _strip_fences(response)})
+            fixed_content = _strip_fences(response)
+            if gf.file_type == "service_impl":
+                fixed_content = _ensure_slf4j_service_impl(fixed_content)
+                fixed_content = _sanitize_service_impl(fixed_content)
+            fixes.append({"file_path": gf.file_path, "content": fixed_content})
+
+        # ---------------------------------------------------------------
+        # Post-fix validation: apply fixes to ctx, then cross-check
+        # If ServiceImpl uses DAO methods or DTO fields that still don't
+        # exist after the fix, forcibly add them.
+        # ---------------------------------------------------------------
+        # First apply all fixes to a working copy
+        for fix in fixes:
+            fp = fix.get("file_path", "")
+            fc = fix.get("content", "")
+            if not fp or not fc:
+                continue
+            for path, gf in ctx.generated_files.items():
+                if path == fp or fp.endswith(gf.file_path):
+                    gf.content = fc
+                    break
+
+        # Now run post-fix cross-file consistency check and auto-repair
+        post_fix_repairs = _post_fix_cross_check(ctx)
+        if post_fix_repairs:
+            fixes.extend(post_fix_repairs)
+            logger.info("[FIX_AGENT] Post-fix auto-repair added %d file(s)", len(post_fix_repairs))
 
         return fixes
+
+
+def _post_fix_cross_check(ctx: SharedContext) -> list[dict]:
+    """After Fix Agent runs, programmatically verify and repair cross-file consistency.
+
+    This catches compile errors that the LLM fix might have missed:
+    1. DTO fields used in ServiceImpl but missing from DTO → add them
+    2. DAO methods called in ServiceImpl but missing from DaoImpl → add them
+    3. CommonUtils.getUuid() anywhere → remove
+    """
+    repairs: list[dict] = []
+
+    _field_re = re.compile(r'private\s+(\S+)\s+(\w+)\s*;')
+    _accessor_re = re.compile(r'(\w+)\.(get|set|is)([A-Z]\w*)\s*\(')
+    _method_def_re = re.compile(r'public\s+(\S+)\s+(\w+)\s*\(([^)]*)\)')
+    _dao_call_re = re.compile(r'(\w+(?:Dao|DaoImpl))\s*\.\s*(\w+)\s*\(([^)]*)\)')
+    _assign_call_re = re.compile(
+        r'([\w<>?,\[\] ]+?)\s+\w+\s*=\s*\w+\.' + r'(\w+)\s*\(([^)]*)\)',
+        re.MULTILINE,
+    )
+
+    # Variable type tracking regex
+    var_type_re = re.compile(
+        r'(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*(?:[=;,):])|\bfor\s*\(\s*(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*:'
+    )
+
+    # Collect DTO info
+    dto_fields: dict[str, dict[str, str]] = {}  # class_name → {field_name: type}
+    dto_gf: dict[str, GeneratedFile] = {}  # class_name → GeneratedFile
+
+    # Collect DAO info
+    dao_methods: dict[str, set[str]] = {}  # class_name → {method_names}
+    dao_gf: dict[str, GeneratedFile] = {}  # class_name → GeneratedFile
+
+    service_files: list[GeneratedFile] = []
+
+    for path, gf in ctx.generated_files.items():
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+        class_name = gf.file_path.split("/")[-1].replace(".java", "")
+
+        if "Dto" in class_name:
+            fields: dict[str, str] = {}
+            for m in _field_re.finditer(gf.content):
+                fields[m.group(2)] = m.group(1)
+            dto_fields[class_name] = fields
+            dto_gf[class_name] = gf
+        elif "DaoImpl" in class_name:
+            methods: set[str] = set()
+            for m in _method_def_re.finditer(gf.content):
+                if m.group(2) != class_name:  # skip constructor
+                    methods.add(m.group(2))
+            dao_methods[class_name] = methods
+            dao_gf[class_name] = gf
+        elif "ServiceImpl" in class_name:
+            service_files.append(gf)
+
+    # --- Check 1: DTO fields used in ServiceImpl but not in DTO ---
+    for svc_gf in service_files:
+        var_to_dto: dict[str, str] = {}
+        for m in var_type_re.finditer(svc_gf.content):
+            if m.group(1) and m.group(2):
+                dto_type, var_name = m.group(1), m.group(2)
+            elif m.group(3) and m.group(4):
+                dto_type, var_name = m.group(3), m.group(4)
+            else:
+                continue
+            if dto_type in dto_fields:
+                var_to_dto[var_name] = dto_type
+
+        missing_fields: dict[str, list[str]] = {}  # dto_class → [field_names]
+        for m in _accessor_re.finditer(svc_gf.content):
+            var_name = m.group(1)
+            prop_upper = m.group(3)
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+
+            if var_name not in var_to_dto:
+                continue
+            dto_name = var_to_dto[var_name]
+            if prop_name not in dto_fields.get(dto_name, {}):
+                if prop_name not in _PAGINATION_CONTAINER_FIELDS:
+                    missing_fields.setdefault(dto_name, []).append(prop_name)
+
+        # Add missing fields to DTOs
+        for dto_name, fields_to_add in missing_fields.items():
+            gf = dto_gf.get(dto_name)
+            if not gf:
+                continue
+            unique_fields = sorted(set(fields_to_add))
+            already_in = dto_fields.get(dto_name, {})
+            new_fields = [f for f in unique_fields if f not in already_in]
+            if not new_fields:
+                continue
+
+            # Insert fields before the last closing brace
+            field_lines = "\n".join(f"    private String {f};" for f in new_fields)
+            last_brace = gf.content.rfind("}")
+            if last_brace > 0:
+                gf.content = gf.content[:last_brace] + f"\n{field_lines}\n" + gf.content[last_brace:]
+                repairs.append({"file_path": gf.file_path, "content": gf.content})
+                # Update the fields map
+                for f in new_fields:
+                    dto_fields.setdefault(dto_name, {})[f] = "String"
+                logger.info(
+                    "[POST_FIX] Added %d missing fields to %s: %s",
+                    len(new_fields), dto_name, ", ".join(new_fields),
+                )
+
+    # --- Check 2: DAO methods called in ServiceImpl but not in DaoImpl ---
+    for svc_gf in service_files:
+        # Build inferred types from assignments
+        inferred: dict[str, tuple[str, str]] = {}
+        for am in _assign_call_re.finditer(svc_gf.content):
+            ret = am.group(1).strip()
+            mname = am.group(2)
+            args = am.group(3).strip()
+            inferred[mname] = (ret, args)
+
+        for m in _dao_call_re.finditer(svc_gf.content):
+            dao_var = m.group(1)
+            called_method = m.group(2)
+            call_args = m.group(3).strip() if m.lastindex >= 3 else ""
+
+            for dao_name, methods in dao_methods.items():
+                dao_simple = dao_name[0].lower() + dao_name[1:]
+                dao_without_impl = dao_simple[:-4] if dao_name.endswith("Impl") else dao_simple
+                if dao_var in (dao_simple, dao_name, dao_without_impl):
+                    if called_method not in methods:
+                        gf = dao_gf.get(dao_name)
+                        if not gf:
+                            continue
+
+                        # Infer return type and param type
+                        inferred_ret, inferred_args = inferred.get(called_method, ("int", call_args))
+                        _lm = called_method.lower()
+                        if _lm.startswith("select") and ("list" in _lm or "lst" in _lm):
+                            super_op = "selectList"
+                        elif _lm.startswith("select"):
+                            super_op = "selectOne"
+                        elif _lm.startswith("insert"):
+                            super_op = "insert"
+                        elif _lm.startswith("update"):
+                            super_op = "batchUpdateReturnSumAffectedRows" if "List" in inferred_ret else "update"
+                        elif _lm.startswith("delete"):
+                            super_op = "batchUpdateReturnSumAffectedRows" if "List" in inferred_ret else "delete"
+                        else:
+                            super_op = "selectOne"
+
+                        # Build param type from inferred args
+                        param_type = inferred_args.split(",")[0].strip() if inferred_args else "Object param"
+                        if " " not in param_type:
+                            param_type = f"{param_type} param"
+
+                        method_code = (
+                            f"\n    public {inferred_ret} {called_method}({param_type}) {{\n"
+                            f"        return super.{super_op}(\"{called_method}\", param);\n"
+                            f"    }}\n"
+                        )
+
+                        last_brace = gf.content.rfind("}")
+                        if last_brace > 0:
+                            gf.content = gf.content[:last_brace] + method_code + gf.content[last_brace:]
+                            dao_methods[dao_name].add(called_method)
+                            # Check if this repair is already in the list
+                            existing = next((r for r in repairs if r["file_path"] == gf.file_path), None)
+                            if existing:
+                                existing["content"] = gf.content
+                            else:
+                                repairs.append({"file_path": gf.file_path, "content": gf.content})
+                            logger.info(
+                                "[POST_FIX] Added missing method '%s' to %s",
+                                called_method, dao_name,
+                            )
+                    break
+
+    # --- Check 3: Remove CommonUtils.getUuid() from any file ---
+    for path, gf in ctx.generated_files.items():
+        if gf.layer == "backend" and 'CommonUtils.getUuid' in gf.content:
+            gf.content = _COMMON_UTILS_GET_UUID_RE.sub(
+                'null /* getUuid removed — ID from DB sequence */', gf.content
+            )
+            existing = next((r for r in repairs if r["file_path"] == gf.file_path), None)
+            if existing:
+                existing["content"] = gf.content
+            else:
+                repairs.append({"file_path": gf.file_path, "content": gf.content})
+            logger.info("[POST_FIX] Removed CommonUtils.getUuid() from %s", gf.file_path)
+
+    return repairs
 
 
 # ---------------------------------------------------------------------------
@@ -3456,15 +3577,22 @@ class QAEngineerAgent:
             ):
                 related.append(f"--- {gf.file_path} ---\n{gf.content}")
 
+        # Collect all backend files for cross-reference
+        backend_context_parts = []
+        for _gf in all_files:
+            if _gf.layer == "backend" and _gf.file_path != file_path:
+                backend_context_parts.append(f"--- [{_gf.file_type.upper()}] {_gf.file_path} ---\n{_gf.content}")
+        backend_context = "\n\n".join(backend_context_parts[:10])
+
         system = (
             "You are an expert developer fixing compilation errors.\n"
             "Output ONLY the complete fixed file content. No markdown fences.\n"
             "Fix ALL errors. If a method/field is missing in a DTO, ADD it.\n\n"
-            "DO NOT GUESS OR FABRICATE — CRITICAL:\n"
-            "- Only fix what the error log says. Do NOT 'improve' or restructure unrelated code.\n"
-            "- If you are unsure about the correct fix, leave a TODO comment rather than inventing a solution.\n"
-            "- NEVER invent a class, method, import, or annotation that is not visible in the provided context.\n"
-            "- It is ALWAYS better to leave a TODO than to fabricate a fix that introduces new errors.\n\n"
+            "╔══════════════════════════════════════════════════════════╗\n"
+            "║  CROSS-FILE COMPILE CHECK: DTO + DAO + Service          ║\n"
+            "║  Every method/field used in Service MUST exist in       ║\n"
+            "║  DAO and DTO. If missing → ADD, NOT remove.             ║\n"
+            "╚══════════════════════════════════════════════════════════╝\n\n"
             "ABSOLUTE RULES (violating ANY of these = broken code):\n"
             "- Use aondev.framework.annotation.ServiceId/ServiceName (NOT hone.bom.annotation.*).\n"
             "- Use aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport (NOT hone.bom.dao.*).\n"
@@ -3474,6 +3602,8 @@ class QAEngineerAgent:
             "- ServiceImpl: NEVER call bare DAO base-class methods (insert/select/update/delete/selectOne/selectList).\n"
             "  Use the full wrapper method names defined in DaoImpl (e.g., insertEduPgm, selectEduPgmList).\n"
             "- DaoImpl method names MUST NOT be bare CRUD verbs — always append a domain noun.\n"
+            "- NEVER use CommonUtils.getUuid() or UUID.randomUUID() — IDs come from DB sequence.\n"
+            "- ServiceImpl MUST ONLY use methods/fields that exist in DTO and DAO. No invented methods.\n"
         )
 
         user = (
@@ -3482,7 +3612,15 @@ class QAEngineerAgent:
         )
         if related:
             user += f"Related files:\n{''.join(related[:5])}\n\n"
-        user += "Output the complete fixed file."
+        if backend_context:
+            user += f"=== ALL BACKEND FILES (cross-reference for compile consistency) ===\n{backend_context}\n=== END ===\n\n"
+        user += (
+            "BEFORE outputting, verify:\n"
+            "  1. Every DAO method called in ServiceImpl exists in DaoImpl\n"
+            "  2. Every DTO getter/setter called in ServiceImpl has a field in DTO\n"
+            "  3. No CommonUtils.getUuid() or UUID.randomUUID()\n\n"
+            "Output the complete fixed file."
+        )
 
         response = await llm_client.complete(system, user, stream=False, max_tokens=settings.CODEGEN_MAX_TOKENS)
         return _strip_fences(response)

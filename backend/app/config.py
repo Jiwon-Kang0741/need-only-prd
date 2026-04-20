@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     CODEX_AZURE_OPENAI_API_VERSION: str = "2025-04-01-preview"
     CODEX_AZURE_OPENAI_MODEL_NAME: str = "gpt-5.3-codex"
     CODEX_AZURE_OPENAI_API_KEY: str = ""
+
+    # --- Mockup Pipeline 전용 (원본 pfy-front 사내 게이트웨이 호환) ---
+    MOCKUP_AOAI_ENDPOINT: str = ""
+    MOCKUP_AOAI_API_KEY: str = ""
+    MOCKUP_AOAI_DEPLOYMENT: str = "gpt-5.2"
+    MOCKUP_AOAI_MAX_TOKENS: int = 8000
+
     MAX_INPUT_CHARS: int = 50000
     MAX_LLM_CALLS_PER_SESSION: int = 200
     SESSION_TTL_HOURS: int = 2
