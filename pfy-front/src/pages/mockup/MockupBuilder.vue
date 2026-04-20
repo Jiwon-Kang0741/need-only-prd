@@ -1,12 +1,6 @@
 <template>
   <div class="mb">
 
-    <!-- ── 헤더 ── -->
-    <div class="mb__header">
-      <h1 class="mb__title">MockUp Builder</h1>
-      <p class="mb__subtitle">화면 스펙을 정의하고 Vue 목업 페이지를 자동 생성합니다. (scaffolding 서버 port 4000 실행 필요)</p>
-    </div>
-
     <div class="mb__body">
 
       <!-- ─────────────────────────────────────────────
@@ -960,13 +954,17 @@ async function generate() {
 
     // need-only-prd 통합: 부모 React에 페이지 생성 완료 알림 → iframe 자동 전환
     try {
-      window.parent?.postMessage({
+      const msg = {
         type: 'pfy-page-generated',
         routePath: data2.routePath,
         previewUrl: `${window.location.origin}${data2.routePath}`,
         pageName: spec.pageName,
-      }, '*');
-    } catch { /* ignore postMessage errors */ }
+      };
+      console.log('[MockupBuilder] postMessage →', msg, 'isInIframe=', window.parent !== window);
+      window.parent?.postMessage(msg, '*');
+    } catch (e) {
+      console.warn('[MockupBuilder] postMessage 실패:', e);
+    }
   } catch (e) {
     errorMsg.value = `요청 실패: ${(e as Error).message}. scaffolding 서버(port 4000)가 실행 중인지 확인하세요.`;
   } finally {

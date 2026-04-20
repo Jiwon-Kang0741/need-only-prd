@@ -48,10 +48,14 @@ export default function MockupPipeline() {
 
   useEffect(() => {
     async function handleMessage(event: MessageEvent) {
-      if (!isPfyMessage(event.data)) return
+      console.log('[MockupPipeline] postMessage received:', event.data, 'from:', event.origin)
+      if (!isPfyMessage(event.data)) {
+        console.log('[MockupPipeline] not a pfy message, ignoring')
+        return
+      }
 
       if (event.data.type === 'pfy-page-generated') {
-        // 페이지 생성 완료 → iframe을 생성된 페이지로 이동
+        console.log('[MockupPipeline] page-generated → switching iframe to', event.data.routePath)
         setIframeUrl(`${PFY_BASE_URL}${event.data.routePath}`)
         return
       }
@@ -96,30 +100,8 @@ export default function MockupPipeline() {
     return () => window.removeEventListener('message', handleMessage)
   }, [setSpecMarkdown, setSpecVersion, setStatus, setGenerating])
 
-  const isBuilderView = iframeUrl === PFY_MOCKUP_BUILDER_URL
-
   return (
     <div className="fixed inset-0 top-[64px] flex flex-col bg-surface z-10">
-      {/* Breadcrumb + back to builder */}
-      <div className="bg-surface-container-low border-b border-surface-container px-4 py-2 text-xs flex items-center gap-2">
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">dashboard_customize</span>
-        <span className="text-on-surface-variant">MockupBuilder</span>
-        {!isBuilderView && (
-          <>
-            <span className="text-outline">/</span>
-            <span className="text-on-surface font-bold">생성된 페이지</span>
-            <button
-              onClick={() => setIframeUrl(PFY_MOCKUP_BUILDER_URL)}
-              className="ml-auto text-primary hover:underline flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-              Builder로 돌아가기
-            </button>
-          </>
-        )}
-        {isBuilderView && <span className="ml-auto text-on-surface-variant">페이지 생성 시 자동으로 미리보기로 이동합니다</span>}
-      </div>
-
       {error && (
         <div className="bg-error-container text-on-error-container px-6 py-3 text-sm flex items-center justify-between">
           <span>{error}</span>

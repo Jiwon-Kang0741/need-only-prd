@@ -27,10 +27,12 @@ class MockupLLMClient:
         max_tokens: int | None = None,
         temperature: float = 0.35,
     ) -> str | AsyncIterator[str]:
+        # MOCKUP_AOAI_* 가 설정되지 않았거나 접근 불가 환경이면 기본 llm_client로 fallback.
+        # (VPN/사내 네트워크 밖에서도 Mockup 파이프라인이 동작하도록)
         if not self._endpoint or not self._api_key:
-            raise RuntimeError(
-                "MOCKUP_AOAI_ENDPOINT / MOCKUP_AOAI_API_KEY 가 .env에 설정되지 않았습니다."
-            )
+            from app.llm.client import llm_client
+            max_tok = max_tokens if max_tokens is not None else settings.MOCKUP_AOAI_MAX_TOKENS
+            return await llm_client.complete(system, user, stream=stream, max_tokens=max_tok)
 
         max_tok = max_tokens if max_tokens is not None else settings.MOCKUP_AOAI_MAX_TOKENS
         body = {

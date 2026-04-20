@@ -148,9 +148,9 @@ export const staticRoutes: RouteRecordRaw[] = [
     },
     {
         path: '/generated/member-list',
-        name: 'generated-MebmerList',
+        name: 'generated-MemberList',
         meta: { generated: true },
-        component: () => import('@/pages/generated/MebmerList.vue'),
+        component: () => import('@/pages/generated/MemberList.vue'),
       },
     {
     path: '/:pathMatch(.*)*',

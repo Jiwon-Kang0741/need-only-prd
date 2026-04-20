@@ -11,12 +11,16 @@ def test_client_reads_config():
 
 
 @pytest.mark.asyncio
-async def test_complete_non_streaming_raises_without_config():
+async def test_complete_falls_back_to_llm_client_when_config_missing():
+    """MOCKUP_AOAI_* 미설정 시 기본 llm_client로 fallback."""
     client = MockupLLMClient()
     client._endpoint = ""
     client._api_key = ""
-    with pytest.raises(RuntimeError, match="MOCKUP_AOAI"):
-        await client.complete("sys", "usr", stream=False)
+    with patch("app.llm.client.llm_client") as mock_client:
+        mock_client.complete = AsyncMock(return_value="fallback-ok")
+        result = await client.complete("sys", "usr", stream=False)
+        assert result == "fallback-ok"
+        mock_client.complete.assert_called_once()
 
 
 @pytest.mark.asyncio
