@@ -18,7 +18,7 @@ export const useCommonCodeStore = defineStore('commonCode', () => {
       loading.value[q.QueryId] = true
       try {
         // Try to fetch from backend common code API
-        const response = await api.post('/online/mvcJson/BMCM010/selectCommonCode', {
+        const response = await api.post('/api/v1/BMCM010/selectCommonCode', {
           QUERY_ID: q.QueryId,
         })
         const payload = response.data?.payload
