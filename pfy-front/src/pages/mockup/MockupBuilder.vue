@@ -1136,6 +1136,7 @@ async function generate() {
   &__preview-split-main {
     flex: 1;
     min-width: 0;
+    max-width: 680px;
     min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
@@ -1631,8 +1632,8 @@ async function generate() {
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-    border: 1px solid #bfdbfe;
+    background: linear-gradient(135deg, #0f0f0f 0%, #0f0f0f 100%);
+    border: 0px solid #000000;
     border-radius: 8px;
     margin-top: 4px;
     flex-wrap: wrap;
