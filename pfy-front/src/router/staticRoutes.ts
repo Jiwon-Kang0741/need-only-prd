@@ -147,6 +147,12 @@ export const staticRoutes: RouteRecordRaw[] = [
       component: () => import('@/pages/generated/scr001/index.vue'),
     },
     {
+        path: '/generated/member-list',
+        name: 'generated-MebmerList',
+        meta: { generated: true },
+        component: () => import('@/pages/generated/MebmerList.vue'),
+      },
+    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/pages/_system/notFound/index.vue'),

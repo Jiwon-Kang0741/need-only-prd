@@ -957,6 +957,16 @@ async function generate() {
       ...data2,
       previewUrl: `${window.location.origin}${data2.routePath}`,
     } as GenerateResult;
+
+    // need-only-prd 통합: 부모 React에 페이지 생성 완료 알림 → iframe 자동 전환
+    try {
+      window.parent?.postMessage({
+        type: 'pfy-page-generated',
+        routePath: data2.routePath,
+        previewUrl: `${window.location.origin}${data2.routePath}`,
+        pageName: spec.pageName,
+      }, '*');
+    } catch { /* ignore postMessage errors */ }
   } catch (e) {
     errorMsg.value = `요청 실패: ${(e as Error).message}. scaffolding 서버(port 4000)가 실행 중인지 확인하세요.`;
   } finally {

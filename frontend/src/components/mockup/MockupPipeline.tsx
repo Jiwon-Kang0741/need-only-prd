@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSessionStore } from '../../store/sessionStore'
 
-const PFY_MOCKUP_BUILDER_URL = 'http://localhost:8081/mockup/builder'
+const PFY_BASE_URL = 'http://localhost:8081'
+const PFY_MOCKUP_BUILDER_URL = `${PFY_BASE_URL}/mockup/builder`
+
+interface PfyPageGeneratedMessage {
+  type: 'pfy-page-generated'
+  routePath: string
+  previewUrl: string
+  pageName: string
+}
 
 interface PfyInterviewResultMessage {
   type: 'pfy-interview-result-success'
@@ -11,12 +19,12 @@ interface PfyInterviewResultMessage {
   pageType: string
 }
 
-function isPfyMessage(data: unknown): data is PfyInterviewResultMessage {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    (data as { type?: string }).type === 'pfy-interview-result-success'
-  )
+type PfyMessage = PfyPageGeneratedMessage | PfyInterviewResultMessage
+
+function isPfyMessage(data: unknown): data is PfyMessage {
+  if (typeof data !== 'object' || data === null) return false
+  const t = (data as { type?: string }).type
+  return t === 'pfy-page-generated' || t === 'pfy-interview-result-success'
 }
 
 function getSessionId(): string {
@@ -35,11 +43,20 @@ export default function MockupPipeline() {
   const setGenerating = useSessionStore((s) => s.setGenerating)
 
   const [error, setError] = useState<string | null>(null)
+  const [iframeUrl, setIframeUrl] = useState(PFY_MOCKUP_BUILDER_URL)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     async function handleMessage(event: MessageEvent) {
       if (!isPfyMessage(event.data)) return
 
+      if (event.data.type === 'pfy-page-generated') {
+        // 페이지 생성 완료 → iframe을 생성된 페이지로 이동
+        setIframeUrl(`${PFY_BASE_URL}${event.data.routePath}`)
+        return
+      }
+
+      // pfy-interview-result-success: 인터뷰 완료 → spec.md 생성
       const payload = event.data
       setGenerating(true)
       setStatus('인터뷰 결과를 spec.md로 변환 중...')
@@ -79,8 +96,30 @@ export default function MockupPipeline() {
     return () => window.removeEventListener('message', handleMessage)
   }, [setSpecMarkdown, setSpecVersion, setStatus, setGenerating])
 
+  const isBuilderView = iframeUrl === PFY_MOCKUP_BUILDER_URL
+
   return (
     <div className="fixed inset-0 top-[64px] flex flex-col bg-surface z-10">
+      {/* Breadcrumb + back to builder */}
+      <div className="bg-surface-container-low border-b border-surface-container px-4 py-2 text-xs flex items-center gap-2">
+        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">dashboard_customize</span>
+        <span className="text-on-surface-variant">MockupBuilder</span>
+        {!isBuilderView && (
+          <>
+            <span className="text-outline">/</span>
+            <span className="text-on-surface font-bold">생성된 페이지</span>
+            <button
+              onClick={() => setIframeUrl(PFY_MOCKUP_BUILDER_URL)}
+              className="ml-auto text-primary hover:underline flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+              Builder로 돌아가기
+            </button>
+          </>
+        )}
+        {isBuilderView && <span className="ml-auto text-on-surface-variant">페이지 생성 시 자동으로 미리보기로 이동합니다</span>}
+      </div>
+
       {error && (
         <div className="bg-error-container text-on-error-container px-6 py-3 text-sm flex items-center justify-between">
           <span>{error}</span>
@@ -90,7 +129,8 @@ export default function MockupPipeline() {
         </div>
       )}
       <iframe
-        src={PFY_MOCKUP_BUILDER_URL}
+        ref={iframeRef}
+        src={iframeUrl}
         className="flex-1 border-0 bg-white w-full"
         title="pfy-front MockupBuilder"
       />
