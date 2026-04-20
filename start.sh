@@ -7,7 +7,7 @@ mkdir -p logs
 # ──────────────────────────────────────────────────────────────
 # 0. 포트 정리 (기존 프로세스가 점유 중이면 종료)
 # ──────────────────────────────────────────────────────────────
-for port in 8001 5173 8081; do
+for port in 8001 5173 8081 4000; do
   pid=$(lsof -ti ":$port" 2>/dev/null || true)
   if [ -n "$pid" ]; then
     echo "Port $port was busy (PID $pid) — killing"
@@ -17,9 +17,9 @@ for port in 8001 5173 8081; do
 done
 
 # ──────────────────────────────────────────────────────────────
-# 1. Backend 의존성 확인/설치
+# 1. Backend (FastAPI) :8001
 # ──────────────────────────────────────────────────────────────
-echo "[1/3] Preparing backend..."
+echo "[1/4] Preparing backend..."
 cd backend
 if [ ! -d ".venv" ]; then
   echo "  → .venv가 없습니다. 생성 중..."
@@ -37,9 +37,9 @@ BACKEND_PID=$!
 cd ..
 
 # ──────────────────────────────────────────────────────────────
-# 2. Frontend (메인) 의존성 확인/설치
+# 2. Frontend (Vite, React) :5173
 # ──────────────────────────────────────────────────────────────
-echo "[2/3] Preparing frontend..."
+echo "[2/4] Preparing frontend..."
 cd frontend
 if [ ! -d "node_modules" ]; then
   echo "  → node_modules가 없습니다. npm install 실행 중..."
@@ -53,15 +53,14 @@ FRONTEND_PID=$!
 cd ..
 
 # ──────────────────────────────────────────────────────────────
-# 3. pfy-front Vue dev server (Mockup 미리보기용)
+# 3. pfy-front (Vue Mockup 런타임) :8081
 # ──────────────────────────────────────────────────────────────
 PFY_PID=""
 if [ -d "pfy-front" ]; then
-  echo "[3/3] Preparing pfy-front..."
+  echo "[3/4] Preparing pfy-front..."
   cd pfy-front
   if [ ! -d "node_modules" ] || [ ! -x "node_modules/.bin/vite" ]; then
     echo "  → node_modules/vite가 없습니다. npm install 실행 중..."
-    echo "    (사내 registry 연결 시도 후 실패하면 public registry로 재시도)"
     if ! npm install --legacy-peer-deps > ../logs/pfy-front-install.log 2>&1; then
       echo "  → 사내 registry 실패, public registry 시도..."
       npm install --registry=https://registry.npmjs.org/ --legacy-peer-deps >> ../logs/pfy-front-install.log 2>&1
@@ -76,22 +75,50 @@ if [ -d "pfy-front" ]; then
 fi
 
 # ──────────────────────────────────────────────────────────────
+# 4. pfy-front scaffolding server (Express, MockupBuilder API) :4000
+# ──────────────────────────────────────────────────────────────
+SCAFFOLD_PID=""
+if [ -d "pfy-front/scaffolding" ]; then
+  echo "[4/4] Preparing pfy-front scaffolding..."
+  cd pfy-front/scaffolding
+  if [ ! -d "node_modules" ] || [ ! -x "node_modules/.bin/ts-node" ]; then
+    echo "  → node_modules/ts-node가 없습니다. npm install 실행 중..."
+    if ! npm install --legacy-peer-deps > ../../logs/scaffolding-install.log 2>&1; then
+      echo "  → 사내 registry 실패, public registry 시도..."
+      npm install --registry=https://registry.npmjs.org/ --legacy-peer-deps >> ../../logs/scaffolding-install.log 2>&1
+    fi
+    echo "  → 설치 완료 (logs/scaffolding-install.log)"
+  fi
+  # scaffolding/.env 필요 (AOAI_ENDPOINT, AOAI_API_KEY)
+  if [ ! -f ".env" ]; then
+    echo "  ⚠ scaffolding/.env 파일이 없습니다. AI 기능은 동작하지 않습니다."
+    echo "    pfy-front/scaffolding/.env.example 을 참고하세요."
+  fi
+  echo "  → Starting scaffolding Express on :4000..."
+  npm run dev > ../../logs/scaffolding.log 2>&1 &
+  SCAFFOLD_PID=$!
+  cd ../..
+fi
+
+# ──────────────────────────────────────────────────────────────
 # PID 저장 및 요약 출력
 # ──────────────────────────────────────────────────────────────
 echo "$BACKEND_PID" > .pids
 echo "$FRONTEND_PID" >> .pids
 [ -n "$PFY_PID" ] && echo "$PFY_PID" >> .pids
+[ -n "$SCAFFOLD_PID" ] && echo "$SCAFFOLD_PID" >> .pids
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
 echo " Services Running"
 echo "═══════════════════════════════════════════════════════════"
-echo "  Backend    http://localhost:8001   (PID $BACKEND_PID)"
-echo "  Frontend   http://localhost:5173   (PID $FRONTEND_PID)"
-[ -n "$PFY_PID" ] && echo "  pfy-front  http://localhost:8081   (PID $PFY_PID)"
+echo "  Backend      http://localhost:8001   (PID $BACKEND_PID)"
+echo "  Frontend     http://localhost:5173   (PID $FRONTEND_PID)"
+[ -n "$PFY_PID" ]      && echo "  pfy-front    http://localhost:8081   (PID $PFY_PID)"
+[ -n "$SCAFFOLD_PID" ] && echo "  scaffolding  http://localhost:4000   (PID $SCAFFOLD_PID)"
 echo ""
-echo "  Logs:      tail -f logs/<backend|frontend|pfy-front>.log"
-echo "  Stop:      ./stop.sh"
+echo "  Logs:  tail -f logs/<backend|frontend|pfy-front|scaffolding>.log"
+echo "  Stop:  ./stop.sh"
 echo "═══════════════════════════════════════════════════════════"
 
 # ──────────────────────────────────────────────────────────────
