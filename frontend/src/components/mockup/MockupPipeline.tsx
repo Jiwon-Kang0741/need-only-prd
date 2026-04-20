@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { getSessionId } from '../../api/client'
 import { useSessionStore } from '../../store/sessionStore'
 
 const PFY_BASE_URL = 'http://localhost:8081'
 const PFY_MOCKUP_BUILDER_URL = `${PFY_BASE_URL}/mockup/builder`
+const VIEWPORT_WIDTH = 1600
+const VIEWPORT_HEIGHT = 1000
 
 interface PfyPageGeneratedMessage {
   type: 'pfy-page-generated'
@@ -27,15 +30,6 @@ function isPfyMessage(data: unknown): data is PfyMessage {
   return t === 'pfy-page-generated' || t === 'pfy-interview-result-success'
 }
 
-function getSessionId(): string {
-  let id = sessionStorage.getItem('session_id')
-  if (!id) {
-    id = crypto.randomUUID()
-    sessionStorage.setItem('session_id', id)
-  }
-  return id
-}
-
 export default function MockupPipeline() {
   const setSpecMarkdown = useSessionStore((s) => s.setSpecMarkdown)
   const setSpecVersion = useSessionStore((s) => s.setSpecVersion)
@@ -44,23 +38,31 @@ export default function MockupPipeline() {
 
   const [error, setError] = useState<string | null>(null)
   const [iframeUrl, setIframeUrl] = useState(PFY_MOCKUP_BUILDER_URL)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => {
+      const next = Math.min(el.clientWidth / VIEWPORT_WIDTH, 1)
+      setScale((prev) => (Math.abs(prev - next) < 0.005 ? prev : next))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     async function handleMessage(event: MessageEvent) {
-      console.log('[MockupPipeline] postMessage received:', event.data, 'from:', event.origin)
-      if (!isPfyMessage(event.data)) {
-        console.log('[MockupPipeline] not a pfy message, ignoring')
-        return
-      }
+      if (!isPfyMessage(event.data)) return
 
       if (event.data.type === 'pfy-page-generated') {
-        console.log('[MockupPipeline] page-generated → switching iframe to', event.data.routePath)
         setIframeUrl(`${PFY_BASE_URL}${event.data.routePath}`)
         return
       }
 
-      // pfy-interview-result-success: 인터뷰 완료 → spec.md 생성
       const payload = event.data
       setGenerating(true)
       setStatus('인터뷰 결과를 spec.md로 변환 중...')
@@ -110,12 +112,22 @@ export default function MockupPipeline() {
           </button>
         </div>
       )}
-      <iframe
-        ref={iframeRef}
-        src={iframeUrl}
-        className="flex-1 border-0 bg-white w-full"
-        title="pfy-front MockupBuilder"
-      />
+      <div ref={containerRef} className="relative flex-1 overflow-auto bg-white">
+        <iframe
+          src={iframeUrl}
+          className="border-0 bg-white"
+          style={{
+            width: `${VIEWPORT_WIDTH}px`,
+            height: `${VIEWPORT_HEIGHT}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+          title="pfy-front MockupBuilder"
+        />
+        <div className="fixed bottom-2 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-md pointer-events-none">
+          {Math.round(scale * 100)}%
+        </div>
+      </div>
     </div>
   )
 }

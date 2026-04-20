@@ -1,6 +1,6 @@
 import type { SessionState, SSEEvent, ValidationResult } from '../types'
 
-function getSessionId(): string {
+export function getSessionId(): string {
   let id = sessionStorage.getItem('session_id')
   if (!id) {
     id = crypto.randomUUID()
