@@ -491,7 +491,19 @@ async function generateInterviewResult() {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (data.success) { resultStatus.value = 'success'; }
+    if (data.success) {
+      resultStatus.value = 'success';
+      // need-only-prd 통합: 부모 React 앱에 완료 알림 → 자동 spec.md 생성
+      try {
+        window.parent?.postMessage({
+          type: 'pfy-interview-result-success',
+          screenName: payload.screenName,
+          pageName: payload.pageName,
+          title: payload.title,
+          pageType: payload.pageType,
+        }, '*');
+      } catch { /* ignore postMessage errors */ }
+    }
     else { resultStatus.value = 'error'; resultMessage.value = data.message ?? '생성에 실패했습니다.'; }
   } catch (e) {
     resultStatus.value = 'error';
@@ -1321,7 +1333,19 @@ async function generateInterviewResult() {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (data.success) { resultStatus.value = 'success'; }
+    if (data.success) {
+      resultStatus.value = 'success';
+      // need-only-prd 통합: 부모 React 앱에 완료 알림 → 자동 spec.md 생성
+      try {
+        window.parent?.postMessage({
+          type: 'pfy-interview-result-success',
+          screenName: payload.screenName,
+          pageName: payload.pageName,
+          title: payload.title,
+          pageType: payload.pageType,
+        }, '*');
+      } catch { /* ignore postMessage errors */ }
+    }
     else { resultStatus.value = 'error'; resultMessage.value = data.message ?? '생성에 실패했습니다.'; }
   } catch (e) {
     resultStatus.value = 'error';

@@ -22,8 +22,10 @@ router = APIRouter(prefix="/mockup", tags=["mockup"])
 _PFY_FRONT_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "pfy-front"
 _PFY_PAGES_GENERATED = _PFY_FRONT_ROOT / "src" / "pages" / "generated"
 _PFY_STATIC_ROUTES = _PFY_FRONT_ROOT / "src" / "router" / "staticRoutes.ts"
+_PFY_SPEC_SOURCE = _PFY_FRONT_ROOT / "src" / "spec-source"
 
 _PROJECT_ID_RE = re.compile(r"^[A-Z0-9_]+$")
+_SCREEN_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class BriefRequest(BaseModel):
@@ -34,6 +36,13 @@ class BriefRequest(BaseModel):
 
 class ParseInterviewRequest(BaseModel):
     raw_interview_text: str
+
+
+class GenerateSpecFromBuilderRequest(BaseModel):
+    screen_name: str
+    page_name: str
+    title: str
+    page_type: str | None = None
 
 
 def _require_mockup_state(session_id: str) -> MockupState:
@@ -191,3 +200,60 @@ async def reset(session_id: str = Depends(get_session_id)):
         s.spec_source = None
         session_store.save(session_id)
     return {"reset": True}
+
+
+@router.post("/generate-spec-from-builder")
+async def generate_spec_from_builder(
+    body: GenerateSpecFromBuilderRequest,
+    session_id: str = Depends(get_session_id),
+):
+    """scaffolding이 src/spec-source/{screen_name}/에 저장한 InterviewNote.md + Component.vue +
+    metadata.json을 읽어 masterPrompt 기반 spec.md 생성 후 세션에 저장."""
+    if not _SCREEN_NAME_RE.match(body.screen_name):
+        raise HTTPException(400, "screen_name은 영문/숫자/언더스코어/하이픈만 허용됩니다.")
+
+    spec_dir = _PFY_SPEC_SOURCE / body.screen_name
+    if not spec_dir.exists():
+        raise HTTPException(404, f"spec-source 디렉토리를 찾을 수 없습니다: {spec_dir}")
+
+    interview_note_path = spec_dir / "InterviewNote.md"
+    component_vue_path = spec_dir / "Component.vue"
+    metadata_path = spec_dir / "metadata.json"
+
+    if not interview_note_path.exists():
+        raise HTTPException(404, "InterviewNote.md가 없습니다. 인터뷰결과생성을 먼저 완료하세요.")
+
+    interview_note_md = interview_note_path.read_text(encoding="utf-8")
+    component_vue = component_vue_path.read_text(encoding="utf-8") if component_vue_path.exists() else ""
+
+    # metadata.json을 brief 대용으로 사용
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        brief_md = (
+            f"# {body.title}\n\n"
+            f"- 페이지명: {body.page_name}\n"
+            f"- 페이지 타입: {body.page_type or metadata.get('pageType', '')}\n\n"
+            f"## Page Spec (from MockupBuilder)\n"
+            f"```json\n{json.dumps(metadata, indent=2, ensure_ascii=False)}\n```\n"
+        )
+    else:
+        brief_md = f"# {body.title}\n\n- 페이지명: {body.page_name}\n"
+
+    session_store.increment_llm_calls(session_id)
+
+    # 스트리밍 없이 한번에 생성 (프론트는 완료 응답 기다렸다가 SpecViewer로 전환)
+    full_spec = ""
+    async for chunk in mockup_pipeline.generate_spec_streaming(
+        brief_md=brief_md,
+        mockup_vue=component_vue,
+        interview_notes_md=interview_note_md,
+    ):
+        full_spec += chunk
+
+    # 세션에 저장 (텍스트 파이프라인과 동일 방식)
+    session = session_store.get_or_create(session_id)
+    session.spec_markdown = full_spec.strip()
+    session.spec_version += 1
+    session_store.save(session_id)
+
+    return {"spec_markdown": session.spec_markdown, "spec_version": session.spec_version}
