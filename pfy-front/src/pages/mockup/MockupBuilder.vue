@@ -976,11 +976,83 @@ async function generate() {
 
 <style scoped lang="scss">
 .mb {
+  /* need-only-prd 통합: 다크 테마 + 주황 포인트 컬러 */
+  --bg-1: #0f0f0f;
+  --bg-2: #1a1a1a;
+  --bg-3: #242424;
+  --divider-1: #2a2a2a;
+  --divider-2: #1e1e1e;
+  --border-color: #333333;
+  --brand-secondary-color: #f4821f;
+  --error-color: #ef4444;
+  --txt-color-1: #ffffff;
+  --txt-color-2: #c0c0c0;
+  --txt-color-3: #909090;
+  --txt-color-4: #606060;
+
   display: flex;
   flex-direction: column;
   height: 100%;
   background: var(--bg-1);
   overflow: hidden;
+
+  /* PrimeVue 컴포넌트 다크 테마 오버라이드 */
+  :deep(.p-inputtext),
+  :deep(.p-select),
+  :deep(.p-inputnumber-input),
+  :deep(.p-textarea) {
+    background: var(--bg-3);
+    color: var(--txt-color-1);
+    border-color: var(--border-color);
+    &:focus, &.p-focus {
+      border-color: var(--brand-secondary-color);
+      box-shadow: 0 0 0 2px rgba(244, 130, 31, 0.2);
+    }
+  }
+  :deep(.p-select-label),
+  :deep(.p-select-dropdown) { color: var(--txt-color-1); }
+  :deep(.p-select-overlay),
+  :deep(.p-select-list),
+  :deep(.p-select-option) {
+    background: var(--bg-2);
+    color: var(--txt-color-1);
+  }
+  :deep(.p-select-option):hover,
+  :deep(.p-select-option-selected) {
+    background: var(--bg-3);
+    color: var(--brand-secondary-color);
+  }
+  :deep(.p-button) {
+    background: var(--brand-secondary-color);
+    border-color: var(--brand-secondary-color);
+    color: #000;
+    &:hover {
+      background: #ff9a3d;
+      border-color: #ff9a3d;
+    }
+    &.p-button-secondary {
+      background: var(--bg-3);
+      border-color: var(--border-color);
+      color: var(--txt-color-1);
+      &:hover { background: var(--divider-1); }
+    }
+    &.p-button-outlined {
+      background: transparent;
+      color: var(--brand-secondary-color);
+      border-color: var(--brand-secondary-color);
+      &:hover {
+        background: rgba(244, 130, 31, 0.1);
+      }
+    }
+  }
+  :deep(.p-checkbox-box) {
+    background: var(--bg-3);
+    border-color: var(--border-color);
+    &.p-highlight {
+      background: var(--brand-secondary-color);
+      border-color: var(--brand-secondary-color);
+    }
+  }
 
   // ── 헤더 ──
   &__header {
