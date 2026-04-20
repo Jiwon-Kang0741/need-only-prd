@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getSessionId } from '../../api/client'
 import { useSessionStore } from '../../store/sessionStore'
 
-const PFY_BASE_URL = 'http://localhost:8081'
+const PFY_BASE_URL = 'http://localhost:8085'
 const PFY_MOCKUP_BUILDER_URL = `${PFY_BASE_URL}/mockup/builder`
 const VIEWPORT_WIDTH = 1600
 const VIEWPORT_HEIGHT = 1000

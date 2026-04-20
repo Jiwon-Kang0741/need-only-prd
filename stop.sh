@@ -12,7 +12,7 @@ if [ -f .pids ]; then
 fi
 
 # Kill any remaining processes on the ports
-for port in 8001 5173 8081 4000; do
+for port in 8001 5173 8085 4000; do
   pid=$(lsof -ti ":$port" 2>/dev/null)
   if [ -n "$pid" ]; then
     kill "$pid" 2>/dev/null

@@ -976,11 +976,101 @@ async function generate() {
 
 <style scoped lang="scss">
 .mb {
+  /* need-only-prd 통합: 다크 테마 + 주황 포인트 컬러 */
+  --bg-1: #0f0f0f;
+  --bg-2: #1a1a1a;
+  --bg-3: #242424;
+  --divider-1: #2a2a2a;
+  --divider-2: #1e1e1e;
+  --border-color: #333333;
+  --brand-secondary-color: #f4821f;
+  --error-color: #ef4444;
+  --txt-color-1: #ffffff;
+  --txt-color-2: #c0c0c0;
+  --txt-color-3: #909090;
+  --txt-color-4: #606060;
+
   display: flex;
   flex-direction: column;
   height: 100%;
   background: var(--bg-1);
   overflow: hidden;
+
+  /* PrimeVue 컴포넌트 다크 테마 오버라이드 */
+  :deep(.p-inputtext),
+  :deep(.p-select),
+  :deep(.p-inputnumber-input),
+  :deep(.p-textarea) {
+    background: var(--bg-3);
+    color: var(--txt-color-1);
+    border-color: var(--border-color);
+    &:focus, &.p-focus {
+      border-color: var(--brand-secondary-color);
+      box-shadow: 0 0 0 2px rgba(244, 130, 31, 0.2);
+    }
+  }
+  :deep(.p-select-label),
+  :deep(.p-select-dropdown) { color: var(--txt-color-1); }
+  :deep(.p-select-overlay),
+  :deep(.p-select-list),
+  :deep(.p-select-option) {
+    background: var(--bg-2);
+    color: var(--txt-color-1);
+  }
+  :deep(.p-select-option):hover,
+  :deep(.p-select-option-selected) {
+    background: var(--bg-3);
+    color: var(--brand-secondary-color);
+  }
+  :deep(.p-button) {
+    background: var(--brand-secondary-color);
+    border-color: var(--brand-secondary-color);
+    color: #000;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    &:hover:not(:disabled) {
+      background: #ff9a3d;
+      border-color: #ff9a3d;
+    }
+    &.p-button-secondary {
+      /* 활성 시: 투명 배경 + 주황 테두리/텍스트로 보조 버튼임을 명확히 */
+      background: transparent;
+      border-color: var(--brand-secondary-color);
+      color: var(--brand-secondary-color);
+      &:hover:not(:disabled) {
+        background: rgba(244, 130, 31, 0.12);
+        border-color: #ff9a3d;
+        color: #ff9a3d;
+      }
+    }
+    &.p-button-outlined {
+      background: transparent;
+      color: var(--brand-secondary-color);
+      border-color: var(--brand-secondary-color);
+      &:hover:not(:disabled) {
+        background: rgba(244, 130, 31, 0.1);
+      }
+    }
+    /* 비활성 상태: 짙은 회색 + 옅은 텍스트 + 커서 금지 → 활성과 명확히 구분 */
+    &:disabled,
+    &.p-disabled,
+    &[disabled] {
+      background: var(--bg-3) !important;
+      border-color: var(--divider-1) !important;
+      color: var(--txt-color-4) !important;
+      opacity: 0.6;
+      cursor: not-allowed;
+      &:hover { background: var(--bg-3) !important; }
+    }
+  }
+  :deep(.p-checkbox-box) {
+    background: var(--bg-3);
+    border-color: var(--border-color);
+    &.p-highlight {
+      background: var(--brand-secondary-color);
+      border-color: var(--brand-secondary-color);
+    }
+  }
 
   // ── 헤더 ──
   &__header {
@@ -1046,6 +1136,7 @@ async function generate() {
   &__preview-split-main {
     flex: 1;
     min-width: 0;
+    max-width: 680px;
     min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
@@ -1541,8 +1632,8 @@ async function generate() {
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-    border: 1px solid #bfdbfe;
+    background: linear-gradient(135deg, #0f0f0f 0%, #0f0f0f 100%);
+    border: 0px solid #000000;
     border-radius: 8px;
     margin-top: 4px;
     flex-wrap: wrap;

@@ -1,7 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { showNoAuthToast } from '@/utils/errorHandler';
-
 import { staticRoutes } from './staticRoutes';
 
 export const router = createRouter({
@@ -9,13 +7,6 @@ export const router = createRouter({
   routes: staticRoutes,
 });
 
-router.beforeEach((to) => {
-  const exists = router.getRoutes().some((r) => r.path === to.path);
-  if (!exists) {
-    setTimeout(() => {
-      showNoAuthToast();
-    });
-    return false;
-  }
-  return true;
-});
+// need-only-prd Mockup 런타임: 존재하지 않는 경로도 차단하지 않고 NotFound 라우트로 fallback.
+// (원본 가드는 navigation을 abort시켜 bootstrap이 중단되는 문제가 있어 제거)
+router.beforeEach(() => true);
