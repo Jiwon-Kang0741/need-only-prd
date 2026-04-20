@@ -18,7 +18,7 @@ export default defineConfig((configEnv: ConfigEnv) => {
   const devApiBase = env.VITE_API_BASE_URL?.trim() || '';
   /** dev 서버 프록시가 실제로 넘길 백엔드 주소(baseURL이 비어 있어도 8888로 전달) */
   const proxyTarget = isMock
-    ? env.VITE_MOCK_BASE_URL || 'http://localhost:8081'
+    ? env.VITE_MOCK_BASE_URL || 'http://localhost:8085'
     : devApiBase || 'http://localhost:8888';
 
   return {
@@ -33,7 +33,7 @@ export default defineConfig((configEnv: ConfigEnv) => {
     },
     // 프록시 설정
     server: {
-      port: 8081,
+      port: 8085,
       open: true,
       proxy: {
         '/online/api': {

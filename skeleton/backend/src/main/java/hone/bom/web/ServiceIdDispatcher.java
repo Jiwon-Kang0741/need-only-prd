@@ -17,7 +17,7 @@ import java.util.*;
 /**
  * Hone Framework @ServiceId dispatcher.
  * Scans all Spring beans for @ServiceId annotations and routes
- * POST /online/mvcJson/{serviceId} to the annotated method.
+ * POST /api/v1/{serviceId} to the annotated method.
  */
 @Slf4j
 @RestController
@@ -60,13 +60,13 @@ public class ServiceIdDispatcher {
                         : null;
 
                 registry.put(id, new MethodTarget(bean, method, paramType));
-                log.info("Registered @ServiceId: POST /online/mvcJson/{}", id);
+                log.info("Registered @ServiceId: POST /api/v1/{}", id);
             }
         }
         log.info("ServiceIdDispatcher: {} endpoints registered", registry.size());
     }
 
-    @PostMapping("/online/mvcJson/{screenCode}/{methodName}")
+    @PostMapping("/api/v1/{screenCode}/{methodName}")
     public ResponseEntity<Map<String, Object>> dispatch(
             @PathVariable String screenCode,
             @PathVariable String methodName,

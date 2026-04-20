@@ -2,12 +2,12 @@
 
 ## 📚 문서 개요
 
-이 폴더는 **htomss/htomss-ui (Nexacro)** 화면을 **tomms-lite-front (Vue 3 + TypeScript)**로 변환하는 완벽한 가이드를 제공합니다.
+이 폴더는 **htomss/htomss-ui (Nexacro)** 화면을 **pfy-front (Vue 3 + TypeScript)**로 변환하는 완벽한 가이드를 제공합니다.
 
 **프로젝트 구조**:
 - **소스 화면**: `htomss/htomss-ui` (Nexacro XFDL 파일)
-- **타겟 프로젝트**: `tomms-lite-front/src/pages` (Vue 3 + TypeScript)
-- **백엔드**: `tomms-lite-war` (Spring Boot + MyBatis)
+- **타겟 프로젝트**: `pfy-front/src/pages` (Vue 3 + TypeScript)
+- **백엔드**: `pfy` (Spring Boot + MyBatis)
 
 PMDP010과 SPOV010의 패턴을 참조하여 동일한 품질로 화면을 개발합니다.
 
@@ -59,7 +59,7 @@ api/pages/[module]/[category]/
 **각 컴포넌트마다 SCSS 파일이 필요한 이유**:
 - 컴포넌트별 스타일 분리 관리
 - 성능 최적화 CSS 포함 (DataTable의 경우)
-- tomms-lite-front 스타일 복제
+- pfy-front 스타일 복제
 - 스타일 충돌 방지
 
 ## 📖 문서 구조
@@ -82,7 +82,7 @@ api/pages/[module]/[category]/
 2. **[01_화면_분석_단계.md](./01_화면_분석_단계.md)**
    - Nexacro XFDL 파일 분석 방법
    - 컴포넌트 매핑 전략
-   - API/HQML 분석 방법
+   - API/Mapper XML 분석 방법
 
 3. **[02_컴포넌트_구조_설계.md](./02_컴포넌트_구조_설계.md)**
    - 폴더/파일 구조 표준
@@ -102,15 +102,15 @@ api/pages/[module]/[category]/
 6. **[05_SumGrid_ProgressBar_구현.md](./05_SumGrid_ProgressBar_구현.md)**
    - 진행상태 컴포넌트 구현
    - searchParams 연동 패턴
-   - tomms-lite-front 스타일 복제
+   - pfy-front 스타일 복제
 
 7. **[06_API_백엔드_연동.md](./06_API_백엔드_연동.md)**
    - API 타입 정의
-   - 파라미터 대문자 변환 로직
-   - HQML 매핑 규칙
+   - camelCase 파라미터 전달 패턴
+   - MyBatis 파라미터 매핑 규칙
 
 8. **[07_CSS_스타일링.md](./07_CSS_스타일링.md)**
-   - tomms-lite-front 스타일 복제 전략
+   - pfy-front 스타일 복제 전략
    - SCSS 변수 활용
    - 반응형 레이아웃
 
@@ -147,17 +147,15 @@ api/pages/[module]/[category]/
 
 - **[자주_발생하는_에러.md](./자주_발생하는_에러.md)** - 실제 발생한 에러 및 해결 방법
 - **[성능_최적화_가이드.md](./성능_최적화_가이드.md)** - DataTable 성능 개선 기법 (97% 개선)
-- **[컴포넌트_매핑_표.md](./컴포넌트_매핑_표.md)** - Nexacro ↔ Vue 컴포넌트 대조표
-
 ### 3. 실제 구현 예제
 
 > ✅ **PMDP020**을 완벽한 참고 예제로 사용하세요!
-> - **tomms-lite-front 프로젝트**: `src/pages/sy/ds/pmdp020/`
+> - **pfy-front 프로젝트**: `src/pages/sy/ds/pmdp020/`
 >   - 폴더 구조: `components/` 서브디렉토리 사용
 >   - API 연동: 실제 백엔드와 통신
 >   - ContentHeader: 제대로 적용됨
 > 
-> - **tomms-lite-front 프로젝트**: `src/pages/sy/ds/spov010/`
+> - **pfy-front 프로젝트**: `src/pages/sy/ds/spov010/`
 >   - 스타일링 패턴 참고용
 
 ## 🎯 핵심 원칙
@@ -215,12 +213,12 @@ watch(
 );
 ```
 
-### 4. **API 파라미터 대문자 변환 (필수!)**
+### 4. **API 파라미터 — camelCase 직접 전달**
 ```typescript
-// 백엔드 HQML은 대문자 파라미터 기대
-// prg_stat → PRG_STAT
-// cont_no → CONT_NO
-// API 레이어에서 자동 변환 함수 구현 필요
+// PFY 백엔드는 camelCase 파라미터 사용 (MyBatis + DTO)
+// 프론트엔드에서 변환 없이 그대로 전달
+const params = { langCd: 'KO', pgmId: 'WIN', useYn: 'Y' };
+const result = await selectWindowList(params);
 ```
 
 ### 5. **성능 최적화 (필수!)**
@@ -254,10 +252,10 @@ td {
 
 ### 2단계: 실제 코드 참고
 ```bash
-# tomms-lite-front의 PMDP020 구현 확인
+# pfy-front의 PMDP020 구현 확인
 code src/pages/sy/ds/pmdp020/
 
-# tomms-lite-front의 spov010 패턴 확인
+# pfy-front의 spov010 패턴 확인
 code src/pages/sy/ds/spov010/
 ```
 
@@ -316,7 +314,7 @@ code src/pages/sy/ds/spov010/
 
 - **에러 발생 시**: `자주_발생하는_에러.md` 참고
 - **성능 문제**: `성능_최적화_가이드.md` 참고
-- **컴포넌트 찾기**: `컴포넌트_매핑_표.md` 참고
+
 
 ## 📝 버전
 

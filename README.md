@@ -92,7 +92,7 @@ CODEX_AZURE_OPENAI_MODEL_NAME=gpt-5.3-codex
 실행 후 접속:
 - **`http://localhost:5173`** — 메인 애플리케이션
 - `http://localhost:8001` — Backend API
-- `http://localhost:8081` — pfy-front (Mockup 렌더링 런타임, iframe 내부에서만 사용)
+- `http://localhost:8085` — pfy-front (Mockup 렌더링 런타임, iframe 내부에서만 사용)
 
 로그 확인:
 ```bash

@@ -89,7 +89,7 @@ public RecordSet selectList(Record input) {
 - **쿼리**: MyBatis XML Mapper
 - **핵심 특징**: **@ServiceId 어노테이션이 자동으로 REST Controller를 생성**
   - **수동으로 Controller(@RestController) 작성 절대 불필요**
-  - API 엔드포인트 자동 생성: `POST /online/mvcJson/{ServiceId}`
+  - API 엔드포인트 자동 생성: `POST /api/v1/{ServiceId}`
 
 ```java
 // tomms-lite 변환 예시
@@ -199,10 +199,10 @@ public Pm020SaveResDto save(Pm020SaveReqDto request) { ... }
 
 **API 엔드포인트**:
 ```
-POST /online/mvcJson/PMDP020/searchList
-POST /online/mvcJson/PMDP020/selectDetail
-POST /online/mvcJson/PMDP020/save
-POST /online/mvcJson/PMDP020/delete
+POST /api/v1/PMDP020/searchList
+POST /api/v1/PMDP020/selectDetail
+POST /api/v1/PMDP020/save
+POST /api/v1/PMDP020/delete
 ```
 
 ---
@@ -239,7 +239,7 @@ find htomss/htomss-olt/htomss-biz-{module} -name "*.hqml"
 
 - **ServiceId 형식**: `{화면코드}/{메서드명}`
 - **예시**: `IMIR010/selectInventoryList`
-- **자동 생성 API**: `POST /online/mvcJson/IMIR010/selectInventoryList`
+- **자동 생성 API**: `POST /api/v1/IMIR010/selectInventoryList`
 
 #### 3단계: DTO 구조 설계
 
@@ -790,7 +790,7 @@ public class PMDP020ServiceImpl implements PMDP020Service {
     
     /**
      * 부품요청 목록 조회
-     * API: POST /online/mvcJson/PMDP020/searchList
+     * API: POST /api/v1/PMDP020/searchList
      * 
      * @param request 부품요청목록조회요청DTO
      * @return List<Pm020SearchListResDto> 부품요청목록응답DTO목록
@@ -817,7 +817,7 @@ public class PMDP020ServiceImpl implements PMDP020Service {
     
     /**
      * 부품요청 상세 조회
-     * API: POST /online/mvcJson/PMDP020/selectDetail
+     * API: POST /api/v1/PMDP020/selectDetail
      * 
      * @param request 부품요청상세조회요청DTO
      * @return Pm020SelectDetailResDto 부품요청상세응답DTO
@@ -845,7 +845,7 @@ public class PMDP020ServiceImpl implements PMDP020Service {
     
     /**
      * 부품요청 저장 (등록/수정)
-     * API: POST /online/mvcJson/PMDP020/save
+     * API: POST /api/v1/PMDP020/save
      * 
      * @param request 부품요청저장요청DTO
      * @return Pm020SaveResDto 저장결과
@@ -884,7 +884,7 @@ public class PMDP020ServiceImpl implements PMDP020Service {
     
     /**
      * 부품요청 삭제
-     * API: POST /online/mvcJson/PMDP020/delete
+     * API: POST /api/v1/PMDP020/delete
      * 
      * @param reqId 요청ID
      * @return Pm020SaveResDto 삭제결과
@@ -991,7 +991,7 @@ class IMIR010ServiceTest {
 #### 2. API 테스트 (Postman)
 
 ```http
-POST http://localhost:9090/online/mvcJson/IMIR010/selectInventoryList
+POST http://localhost:9090/api/v1/IMIR010/selectInventoryList
 Content-Type: application/json
 
 {
@@ -1340,7 +1340,7 @@ public Map<String, Object> delete(String id) {
 
 ### Issue 3: API 호출 시 404 에러
 - **원인**: @ServiceId 형식 오류
-- **해결**: `{화면코드}/{메서드명}` 형식 확인, `/online/mvcJson/{ServiceId}` 경로로 호출
+- **해결**: `{화면코드}/{메서드명}` 형식 확인, `/api/v1/{ServiceId}` 경로로 호출
 
 ### Issue 4: DTO 필드 매핑 안됨
 - **원인**: 컬럼 alias와 필드명 불일치
@@ -1432,10 +1432,10 @@ AI 어시스턴트 작업 순서:
 
 10. BackendGuide/05-코드변환가이드.md 참조하여 코드 검증
 11. API 테스트:
-    - POST /online/mvcJson/PMDP020/searchList
-    - POST /online/mvcJson/PMDP020/selectDetail
-    - POST /online/mvcJson/PMDP020/save
-    - POST /online/mvcJson/PMDP020/delete
+    - POST /api/v1/PMDP020/searchList
+    - POST /api/v1/PMDP020/selectDetail
+    - POST /api/v1/PMDP020/save
+    - POST /api/v1/PMDP020/delete
 ```
 
 **핵심 포인트**:
@@ -1455,7 +1455,7 @@ AI 어시스턴트 작업 순서:
 
 이 한 줄이 자동으로 다음 API를 생성합니다:
 ```
-POST /online/mvcJson/PMDP020/searchList
+POST /api/v1/PMDP020/searchList
 ```
 
 **절대 Controller를 직접 작성하지 마세요!**
