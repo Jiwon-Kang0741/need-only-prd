@@ -1026,23 +1026,41 @@ async function generate() {
     background: var(--brand-secondary-color);
     border-color: var(--brand-secondary-color);
     color: #000;
-    &:hover {
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    &:hover:not(:disabled) {
       background: #ff9a3d;
       border-color: #ff9a3d;
     }
     &.p-button-secondary {
-      background: var(--bg-3);
-      border-color: var(--border-color);
-      color: var(--txt-color-1);
-      &:hover { background: var(--divider-1); }
+      /* 활성 시: 투명 배경 + 주황 테두리/텍스트로 보조 버튼임을 명확히 */
+      background: transparent;
+      border-color: var(--brand-secondary-color);
+      color: var(--brand-secondary-color);
+      &:hover:not(:disabled) {
+        background: rgba(244, 130, 31, 0.12);
+        border-color: #ff9a3d;
+        color: #ff9a3d;
+      }
     }
     &.p-button-outlined {
       background: transparent;
       color: var(--brand-secondary-color);
       border-color: var(--brand-secondary-color);
-      &:hover {
+      &:hover:not(:disabled) {
         background: rgba(244, 130, 31, 0.1);
       }
+    }
+    /* 비활성 상태: 짙은 회색 + 옅은 텍스트 + 커서 금지 → 활성과 명확히 구분 */
+    &:disabled,
+    &.p-disabled,
+    &[disabled] {
+      background: var(--bg-3) !important;
+      border-color: var(--divider-1) !important;
+      color: var(--txt-color-4) !important;
+      opacity: 0.6;
+      cursor: not-allowed;
+      &:hover { background: var(--bg-3) !important; }
     }
   }
   :deep(.p-checkbox-box) {
