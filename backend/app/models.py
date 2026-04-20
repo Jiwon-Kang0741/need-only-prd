@@ -119,42 +119,13 @@ class CodeGenState(BaseModel):
 # --- Mockup Pipeline Models ---
 
 
-class FieldOption(BaseModel):
-    label: str
-    value: str
-    color: str | None = None
-
-
-class FieldDef(BaseModel):
-    key: str
-    label: str
-    type: Literal["text", "number", "select", "radio", "badge", "date", "daterange", "textarea", "checkbox"]
-    searchable: bool = False
-    listable: bool = False
-    detailable: bool = False
-    editable: bool = False
-    required: bool = False
-    options: list[FieldOption] | None = None
-    width: str | None = None
-
-
-class TabDef(BaseModel):
-    key: str
-    label: str
-    fields: list[FieldDef]
-
-
 class MockupState(BaseModel):
-    screen_id: str
-    screen_name: str
-    page_type: Literal["list-detail", "list", "edit", "tab-detail"]
-    fields: list[dict] = Field(default_factory=list)
-    tabs: list[TabDef] | None = None
-    vue_code: str | None = None
-    annotations: list[dict] | None = None
-    annotation_markdown: str | None = None
-    interview_questions: list[dict] | None = None
-    interview_answers: list[dict] | None = None
+    project_id: str
+    project_name: str
+    brief_md: str | None = None
+    mockup_vue: str | None = None
     raw_interview_text: str | None = None
-    interview_note_md: str | None = None
+    interview_notes_md: str | None = None
     current_step: int = 1
+
+    model_config = {"extra": "ignore"}
