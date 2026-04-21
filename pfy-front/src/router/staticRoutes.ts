@@ -171,6 +171,30 @@ export const staticRoutes: RouteRecordRaw[] = [
       component: () => import('@/pages/generated/scr004/index.vue'),
     },
     {
+        path: '/generated/cpmsEduList',
+        name: 'generated-cpmsEduList',
+        meta: { generated: true },
+        component: () => import('@/pages/generated/cpmsEduList.vue'),
+      },
+    {
+        path: '/generated/CpmsEduList',
+        name: 'generated-CpmsEduList',
+        meta: { generated: true },
+        component: () => import('@/pages/generated/CpmsEduList.vue'),
+      },
+    {
+      path: '/EDU_A001',
+      name: 'EDU_A001',
+      meta: { menuId: 'EDU_A001', generated: true },
+      component: () => import('@/pages/generated/edu_a001/index.vue'),
+    },
+    {
+      path: '/FDGDFG',
+      name: 'FDGDFG',
+      meta: { menuId: 'FDGDFG', generated: true },
+      component: () => import('@/pages/generated/fdgdfg/index.vue'),
+    },
+    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/pages/_system/notFound/index.vue'),

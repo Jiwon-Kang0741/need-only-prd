@@ -1757,6 +1757,15 @@ router.post('/', (req: Request, res: Response) => {
     });
   }
 
+  // /online/ 로 시작하는 경로는 Vite 프록시와 충돌하므로 차단
+  const RESERVED_PREFIXES = ['/online/', '/online/api', '/online/mvcJson', '/online/files', '/online/download'];
+  if (RESERVED_PREFIXES.some(p => spec.routePath.startsWith(p) || spec.routePath === p.replace(/\/$/, ''))) {
+    return res.status(400).json({
+      success: false,
+      message: `routePath 가 예약된 프록시 경로(${spec.routePath})와 충돌합니다. /generated/ 또는 다른 경로를 사용하세요.`,
+    });
+  }
+
   /* ── detail → 미구현 ── */
   if (spec.pageType === 'detail') {
     return res.status(400).json({

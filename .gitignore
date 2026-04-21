@@ -15,6 +15,7 @@ dist/
 # Runtime
 .pids
 backend/.sessions/
+backend/test_output/
 logs/
 
 # OS

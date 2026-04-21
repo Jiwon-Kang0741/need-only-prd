@@ -32,6 +32,9 @@
           <div class="mb__field">
             <label class="mb__label">라우트 경로 <span class="mb__required">*</span></label>
             <InputText v-model="spec.routePath" placeholder="예: /generated/member-list" style="width: 100%" />
+            <small v-if="routePathConflict" class="mb__route-warn">
+              ⚠ /online/ 로 시작하는 경로는 API 프록시와 충돌합니다. <code>/generated/...</code> 형식을 사용하세요.
+            </small>
           </div>
 
           <div class="mb__field">
@@ -356,7 +359,28 @@
                     <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" />
                     {{ copied ? '복사됨!' : 'URL 복사' }}
                   </button>
+                  <button class="mb__copy-btn" @click="previewVisible = !previewVisible">
+                    <i :class="previewVisible ? 'pi pi-eye-slash' : 'pi pi-eye'" />
+                    {{ previewVisible ? '미리보기 닫기' : '인라인 미리보기' }}
+                  </button>
                 </div>
+              </div>
+
+              <!-- 인라인 iframe 미리보기 -->
+              <div v-if="previewVisible" class="mb__iframe-wrap">
+                <div class="mb__iframe-toolbar">
+                  <span class="mb__iframe-url">{{ result.previewUrl }}</span>
+                  <button class="mb__iframe-reload" title="새로고침" @click="reloadPreview">
+                    <i class="pi pi-refresh" />
+                  </button>
+                </div>
+                <iframe
+                  :key="iframeKey"
+                  :src="result.previewUrl"
+                  class="mb__iframe"
+                  title="페이지 미리보기"
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+                />
               </div>
             </section>
 
@@ -557,6 +581,13 @@ const annotationError     = ref('');
 const annotationMarkdown  = ref('');
 const annotationCopied    = ref(false);
 
+const previewVisible = ref(false);
+const iframeKey      = ref(0);
+
+function reloadPreview() {
+  iframeKey.value += 1;
+}
+
 // ── Computed ───────────────────────────────────────────────────────────────
 /** 요청 payload (JSON 문자열) */
 const specJson = computed(() => {
@@ -619,8 +650,14 @@ const specJson = computed(() => {
   return JSON.stringify(preview, null, 2);
 });
 
+const PROXY_PREFIXES = ['/online/'];
+
+const routePathConflict = computed(() =>
+  PROXY_PREFIXES.some(p => spec.routePath.startsWith(p)),
+);
+
 const canGenerate = computed(
-  () => !!spec.pageName.trim() && !!spec.routePath.trim(),
+  () => !!spec.pageName.trim() && !!spec.routePath.trim() && !routePathConflict.value,
 );
 
 function interviewPriorityLabel(p: string): string {
@@ -846,6 +883,7 @@ async function generate() {
   interviewSource.value = '';
   annotationMarkdown.value = '';
   interviewStep.value = '';
+  previewVisible.value = false;
   generating.value = true;
 
   const titleForAi = spec.title.trim() || spec.pageName.trim();
@@ -952,6 +990,10 @@ async function generate() {
       previewUrl: `${window.location.origin}${data2.routePath}`,
     } as GenerateResult;
 
+    // 인라인 미리보기 자동 열기
+    previewVisible.value = true;
+    iframeKey.value += 1;
+
     // need-only-prd 통합: 부모 React에 페이지 생성 완료 알림 → iframe 자동 전환
     try {
       const msg = {
@@ -993,6 +1035,9 @@ async function generate() {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* iframe 안에서 전체 뷰포트를 채우기 위한 폴백 */
+  min-height: 100vh;
+  max-height: 100vh;
   background: var(--bg-1);
   overflow: hidden;
 
@@ -1103,7 +1148,7 @@ async function generate() {
 
   // ── 왼쪽 폼 패널 ──
   &__form-panel {
-    width: 520px;
+    width: clamp(260px, 32%, 520px);
     flex-shrink: 0;
     overflow-y: auto;
     padding: 20px 24px 32px;
@@ -1119,7 +1164,7 @@ async function generate() {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    padding: 20px 24px 32px;
+    padding: 20px 16px 32px;
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -1129,21 +1174,20 @@ async function generate() {
     display: flex;
     flex: 1;
     min-height: 0;
-    gap: 20px;
+    gap: 16px;
     align-items: stretch;
   }
 
   &__preview-split-main {
     flex: 1;
     min-width: 0;
-    max-width: 680px;
     min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
   }
 
   &__preview-split-side {
-    width: 340px;
+    width: clamp(200px, 26%, 340px);
     flex-shrink: 0;
     min-height: 0;
     display: flex;
@@ -1160,7 +1204,7 @@ async function generate() {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 16px 16px 14px;
+    padding: 12px 12px 12px;
     overflow: hidden;
   }
 
@@ -1471,17 +1515,30 @@ async function generate() {
     color: var(--txt-color-4);
   }
 
+  &__route-warn {
+    font-size: 11px;
+    color: #f97316;
+    line-height: 1.5;
+
+    code {
+      font-family: 'Consolas', 'Monaco', monospace;
+      background: rgba(249, 115, 22, 0.12);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+  }
+
   // ── 동적 리스트 그리드 ──
   &__grid-head {
     display: grid;
-    gap: 6px;
+    gap: 4px;
     font-size: 11px;
     font-weight: 500;
     color: var(--txt-color-4);
     padding: 0 2px 4px;
 
     &.mb__grid--4col {
-      grid-template-columns: 1fr 1fr 110px 1fr 28px;
+      grid-template-columns: 1fr 1fr minmax(80px, 110px) 1fr 28px;
     }
 
     &.mb__grid--2col {
@@ -1489,18 +1546,18 @@ async function generate() {
     }
 
     &.mb__grid--form {
-      grid-template-columns: 1fr 1fr 120px 40px 1fr 28px;
+      grid-template-columns: 1fr 1fr minmax(80px, 120px) 36px 1fr 28px;
     }
   }
 
   &__grid-row {
     display: grid;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
     margin-bottom: 6px;
 
     &.mb__grid--4col {
-      grid-template-columns: 1fr 1fr 110px 1fr 28px;
+      grid-template-columns: 1fr 1fr minmax(80px, 110px) 1fr 28px;
     }
 
     &.mb__grid--2col {
@@ -1508,7 +1565,7 @@ async function generate() {
     }
 
     &.mb__grid--form {
-      grid-template-columns: 1fr 1fr 120px 40px 1fr 28px;
+      grid-template-columns: 1fr 1fr minmax(80px, 120px) 36px 1fr 28px;
     }
   }
 
@@ -1851,6 +1908,64 @@ async function generate() {
     .pi {
       font-size: 13px;
     }
+  }
+
+  // ── 인라인 iframe 미리보기 ──
+  &__iframe-wrap {
+    margin-top: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  &__iframe-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--bg-3);
+    border-bottom: 1px solid var(--border-color);
+    gap: 8px;
+  }
+
+  &__iframe-url {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--txt-color-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__iframe-reload {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--txt-color-3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover {
+      background: var(--bg-2);
+      color: var(--brand-secondary-color);
+    }
+  }
+
+  &__iframe {
+    display: block;
+    width: 100%;
+    height: 540px;
+    border: none;
   }
 
   // ── TODO 배지 ──

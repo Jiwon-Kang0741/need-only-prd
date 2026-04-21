@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     CODEX_AZURE_OPENAI_API_KEY: str = ""
 
     # --- Mockup Pipeline 전용 (원본 pfy-front 사내 게이트웨이 호환) ---
+    # .env의 AOAI_* 변수를 우선 사용하고, 없으면 MOCKUP_AOAI_* 로 fallback
+    AOAI_ENDPOINT: str = ""
+    AOAI_API_KEY: str = ""
+    AOAI_DEPLOYMENT: str = "gpt-5.2"
     MOCKUP_AOAI_ENDPOINT: str = ""
     MOCKUP_AOAI_API_KEY: str = ""
     MOCKUP_AOAI_DEPLOYMENT: str = "gpt-5.2"

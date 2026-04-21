@@ -48,6 +48,10 @@ class SessionStore:
                 self._cache[session_id] = state
                 return state
             except Exception:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Failed to load session %s from disk — treating as not found", session_id
+                )
                 return None
         return None
 
@@ -61,7 +65,27 @@ class SessionStore:
         return session
 
     def get_or_create(self, session_id: str) -> SessionState:
-        return self.get(session_id) or self.create(session_id)
+        existing = self.get(session_id)
+        if existing is not None:
+            return existing
+        # Only create (and overwrite disk) if there is no file on disk at all.
+        # If a file exists but failed to parse, keep it intact and return a
+        # transient in-memory session to avoid destroying persisted data.
+        path = self._dir / f"{session_id}.json"
+        if path.exists():
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "Session %s disk file exists but could not be parsed — "
+                "using transient in-memory session to preserve data",
+                session_id,
+            )
+            session = SessionState(
+                session_id=session_id,
+                created_at=datetime.now(timezone.utc),
+            )
+            self._cache[session_id] = session
+            return session
+        return self.create(session_id)
 
     def save(self, session_id: str) -> None:
         """Persist current session state to disk."""

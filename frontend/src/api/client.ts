@@ -1,6 +1,6 @@
 import type { SessionState, SSEEvent, ValidationResult } from '../types'
 
-export function getSessionId(): string {
+function getSessionId(): string {
   let id = sessionStorage.getItem('session_id')
   if (!id) {
     id = crypto.randomUUID()
@@ -188,21 +188,15 @@ export async function getGeneratedFiles(layer?: string): Promise<{ files: import
   return res.json()
 }
 
-// --- Mockup Pipeline API (원본 pfy-front 4단계 플로우) ---
+// --- Mockup Pipeline API ---
 
-export async function mockupBrief(
-  projectId: string,
-  projectName: string,
-  briefMd: string,
-): Promise<import('../types').BriefResponse> {
-  const res = await fetch('/api/mockup/brief', {
+export async function mockupAiGenerate(
+  title: string, pageType: string, description?: string,
+): Promise<import('../types').AiGenerateResult> {
+  const res = await fetch('/api/mockup/ai-generate', {
     method: 'POST',
     headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      project_id: projectId,
-      project_name: projectName,
-      brief_md: briefMd,
-    }),
+    body: JSON.stringify({ title, page_type: pageType, description }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
@@ -211,19 +205,53 @@ export async function mockupBrief(
   return res.json()
 }
 
-export function mockupGenerateMockup(
-  onEvent: (event: import('../types').SSEEvent) => void,
-): void {
-  consumeSSE('/api/mockup/generate-mockup', onEvent, {})
-}
-
-export async function mockupParseInterview(
-  rawInterviewText: string,
-): Promise<import('../types').ParseInterviewResponse> {
-  const res = await fetch('/api/mockup/parse-interview', {
+export async function mockupScaffold(
+  screenId: string, screenName: string, pageType: string, fields: Record<string, unknown>[], tabs?: Record<string, unknown>[],
+): Promise<import('../types').ScaffoldResult> {
+  const res = await fetch('/api/mockup/scaffold', {
     method: 'POST',
     headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw_interview_text: rawInterviewText }),
+    body: JSON.stringify({ screen_id: screenId, screen_name: screenName, page_type: pageType, fields, tabs }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupAiAnnotate(): Promise<import('../types').AnnotateResult> {
+  const res = await fetch('/api/mockup/ai-annotate', {
+    method: 'POST',
+    headers: apiHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupAiInterview(): Promise<import('../types').InterviewResult> {
+  const res = await fetch('/api/mockup/ai-interview', {
+    method: 'POST',
+    headers: apiHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    throw new Error(err.detail ?? `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function mockupInterviewResult(
+  answers?: { no: number; answer: string }[],
+  rawInterviewText?: string,
+): Promise<import('../types').InterviewResultResponse> {
+  const res = await fetch('/api/mockup/interview-result', {
+    method: 'POST',
+    headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers, raw_interview_text: rawInterviewText }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
@@ -234,10 +262,17 @@ export async function mockupParseInterview(
 
 export function mockupGenerateSpec(
   onEvent: (event: import('../types').SSEEvent) => void,
+  payload?: {
+    screenName?: string
+    annotationMarkdown?: string
+    interviewNoteMd?: string
+    vueCode?: string
+  },
 ): void {
-  consumeSSE('/api/mockup/generate-spec', onEvent, {})
-}
-
-export async function mockupReset(): Promise<void> {
-  await fetch('/api/mockup/reset', { method: 'POST', headers: apiHeaders() })
+  consumeSSE('/api/mockup/generate-spec', onEvent, {
+    screen_name: payload?.screenName ?? null,
+    annotation_markdown: payload?.annotationMarkdown ?? null,
+    interview_note_md: payload?.interviewNoteMd ?? null,
+    vue_code: payload?.vueCode ?? null,
+  })
 }

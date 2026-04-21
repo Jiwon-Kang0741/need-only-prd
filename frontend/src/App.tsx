@@ -18,9 +18,14 @@ function App() {
   const showCompare = useSessionStore((s) => s.showCompare)
   const toggleCompare = useSessionStore((s) => s.toggleCompare)
   const reset = useSessionStore((s) => s.reset)
+  const specMode = useSessionStore((s) => s.specMode)
+  const mockupState = useSessionStore((s) => s.mockupState)
 
-  const showSpec = specMarkdown !== null
-  const showOverlay = isGenerating && !specMarkdown
+  // Mockup Step 6~7 render spec/code inside MockupPipeline — don't hijack the layout
+  const inMockupSpec = specMode === 'mockup' && (mockupState?.currentStep ?? 0) >= 6
+
+  const showSpec = specMarkdown !== null && !inMockupSpec
+  const showOverlay = isGenerating && !specMarkdown && !inMockupSpec
 
   return (
     <Layout onNewSession={reset}>

@@ -6,18 +6,22 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 
 import httpx
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 class MockupLLMClient:
     def __init__(self) -> None:
-        self._endpoint = settings.MOCKUP_AOAI_ENDPOINT
-        self._api_key = settings.MOCKUP_AOAI_API_KEY
-        self._model = settings.MOCKUP_AOAI_DEPLOYMENT
+        # .env의 AOAI_* 우선, 없으면 MOCKUP_AOAI_* fallback
+        self._endpoint = settings.AOAI_ENDPOINT or settings.MOCKUP_AOAI_ENDPOINT
+        self._api_key = settings.AOAI_API_KEY or settings.MOCKUP_AOAI_API_KEY
+        self._model = settings.AOAI_DEPLOYMENT or settings.MOCKUP_AOAI_DEPLOYMENT
 
     async def complete(
         self,
@@ -43,40 +47,29 @@ class MockupLLMClient:
             ],
             "temperature": temperature,
             "max_tokens": max_tok,
-            "stream": stream,
+            "stream": False,
         }
         headers = {"Content-Type": "application/json", "X-Api-Key": self._api_key}
 
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=30.0), verify=False
+        ) as c:
+            r = await c.post(self._endpoint, json=body, headers=headers)
+            r.raise_for_status()
+            data = r.json()
+            content = data["choices"][0]["message"]["content"]
+            logger.info("[MockupLLM] response received — %d chars", len(content) if content else 0)
+            content = content or ""
+
         if not stream:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(120.0, connect=30.0), verify=False
-            ) as c:
-                r = await c.post(self._endpoint, json=body, headers=headers)
-                r.raise_for_status()
-                data = r.json()
-                return data["choices"][0]["message"]["content"]
+            return content
 
-        async def _stream() -> AsyncIterator[str]:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(None, connect=30.0), verify=False
-            ) as c:
-                async with c.stream("POST", self._endpoint, json=body, headers=headers) as r:
-                    r.raise_for_status()
-                    async for line in r.aiter_lines():
-                        if not line or not line.startswith("data: "):
-                            continue
-                        payload = line[6:].strip()
-                        if payload == "[DONE]":
-                            break
-                        try:
-                            obj = json.loads(payload)
-                            delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
-                            if delta:
-                                yield delta
-                        except (json.JSONDecodeError, KeyError, IndexError):
-                            continue
+        # stream=True인 경우에도 이 게이트웨이는 단일 응답만 반환하므로
+        # AsyncIterator로 래핑해서 반환한다.
+        async def _as_stream() -> AsyncIterator[str]:
+            yield content
 
-        return _stream()
+        return _as_stream()
 
 
 mockup_client = MockupLLMClient()
