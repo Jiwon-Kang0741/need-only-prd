@@ -762,14 +762,28 @@ _IMPORT_REPLACEMENTS: list[tuple[str, str]] = [
     ("hone.bom.annotation.ServiceName", "aondev.framework.annotation.ServiceName"),
     ("hone.bom.dao.mybatis.support.AbstractSqlSessionDaoSupport",
      "aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport"),
+    # javax.validation → jakarta.validation (Spring Boot 3+ uses Jakarta EE 9+)
+    ("javax.validation.constraints.Email", "jakarta.validation.constraints.Email"),
+    ("javax.validation.constraints.NotBlank", "jakarta.validation.constraints.NotBlank"),
+    ("javax.validation.constraints.NotNull", "jakarta.validation.constraints.NotNull"),
+    ("javax.validation.constraints.NotEmpty", "jakarta.validation.constraints.NotEmpty"),
+    ("javax.validation.constraints.Size", "jakarta.validation.constraints.Size"),
+    ("javax.validation.constraints.Pattern", "jakarta.validation.constraints.Pattern"),
+    ("javax.validation.constraints.Min", "jakarta.validation.constraints.Min"),
+    ("javax.validation.constraints.Max", "jakarta.validation.constraints.Max"),
+    ("javax.validation.constraints.Positive", "jakarta.validation.constraints.Positive"),
+    ("javax.validation.constraints.PositiveOrZero", "jakarta.validation.constraints.PositiveOrZero"),
+    ("javax.validation.Valid", "jakarta.validation.Valid"),
+    ("javax.validation.constraints.*", "jakarta.validation.constraints.*"),
+    ("javax.validation.*", "jakarta.validation.*"),
 ]
 
 _IMPORT_RE = re.compile(r'^import\s+(static\s+)?([a-zA-Z0-9_.]+(?:\.\*)?)\s*;', re.MULTILINE)
-_JAVA_IMPORT_ORDER = ["java.", "javax.", "org.", "com.", "aondev.", "biz.", ""]
+_JAVA_IMPORT_ORDER = ["java.", "jakarta.", "javax.", "org.", "com.", "aondev.", "biz.", ""]
 
 
 def _import_sort_key(imp: str) -> tuple[int, str]:
-    """Sort key: java → javax → org → com → aondev → biz → others."""
+    """Sort key: java → jakarta → javax → org → com → aondev → biz → others."""
     for idx, prefix in enumerate(_JAVA_IMPORT_ORDER):
         if prefix and imp.startswith(prefix):
             return (idx, imp)
@@ -2263,7 +2277,13 @@ class BackendEngineerAgent:
                     "Imports (use lombok.Data + lombok.EqualsAndHashCode + SearchBaseDto only for Lombok/base):\n"
                     "  import lombok.Data;\n"
                     "  import lombok.EqualsAndHashCode;\n"
-                    "  import com.common.dto.base.SearchBaseDto;\n\n"
+                    "  import com.common.dto.base.SearchBaseDto;\n"
+                    "Validation annotations MUST use jakarta.validation (NOT javax.validation):\n"
+                    "  import jakarta.validation.constraints.Email;\n"
+                    "  import jakarta.validation.constraints.NotBlank;\n"
+                    "  import jakarta.validation.constraints.NotNull;\n"
+                    "  import jakarta.validation.constraints.Size;\n"
+                    "  import jakarta.validation.constraints.Pattern;\n\n"
                     "Class annotations (exactly, no @Getter/@Setter/@ToString):\n"
                     "  @Data\n"
                     "  @EqualsAndHashCode(callSuper=false)\n"
@@ -2283,7 +2303,11 @@ class BackendEngineerAgent:
                     "  import lombok.Data;\n"
                     "  import lombok.EqualsAndHashCode;\n"
                     "  import com.common.dto.base.AuditBaseDto;\n"
-                    "  (add import java.io.Serializable; and 'implements Serializable' + serialVersionUID if used)\n\n"
+                    "  (add import java.io.Serializable; and 'implements Serializable' + serialVersionUID if used)\n"
+                    "Validation annotations MUST use jakarta.validation (NOT javax.validation):\n"
+                    "  import jakarta.validation.constraints.NotBlank;\n"
+                    "  import jakarta.validation.constraints.NotNull;\n"
+                    "  import jakarta.validation.constraints.Size;\n\n"
                     "  @Data\n"
                     "  @EqualsAndHashCode(callSuper=false)\n"
                     "  public class <ScreenPrefix>ResDto extends AuditBaseDto implements Serializable {\n\n"
@@ -2799,6 +2823,7 @@ class FrontendEngineerAgent:
             "- Import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue'\n"
             "- Import child components: SearchForm, DataTable (from ./components/ subfolders)\n"
             "- Import SumGrid ONLY if a vue_sum_grid file exists in the generation plan — do NOT import SumGrid if it was not planned\n"
+            "- CRITICAL: DO NOT import DetailPanel, EditPanel, or any sub-component that is NOT explicitly listed in the generation plan — importing a non-existent file causes a fatal SyntaxError at runtime\n"
             "- Import API functions from the API module (e.g., '@/api/pages/{module}/{category}/{screenId}')\n"
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- const searchParams = ref({...initial search params...})\n"
@@ -2822,6 +2847,9 @@ class FrontendEngineerAgent:
             "- Import { Button } from '@/components/common/button'\n"
             "- Import InputText from '@/components/common/inputText/InputText.vue'\n"
             "- Import Select from '@/components/common/select/Select.vue'\n"
+            "- Import { DatePicker } from '@/components/common/datePicker'  ← named import, NEVER default import\n"
+            "- Import { RangeDatePicker } from '@/components/common/datePicker'  ← named import, NEVER default import\n"
+            "- Import { SingleDatePicker } from '@/components/common/datePicker'  ← named import, NEVER default import\n"
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- const searchFormRef = ref()\n"
             "- const searchParams = inject<Ref<SearchParamsType>>('searchParams')\n"
@@ -2997,6 +3025,9 @@ class FrontendEngineerAgent:
             "- Button: import { Button } from '@/components/common/button'\n"
             "- InputText: import InputText from '@/components/common/inputText/InputText.vue'\n"
             "- Select: import Select from '@/components/common/select/Select.vue'\n"
+            "- DatePicker: import { DatePicker } from '@/components/common/datePicker'  — named export, NOT default import\n"
+            "- RangeDatePicker: import { RangeDatePicker } from '@/components/common/datePicker'  — named export, NOT default import\n"
+            "- SingleDatePicker: import { SingleDatePicker } from '@/components/common/datePicker'  — named export, NOT default import\n"
             "- axios: import api from '@/plugins/axios'\n"
             "- formatErrorMessage: import { formatErrorMessage } from '@/utils/formatErrorMessage'\n"
             "- CommonCodeStore: import { useCommonCodeStore } from '@/stores/commonCodeStore'\n"
@@ -3021,6 +3052,8 @@ class FrontendEngineerAgent:
             "- DO NOT omit GPU acceleration CSS — add will-change: background-color on tr, contain: layout style on td.\n"
             "- DO NOT apply hover styles to selected rows — use :hover:not(.p-datatable-row-selected).\n"
             "- DO NOT use <script> without setup — MUST be <script setup lang=\"ts\">.\n"
+            "- DO NOT use default import for datePicker components — MUST use named imports: import { DatePicker } from '@/components/common/datePicker' (NOT import DatePicker from ...).\n"
+            "- DO NOT import DetailPanel or any sub-components that do NOT exist in the generation plan — only import files that are explicitly listed in the plan.\n"
         )
 
         results: list[GeneratedFile] = []
