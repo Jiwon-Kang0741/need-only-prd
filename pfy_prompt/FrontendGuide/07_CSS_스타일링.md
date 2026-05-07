@@ -122,6 +122,45 @@ button:hover {
 
 ## 3️⃣ 컴포넌트별 스타일링
 
+### ⚠️ 페이지 최상위 컨테이너 배경색·padding 금지 (CRITICAL!)
+
+페이지 최상위 래퍼(`.xxx-page`, `.main-content-container` 등)에는 다음 두 속성을 **절대 지정하지 마세요**.
+
+1. **`background-color`** — CPMS 프레임워크가 제공하는 기본 흰색 배경을 그대로 사용해야 합니다.
+2. **`padding`** — CPMS `MainLayout`의 `.tab-content`가 이미 `padding: 32px 24px;`를 적용합니다. 페이지에서 `padding`을 다시 주면 좌·우·상·하 모두 **이중 padding**이 발생해 콘텐츠가 한 단계 더 안쪽으로 밀려 보입니다.
+
+자식 요소 사이 간격은 페이지 루트의 `gap`만 사용해 조절합니다. (자식: ContentHeader / SearchForm / SumGrid / DataTable)
+
+```scss
+// ❌ WRONG — 페이지 루트에 background-color, padding 지정 금지
+.cpms-edu-prog-list-page {
+  background-color: var(--bg-2);          // ← 페이지 전체가 카키색으로 변함
+  padding: var(--spacing-md, 16px);       // ← 외부 .tab-content 위에 이중 padding
+}
+
+// ✅ CORRECT — 배경색·padding 없이 레이아웃만 지정 (자식 간 간격은 gap만 사용)
+.cpms-edu-prog-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 16px);
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+```
+
+`background-color`(예: `--bg-2`)와 `padding`은 **내부 컨테이너**(SearchForm, SumGrid, DataTable 헤더 등)에만 사용합니다.
+
+| 사용 위치 | background-color | padding |
+|-----------|-----------------|---------|
+| 페이지 최상위 래퍼 (`.xxx-page`) | 지정 금지 (기본 흰색) ❌ | 지정 금지 (외부 `.tab-content`가 처리) ❌ |
+| SearchForm 컨테이너 | `var(--bg-1)` ✅ | 허용 ✅ |
+| SumGrid 컨테이너 | `var(--bg-2)` ✅ | 허용 ✅ |
+| DataTable 헤더 | `var(--bg-2)` ✅ | 허용 ✅ |
+| 테이블 섹션 래퍼 | `var(--bg-1)` ✅ | 허용 ✅ |
+
+> 💡 자식 컴포넌트는 `<section>` 등 별도 래퍼로 감싸지 말고, 페이지 루트 `<div>`의 직속 자식으로 배치하세요. 래퍼를 추가하면 `gap` 계산이 흐트러지고 화면 정렬이 원본 화면과 어긋납니다.
+
 ### 3.1 SearchForm 스타일
 
 ```scss

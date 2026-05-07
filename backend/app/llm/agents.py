@@ -167,6 +167,24 @@ _FRONTEND_CHECKS = [
     (re.compile(r'\bconfirm\s*\('), 'confirm() found — use ConfirmDialog instead'),
 ]
 
+_PAGE_SCSS_BACKGROUND_RE = re.compile(
+    r'\.-?[\w-]+-page\s*\{[^{}]*background-color\s*:', re.DOTALL
+)
+_PAGE_SCSS_PADDING_RE = re.compile(
+    r'\.-?[\w-]+-page\s*\{[^{}]*\bpadding\s*:', re.DOTALL
+)
+_PAGE_SCSS_CHECKS: list[tuple[re.Pattern, str]] = [
+    (_PAGE_SCSS_BACKGROUND_RE,
+     'Page root wrapper (.xxx-page) has background-color — remove it. '
+     'CPMS framework provides default white background. '
+     'Use background-color only on inner containers (SearchForm, SumGrid, DataTable header).'),
+    (_PAGE_SCSS_PADDING_RE,
+     'Page root wrapper (.xxx-page) has padding — remove it. '
+     'CPMS MainLayout .tab-content already provides padding: 32px 24px. '
+     'Adding page-level padding causes double padding (content shifted inward). '
+     'Use only `gap` on the root for spacing between ContentHeader/SearchForm/SumGrid/DataTable.'),
+]
+
 
 def _check_forbidden_imports(gf: GeneratedFile) -> list[dict]:
     """Dynamically detect imports from libraries NOT in pom.xml.
@@ -745,6 +763,14 @@ def static_check(files: list[GeneratedFile]) -> list[dict]:
                     "issue": f"[STATIC] {message}",
                     "fix_instruction": message.split(" — ")[-1] if " — " in message else message,
                 })
+        if gf.file_type in ("vue_scss", "vue_page"):
+            for pattern, message in _PAGE_SCSS_CHECKS:
+                if pattern.search(gf.content):
+                    issues.append({
+                        "file_path": gf.file_path,
+                        "issue": f"[STATIC] {message}",
+                        "fix_instruction": message,
+                    })
         issues.extend(_check_forbidden_imports(gf))
 
     issues.extend(_check_dto_layer_conventions(files))
@@ -2807,7 +2833,22 @@ class FrontendEngineerAgent:
             "- Use try/finally with loading ref for fetch calls\n"
             "- Pass fetched data as props to DataTable children (and SumGrid if it exists in plan)\n"
             "- <style scoped lang=\"scss\" src=\"./{screenId}.scss\"></style>\n"
-            "- DO NOT provide('searchFormRef') — this is an obsolete pattern\n"
+            "- DO NOT provide('searchFormRef') — this is an obsolete pattern\n\n"
+            "PAGE WRAPPER LAYOUT (CRITICAL — NO background-color and NO padding on page root!):\n"
+            "- The page root <div> class (e.g., .xxx-page) MUST NOT have background-color.\n"
+            "- CPMS framework provides default white background — do NOT override it.\n"
+            "- The page root <div> MUST NOT have `padding`. CPMS MainLayout's `.tab-content` already provides `padding: 32px 24px`. Adding page-level padding causes double-padding (content shifted inward).\n"
+            "- Page root <div> should ONLY have layout styles: display:flex, flex-direction:column, gap, width, min-height, box-sizing.\n"
+            "- For spacing between ContentHeader / SearchForm / SumGrid / DataTable, use ONLY the root `gap`. Do NOT add padding/margin to the root.\n"
+            "- background-color is allowed ONLY on inner containers: SearchForm(--bg-1), SumGrid(--bg-2), DataTable header(--bg-2).\n"
+            "- DO NOT wrap children in <section class=\"search-section\"> / <section class=\"table-section\"> or any extra wrapper. Place ContentHeader, SearchForm, SumGrid, DataTable as DIRECT children of the page root <div>.\n"
+            "- Template structure (EXACT pattern — no extra wrappers):\n"
+            "  <div class=\"{screenId}-page\">\n"
+            "    <ContentHeader />\n"
+            "    <SearchForm ... />\n"
+            "    <SumGrid ... />  <!-- only if planned -->\n"
+            "    <DataTable ... />\n"
+            "  </div>\n"
         ),
         "vue_search_form": (
             "Generate a SearchForm component (.vue file).\n"
@@ -2966,7 +3007,28 @@ class FrontendEngineerAgent:
             "- Use CSS custom properties (--bg-*, --primary-*, spacing tokens)\n"
             "- :deep() for scoped child PrimeVue components\n"
             "- Responsive breakpoints/mixins if needed\n"
-            "- Output ONLY SCSS code. No markdown fences.\n"
+            "- Output ONLY SCSS code. No markdown fences.\n\n"
+            "PAGE WRAPPER BACKGROUND-COLOR PROHIBITION (CRITICAL!):\n"
+            "- The page root class (.xxx-page) MUST NOT have background-color.\n"
+            "- CPMS framework provides default white background — overriding causes color mismatch.\n"
+            "- CORRECT page root style:\n"
+            "  .{screenId}-page {\n"
+            "    display: flex;\n"
+            "    flex-direction: column;\n"
+            "    gap: var(--spacing-md, 16px);\n"
+            "    width: 100%;\n"
+            "    min-height: 100%;\n"
+            "    padding: var(--spacing-md, 16px);\n"
+            "    box-sizing: border-box;\n"
+            "  }\n\n"
+            "BACKGROUND-COLOR ALLOWED LOCATIONS:\n"
+            "| Location              | background-color         |\n"
+            "|-----------------------|--------------------------|\n"
+            "| Page root wrapper     | NONE (framework white)   |\n"
+            "| SearchForm container  | var(--bg-1)              |\n"
+            "| SumGrid container     | var(--bg-2)              |\n"
+            "| DataTable header      | var(--bg-2)              |\n"
+            "| Table section wrapper | var(--bg-1)              |\n"
         ),
     }
 
@@ -3021,6 +3083,8 @@ class FrontendEngineerAgent:
             "- DO NOT omit GPU acceleration CSS — add will-change: background-color on tr, contain: layout style on td.\n"
             "- DO NOT apply hover styles to selected rows — use :hover:not(.p-datatable-row-selected).\n"
             "- DO NOT use <script> without setup — MUST be <script setup lang=\"ts\">.\n"
+            "- DO NOT add background-color to the page root wrapper class (.xxx-page) — CPMS framework provides default white background.\n"
+            "- DO NOT use --bg-2 on the page root — only use it on inner containers (SumGrid, DataTable header).\n"
         )
 
         results: list[GeneratedFile] = []
@@ -3233,6 +3297,12 @@ class FrontendQAAgent:
             "- DO NOT provide('searchFormRef') — obsolete pattern\n"
             "- DO NOT use alert()/confirm()/prompt() — use Toast and ConfirmDialog\n"
             "- SearchForm MUST defineExpose({ searchFormRef })\n\n"
+            "CSS/SCSS BACKGROUND & LAYOUT COMPLIANCE (CRITICAL):\n"
+            "- Page root wrapper class (.xxx-page) MUST NOT have background-color — CPMS framework provides default white.\n"
+            "- --bg-2 on page root wrapper is FORBIDDEN — causes entire page to turn grayish.\n"
+            "- background-color allowed ONLY on inner containers: SearchForm(--bg-1), SumGrid(--bg-2), DataTable header(--bg-2), table wrapper(--bg-1).\n"
+            "- Page root wrapper should ONLY have layout styles: display:flex, flex-direction:column, gap, width, min-height, padding, box-sizing.\n"
+            "- If page-level SCSS file (.scss) has background-color on the root wrapper class, flag as CRITICAL issue.\n\n"
             'Output JSON: {"issues": [{"file_path": "...", "issue": "description of problem", "fix_instruction": "how to fix"}]}\n'
             'If no issues: {"issues": []}\n'
             "Output ONLY JSON.\n"
