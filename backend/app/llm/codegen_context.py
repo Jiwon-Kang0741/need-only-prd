@@ -101,7 +101,7 @@ _BACKEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
 }
 
 _FRONTEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
-    "vue_page": [("00_", None), ("02_", None)],
+    "vue_page": [("00_", None), ("02_", None), ("07_", None)],
     "vue_search_form": [("02_", None), ("03_", None), ("07_", None), ("12_", ["SearchForm", "SearchFormRow", "SearchFormField", "SearchFormLabel", "SearchFormContent", "SearchFormFieldGroup", "Import 패턴", "검색 화면"])],
     "vue_data_table": [("02_", None), ("04_", None), ("07_", None)],
     "vue_data_table_utils": [("02_", None), ("04_", None)],
