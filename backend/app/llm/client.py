@@ -153,7 +153,7 @@ llm_client = LLMClient()
 
 
 class CodexLLMClient:
-    """LLM client using gpt-5.3-codex via the OpenAI Responses API."""
+    """LLM client using gpt-5.5 via the OpenAI Responses API."""
 
     def __init__(self):
         if settings.CODEX_AZURE_OPENAI_API_KEY and settings.CODEX_AZURE_OPENAI_ENDPOINT:

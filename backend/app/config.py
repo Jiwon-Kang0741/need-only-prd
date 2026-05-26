@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_KEY: str = ""
     CODEX_AZURE_OPENAI_ENDPOINT: str = ""
     CODEX_AZURE_OPENAI_API_VERSION: str = "2025-04-01-preview"
-    CODEX_AZURE_OPENAI_MODEL_NAME: str = "gpt-5.3-codex"
+    CODEX_AZURE_OPENAI_MODEL_NAME: str = "gpt-5.5"
     CODEX_AZURE_OPENAI_API_KEY: str = ""
 
     # --- Mockup Pipeline 전용 (원본 pfy-front 사내 게이트웨이 호환) ---

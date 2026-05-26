@@ -40,7 +40,7 @@ LLM 기반 PRD(Product Requirements Document) 자동 생성기 + 원본 pfy-fron
 | Backend | FastAPI, Python 3.11+, sse-starlette, pydantic-settings, httpx |
 | LLM (spec/QA) | Azure OpenAI gpt-5.4 |
 | LLM (Mockup) | Azure OpenAI gpt-5.4 (프록시) 또는 사내 게이트웨이 gpt-5.2 (직접) |
-| LLM (코드 생성) | Azure OpenAI gpt-5.3-codex |
+| LLM (코드 생성) | Azure OpenAI gpt-5.5 |
 | Mockup 런타임 | pfy-front (Vue 3 + PrimeVue + CPMS 공통 컴포넌트) |
 | Mockup API | pfy-front scaffolding (Express + ts-node) |
 | 코드 생성 대상 | Spring Boot 2.7 + MyBatis + Vue3 + PrimeVue (CPMS 프레임워크) |
@@ -76,7 +76,7 @@ AZURE_OPENAI_MODEL_NAME=gpt-5.4
 # Azure OpenAI Codex — 코드 생성 전용
 CODEX_AZURE_OPENAI_ENDPOINT=https://your-codex-resource.cognitiveservices.azure.com
 CODEX_AZURE_OPENAI_API_KEY=your-codex-key
-CODEX_AZURE_OPENAI_MODEL_NAME=gpt-5.3-codex
+CODEX_AZURE_OPENAI_MODEL_NAME=gpt-5.5
 
 # MockupBuilder scaffolding 서버가 호출할 LLM 선택
 # - USE_LLM_PROXY=true  → 우리 FastAPI /api/llm/chat-completion 경유 (gpt-5.4, VPN 불필요)
@@ -159,7 +159,7 @@ npm run lint                   # ESLint
                                ▼
               ┌───────────────────────────────┐
               │ Code Generation (7 phases)    │
-              │ codex_client (gpt-5.3-codex)  │
+              │ codex_client (gpt-5.5)  │
               │ llm_client   (gpt-5.4 for QA) │
               └────────────┬──────────────────┘
                            ▼
@@ -404,7 +404,7 @@ need-only-prd/
 |---------|--------|------|
 | `LLM_PROVIDER` | azure_openai | LLM 제공자 (anthropic/azure_openai/openai) |
 | `AZURE_OPENAI_MODEL_NAME` | gpt-5.4 | 텍스트 스펙 생성/QA 모델 |
-| `CODEX_AZURE_OPENAI_MODEL_NAME` | gpt-5.3-codex | 코드 생성 모델 |
+| `CODEX_AZURE_OPENAI_MODEL_NAME` | gpt-5.5 | 코드 생성 모델 |
 | `USE_LLM_PROXY` | false | scaffolding의 LLM 호출 경로 선택 (true=백엔드 프록시, false=직접) |
 | `AOAI_ENDPOINT` | (사내 gpt-5.2 URL) | scaffolding이 직접 호출할 LLM 엔드포인트 |
 | `AOAI_API_KEY` | - | scaffolding용 AOAI 키 |
