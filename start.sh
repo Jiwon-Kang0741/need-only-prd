@@ -5,30 +5,102 @@ cd "$(dirname "$0")"
 mkdir -p logs
 
 # ──────────────────────────────────────────────────────────────
+# venv 활성화 (Linux/macOS: bin/activate, Windows Git Bash: Scripts/activate)
+# ──────────────────────────────────────────────────────────────
+activate_backend_venv() {
+  if [ -f ".venv/Scripts/activate" ]; then
+    # shellcheck source=/dev/null
+    source ".venv/Scripts/activate"
+  elif [ -f ".venv/bin/activate" ]; then
+    # shellcheck source=/dev/null
+    source ".venv/bin/activate"
+  else
+    echo "  ✗ backend/.venv 에 activate 스크립트가 없습니다." >&2
+    return 1
+  fi
+}
+
+find_python() {
+  command -v python3 >/dev/null 2>&1 && { echo python3; return; }
+  command -v python >/dev/null 2>&1 && { echo python; return; }
+  command -v py >/dev/null 2>&1 && { echo py; return; }
+  echo ""
+}
+
+# ──────────────────────────────────────────────────────────────
 # 0. 포트 정리 (기존 프로세스가 점유 중이면 종료)
 # ──────────────────────────────────────────────────────────────
-for port in 8001 5173 8085 4000; do
-  pid=$(lsof -ti ":$port" 2>/dev/null || true)
-  if [ -n "$pid" ]; then
-    echo "Port $port was busy (PID $pid) — killing"
-    kill -9 "$pid" 2>/dev/null || true
-    sleep 0.5
+kill_ports() {
+  if command -v lsof >/dev/null 2>&1; then
+    for port in 8001 5173 8085 4000; do
+      # lsof can return multiple PIDs (parent + workers); kill all of them.
+      pids=$(lsof -ti ":$port" 2>/dev/null || true)
+      if [ -n "$pids" ]; then
+        echo "Port $port was busy (PIDs $pids) — killing tree"
+        for pid in $pids; do
+          kill -9 "$pid" 2>/dev/null || true
+        done
+        sleep 0.5
+      fi
+    done
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    echo "  → 포트 정리 (PowerShell, 프로세스 트리 포함)..."
+    # Loop up to 3 times: kill any process listening on each port AND its
+    # entire descendant tree (uvicorn --reload spawns watchfiles parent +
+    # multiprocessing-fork child; killing the parent alone leaves an orphan
+    # child still bound to the socket on Windows).
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
+      function Kill-Tree([int]\$RootId) {
+        try {
+          \$kids = Get-CimInstance Win32_Process -Filter \"ParentProcessId=\$RootId\" -ErrorAction SilentlyContinue
+          foreach (\$k in \$kids) { Kill-Tree -RootId \$k.ProcessId }
+          Stop-Process -Id \$RootId -Force -ErrorAction SilentlyContinue
+        } catch {}
+      }
+      foreach (\$pass in 1..3) {
+        \$any = \$false
+        foreach (\$port in 8001,5173,8085,4000) {
+          \$conns = Get-NetTCPConnection -LocalPort \$port -State Listen -ErrorAction SilentlyContinue
+          foreach (\$c in \$conns) {
+            \$any = \$true
+            Write-Host (\"  - port {0} owner PID {1} (pass {2}) — kill-tree\" -f \$port, \$c.OwningProcess, \$pass)
+            Kill-Tree -RootId \$c.OwningProcess
+          }
+        }
+        if (-not \$any) { break }
+        Start-Sleep -Milliseconds 800
+      }
+      # Sanity report
+      foreach (\$port in 8001,5173,8085,4000) {
+        \$rest = Get-NetTCPConnection -LocalPort \$port -State Listen -ErrorAction SilentlyContinue
+        if (\$rest) {
+          Write-Host (\"  ! port {0} still has {1} listener(s) after cleanup\" -f \$port, (\$rest | Measure-Object).Count)
+        }
+      }
+    " 2>/dev/null || true
+    sleep 1
   fi
-done
+}
+kill_ports
 
 # ──────────────────────────────────────────────────────────────
 # 1. Backend (FastAPI) :8001
 # ──────────────────────────────────────────────────────────────
 echo "[1/4] Preparing backend..."
 cd backend
+PY="$(find_python)"
+if [ -z "$PY" ]; then
+  echo "  ✗ python3 / python / py 를 찾을 수 없습니다." >&2
+  exit 1
+fi
 if [ ! -d ".venv" ]; then
   echo "  → .venv가 없습니다. 생성 중..."
-  python3 -m venv .venv
-  source .venv/bin/activate
+  "$PY" -m venv .venv
+  activate_backend_venv
   pip install -e ".[dev]" > ../logs/backend-install.log 2>&1
   echo "  → 설치 완료 (logs/backend-install.log)"
 else
-  source .venv/bin/activate
+  activate_backend_venv
 fi
 
 echo "  → Starting uvicorn on :8001..."
@@ -59,7 +131,7 @@ PFY_PID=""
 if [ -d "pfy-front" ]; then
   echo "[3/4] Preparing pfy-front..."
   cd pfy-front
-  if [ ! -d "node_modules" ] || [ ! -x "node_modules/.bin/vite" ]; then
+  if [ ! -d "node_modules" ] || { [ ! -f "node_modules/.bin/vite" ] && [ ! -f "node_modules/.bin/vite.cmd" ]; }; then
     echo "  → node_modules/vite가 없습니다. npm install 실행 중..."
     if ! npm install --legacy-peer-deps > ../logs/pfy-front-install.log 2>&1; then
       echo "  → 사내 registry 실패, public registry 시도..."
@@ -81,7 +153,7 @@ SCAFFOLD_PID=""
 if [ -d "pfy-front/scaffolding" ]; then
   echo "[4/4] Preparing pfy-front scaffolding..."
   cd pfy-front/scaffolding
-  if [ ! -d "node_modules" ] || [ ! -x "node_modules/.bin/ts-node" ]; then
+  if [ ! -d "node_modules" ] || { [ ! -f "node_modules/.bin/ts-node" ] && [ ! -f "node_modules/.bin/ts-node.cmd" ]; }; then
     echo "  → node_modules/ts-node가 없습니다. npm install 실행 중..."
     if ! npm install --legacy-peer-deps > ../../logs/scaffolding-install.log 2>&1; then
       echo "  → 사내 registry 실패, public registry 시도..."

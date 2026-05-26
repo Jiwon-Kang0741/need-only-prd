@@ -154,6 +154,14 @@ _BACKEND_CHECKS = [
      "DaoImpl delete method uses super.update() — WRONG. "
      "delete-named methods MUST use super.delete() or super.batchUpdateReturnSumAffectedRows() for lists. "
      "CORRECT: return super.delete(\"deleteXxx\", param); or super.batchUpdateReturnSumAffectedRows(\"deleteXxx\", list)"),
+    # Java arrays in DTO fields — banned (massive source of compile errors with MyBatis/JSON/StringUtils)
+    (re.compile(r'\bprivate\s+(?:String|Integer|Long|Double|Float|Boolean|int|long|double|float|boolean)\s*\[\]\s*\w+\s*;'),
+     "DTO field declared as Java array (Type[]) — FORBIDDEN. "
+     "Java arrays cannot use StringUtils.hasText(), .split(), .isEmpty(), CollectionUtils.isEmpty() and break MyBatis/JSON binding. "
+     "CHANGE the field type: "
+     "(A) if Service uses .split(\",\") / hasText() → use 'private String xxx;' (comma-separated value); "
+     "(B) if Service iterates / uses List API → use 'private List<String> xxx;'. "
+     "Pick ONE and update every Service usage to match."),
     # update-named DaoImpl method using super.delete() — must use super.update()
     (re.compile(r'public\s+\S+\s+update\w+\s*\([^)]*\)\s*\{[^}]*super\s*\.\s*delete\s*\(', re.DOTALL),
      "DaoImpl update method uses super.delete() — WRONG. "
@@ -244,7 +252,15 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
     """Cross-check generated files for consistency: DTO fields, DAO methods, types."""
     issues: list[dict] = []
 
-    _field_re = re.compile(r'private\s+\S+\s+(\w+)\s*;')
+    # Match field declarations even when an initializer is present:
+    #   private String foo;
+    #   private List<String> ids = new ArrayList<>();
+    #   private int count = 0;
+    _field_re = re.compile(r'private\s+\S+\s+(\w+)\s*(?:=\s*[^;]+)?\s*;')
+    # Capture both type and name for type-aware checks (arrays vs scalars vs lists).
+    _field_typed_re = re.compile(
+        r'private\s+(\S+(?:<[^>]+>)?(?:\s*\[\s*\])?)\s+(\w+)\s*(?:=\s*[^;]+)?\s*;'
+    )
     _accessor_re = re.compile(r'(\w+)\.(get|set|is)([A-Z]\w*)\s*\(')
     _var_decl_re = re.compile(r'(\w[\w<>,\s]*?)\s+(\w+)\s*=')
     _method_def_re = re.compile(r'public\s+\S+\s+(\w+)\s*\(([^)]*)\)')
@@ -256,6 +272,7 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
     )
 
     dto_fields: dict[str, set[str]] = {}
+    dto_field_types: dict[str, dict[str, str]] = {}  # class_name → {field: declared Java type}
     dto_file_paths: dict[str, str] = {}  # class_name → file_path
     dao_methods: dict[str, set[str]] = {}
     dao_method_sigs: dict[str, dict[str, tuple]] = {}  # class_name → {method → (ret_type, params_str)}
@@ -276,9 +293,13 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
 
         if "Dto" in class_name:
             fields = set()
-            for m in _field_re.finditer(gf.content):
-                fields.add(m.group(1))
+            field_types: dict[str, str] = {}
+            for m in _field_typed_re.finditer(gf.content):
+                _ftype, _fname = m.group(1).strip(), m.group(2)
+                fields.add(_fname)
+                field_types[_fname] = _ftype
             dto_fields[class_name] = fields
+            dto_field_types[class_name] = field_types
             dto_file_paths[class_name] = gf.file_path
         elif "DaoImpl" in class_name:
             methods = set()
@@ -588,6 +609,204 @@ def _check_cross_file_consistency(files: list[GeneratedFile]) -> list[dict]:
                         f"REMOVE the <if test=\"{field_name} != null\"> condition from the Mapper XML, "
                         f"or ADD 'private String {field_name};' to {related_dto_name}. "
                         f"Currently declared fields: {', '.join(sorted(all_related_dto_fields)[:15])}"
+                    ),
+                })
+
+    # --- 6b. Array vs scalar/List type mismatch between DTO and ServiceImpl ---
+    # Scenario the user reported:
+    #   DTO:     private String[] ids;
+    #   Service: if (hasText(p.getIds()))                 ← hasText(String) — String[] is NOT a String
+    #            String[] arr = p.getIds().split(",")     ← String[] has no .split() method
+    # Detect (a) scalar-only methods called on an array/list field, and (b) string-only helpers
+    # passed an array/list field.  Emit a clear fix instruction telling Fix Agent to either
+    # change the DTO type to String OR rewrite the Service usage.
+    _string_only_methods = (
+        "split", "trim", "isBlank", "toLowerCase", "toUpperCase",
+        "concat", "replace", "replaceAll", "replaceFirst", "matches",
+        "startsWith", "endsWith", "contains", "indexOf", "substring",
+        "charAt", "codePointAt", "compareTo", "compareToIgnoreCase", "equalsIgnoreCase",
+        "intern", "format", "valueOf", "chars", "codePoints", "lines", "strip",
+    )
+    _list_only_methods = ("isEmpty", "size", "add", "addAll", "remove", "clear", "contains", "iterator", "stream", "forEach", "get")
+    # Scalar-only static helpers that accept a single String (NOT String[] or List).
+    # Pattern matches function call expression where the argument is `var.getXxx()` of a DTO.
+    _hasText_call_re = re.compile(
+        r'\b(?:StringUtils\s*\.\s*)?hasText\s*\(\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+    )
+    # Pattern: var.getXxx().method(  — capture the field-getter and the next method called on it
+    _chained_call_re = re.compile(
+        r'(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\.\s*(\w+)\s*\('
+    )
+    # Pattern: for-each over a getter:  for (Type x : var.getXxx())
+    _foreach_getter_re = re.compile(
+        r'\bfor\s*\(\s*(?:final\s+)?\S+\s+\w+\s*:\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+    )
+
+    def _is_array_type(t: str) -> bool:
+        return t.endswith("[]") or t.replace(" ", "").endswith("[]")
+
+    def _is_list_type(t: str) -> bool:
+        # List<...>, ArrayList<...>, Collection<...>, Set<...>
+        return bool(re.match(r'^(List|ArrayList|Collection|Set|LinkedList)\s*<', t))
+
+    def _is_string_type(t: str) -> bool:
+        return t.strip() == "String"
+
+    for svc_gf in service_files:
+        # Re-build var → DTO mapping (same logic as section 1)
+        var_to_dto_local: dict[str, str] = {}
+        for vm in var_type_re.finditer(svc_gf.content):
+            if vm.group(1) and vm.group(2):
+                _dt, _vn = vm.group(1), vm.group(2)
+            elif vm.group(3) and vm.group(4):
+                _dt, _vn = vm.group(3), vm.group(4)
+            else:
+                continue
+            if _dt in dto_field_types:
+                var_to_dto_local[_vn] = _dt
+
+        def _resolve_field_type(var_name: str, prop_upper: str) -> tuple[str, str] | None:
+            dto = var_to_dto_local.get(var_name)
+            if not dto:
+                return None
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            ftype = dto_field_types.get(dto, {}).get(prop_name)
+            if not ftype:
+                return None
+            return (dto, ftype)
+
+        # (a) hasText(p.getXxx()) where getXxx() is array or List
+        for m in _hasText_call_re.finditer(svc_gf.content):
+            var_name, prop_upper = m.group(1), m.group(2)
+            info = _resolve_field_type(var_name, prop_upper)
+            if not info:
+                continue
+            dto, ftype = info
+            if _is_array_type(ftype) or _is_list_type(ftype):
+                prop_name = prop_upper[0].lower() + prop_upper[1:]
+                dto_fp = dto_file_paths.get(dto, svc_gf.file_path)
+                issues.append({
+                    "file_path": dto_fp,
+                    "issue": (
+                        f"[STATIC] DTO {dto}.{prop_name} is declared as '{ftype}' but ServiceImpl "
+                        f"calls hasText({var_name}.get{prop_upper}()) — hasText() ONLY accepts String. "
+                        f"This is a compile error: array/List has no String semantics."
+                    ),
+                    "fix_instruction": (
+                        f"DECIDE the data shape and align DTO + Service:\n"
+                        f"  Option A (recommended for ID lists used with .split(\",\")):\n"
+                        f"    CHANGE the DTO to:  private String {prop_name};\n"
+                        f"    KEEP ServiceImpl as-is (hasText + .split(\",\")).\n"
+                        f"  Option B (if Service should iterate as List):\n"
+                        f"    CHANGE the DTO to:  private List<String> {prop_name};\n"
+                        f"    REWRITE ServiceImpl: replace hasText({var_name}.get{prop_upper}()) with "
+                        f"({var_name}.get{prop_upper}() != null && !{var_name}.get{prop_upper}().isEmpty()), "
+                        f"and replace .split(\",\") loops with for-each over the List directly.\n"
+                        f"NEVER use Java arrays (Type[]) in DTOs — pick String OR List<String>."
+                    ),
+                })
+
+        # (b) p.getXxx().method(...) — String-only method on a non-String field, OR List-only method on a String field
+        for m in _chained_call_re.finditer(svc_gf.content):
+            var_name, prop_upper, method = m.group(1), m.group(2), m.group(3)
+            info = _resolve_field_type(var_name, prop_upper)
+            if not info:
+                continue
+            dto, ftype = info
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            dto_fp = dto_file_paths.get(dto, svc_gf.file_path)
+
+            # String-only method called on array/List field
+            if method in _string_only_methods and (_is_array_type(ftype) or _is_list_type(ftype)):
+                issues.append({
+                    "file_path": dto_fp,
+                    "issue": (
+                        f"[STATIC] DTO {dto}.{prop_name} is '{ftype}' but ServiceImpl calls "
+                        f"{var_name}.get{prop_upper}().{method}(...) — '.{method}()' is a String-only method, "
+                        f"not available on {ftype}. COMPILE ERROR."
+                    ),
+                    "fix_instruction": (
+                        f"DECIDE one consistent shape (NEVER use Java arrays):\n"
+                        f"  Option A: CHANGE DTO to 'private String {prop_name};' "
+                        f"(keeps the .{method}(...) call valid in ServiceImpl).\n"
+                        f"  Option B: CHANGE DTO to 'private List<String> {prop_name};' AND rewrite the "
+                        f".{method}(...) call to use List API (e.g. for-each over the list, .isEmpty() instead of hasText)."
+                    ),
+                })
+
+            # List-only method called on String field (e.g. p.getIds().isEmpty() when ids is String)
+            if method in _list_only_methods and _is_string_type(ftype) and method != "contains" and method != "indexOf":
+                # contains/indexOf exist on String too; skip those to avoid false positives
+                issues.append({
+                    "file_path": dto_fp,
+                    "issue": (
+                        f"[STATIC] DTO {dto}.{prop_name} is 'String' but ServiceImpl calls "
+                        f"{var_name}.get{prop_upper}().{method}(...) — '.{method}()' is a List-only method. "
+                        f"COMPILE ERROR."
+                    ),
+                    "fix_instruction": (
+                        f"Either CHANGE the DTO to 'private List<String> {prop_name};' (if Service should iterate), "
+                        f"or REWRITE the call (e.g. replace .isEmpty() on String with !StringUtils.hasText(...))."
+                    ),
+                })
+
+        # (c) for-each iterating a String getter  → not iterable
+        for m in _foreach_getter_re.finditer(svc_gf.content):
+            var_name, prop_upper = m.group(1), m.group(2)
+            info = _resolve_field_type(var_name, prop_upper)
+            if not info:
+                continue
+            dto, ftype = info
+            if _is_string_type(ftype):
+                prop_name = prop_upper[0].lower() + prop_upper[1:]
+                dto_fp = dto_file_paths.get(dto, svc_gf.file_path)
+                issues.append({
+                    "file_path": dto_fp,
+                    "issue": (
+                        f"[STATIC] DTO {dto}.{prop_name} is 'String' but ServiceImpl iterates "
+                        f"`for (... : {var_name}.get{prop_upper}())` — String is not iterable. COMPILE ERROR."
+                    ),
+                    "fix_instruction": (
+                        f"Either CHANGE the DTO to 'private List<String> {prop_name};' (and remove .split(\",\") elsewhere), "
+                        f"or REWRITE the for-each as `for (String s : {var_name}.get{prop_upper}().split(\",\"))`."
+                    ),
+                })
+
+    # --- 6c. Generic DTO/Service type-contract checks ---
+    # This is intentionally generic (not per-field hardcoding):
+    # verify that how ServiceImpl uses dto.getXxx() matches the declared DTO field type.
+    # Violations feed FixAgent so it can rewrite Service code (or DTO type) consistently.
+    dto_type_map_for_contract: dict[str, dict[str, str]] = {}
+    for cls, fset in dto_fields.items():
+        # dto_fields here already stores class -> set(field_names), but type-aware checks need types.
+        # Rebuild from file content with initializer-aware regex.
+        gf = next((x for x in files if x.file_path == dto_file_paths.get(cls)), None)
+        if not gf:
+            continue
+        fmap: dict[str, str] = {}
+        for m in re.finditer(
+            r'private\s+(\S+(?:<[^>]+>)?(?:\s*\[\s*\])?)\s+(\w+)\s*(?:=\s*[^;]+)?\s*;',
+            gf.content,
+        ):
+            fmap[m.group(2)] = m.group(1).replace(" ", "").strip()
+        if fmap:
+            dto_type_map_for_contract[cls] = fmap
+
+    if dto_type_map_for_contract:
+        for svc in service_files:
+            vios = _service_dto_type_contract_violations(svc.content, dto_type_map_for_contract)
+            for vio in vios:
+                issues.append({
+                    "file_path": svc.file_path,
+                    "issue": f"[STATIC] DTO/Service type-contract violation: {vio}",
+                    "fix_instruction": (
+                        "Align Service getter usage with DTO declared field types. "
+                        "Rules: hasText/getter.split/trim require String; "
+                        "isEmpty/size/stream require List; "
+                        "for-each over getter requires List/array; "
+                        "numeric comparisons (<, >, <=, >=) require numeric field type; "
+                        "getter assignment type must match DTO declared type. "
+                        "Fix by rewriting Service usage or DTO type so both sides are compatible."
                     ),
                 })
 
@@ -937,10 +1156,663 @@ def organize_imports_for_files(files: list[GeneratedFile]) -> None:
             gf.content = organize_imports(gf.content)
 
 
+_DTO_ARRAY_FIELD_RE = re.compile(
+    r'(private\s+)(\w+(?:<[^>]+>)?)\s*\[\s*\]\s+(\w+)\s*(?:=\s*[^;]+)?\s*;'
+)
+# Match `private List<X> name [= ...];` — used to downgrade List → String when
+# the Service code uses the field via String API.
+_DTO_LIST_FIELD_RE = re.compile(
+    r'(private\s+)(?:List|ArrayList|Collection|LinkedList)\s*<\s*([^>]+?)\s*>\s+(\w+)\s*(?:=\s*[^;]+)?\s*;'
+)
+# Generic `private <Type> <name>[ = init];` — used by the duplicate-field cleaner.
+_DTO_ANY_FIELD_RE = re.compile(
+    r'^(\s*private\s+\S+(?:\s*<[^>]+>)?(?:\s*\[\s*\])?\s+)(\w+)(\s*(?:=\s*[^;]+)?\s*;.*)$',
+    re.MULTILINE,
+)
+# String-only methods on a String value — used to detect Service usage that requires String, not array.
+_STRING_ONLY_METHODS = {
+    "split", "trim", "isBlank", "toLowerCase", "toUpperCase",
+    "replace", "replaceAll", "replaceFirst", "matches",
+    "startsWith", "endsWith", "substring", "charAt",
+    "compareTo", "compareToIgnoreCase", "equalsIgnoreCase", "strip", "concat",
+}
+_HAS_TEXT_GETTER_RE = re.compile(
+    r'\b(?:StringUtils\s*\.\s*)?hasText\s*\(\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+)
+_CHAINED_GETTER_RE = re.compile(
+    r'(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\.\s*(\w+)\s*\('
+)
+_DTO_VAR_TYPE_RE = re.compile(
+    r'(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*(?:[=;,):])|\bfor\s*\(\s*(?:final\s+)?(\w+(?:Dto\w*))\s+(\w+)\s*:'
+)
+
+
+def _collect_dto_field_types_from_ctx(ctx: "SharedContext") -> dict[str, dict[str, str]]:
+    """Collect DTO field types from generated DTO files (req/res).
+
+    Returns:
+        {DtoClassName: {field_name: declared_type}}
+    """
+    dto_field_types: dict[str, dict[str, str]] = {}
+    field_re = re.compile(
+        r'private\s+(\S+(?:<[^>]+>)?(?:\s*\[\s*\])?)\s+(\w+)\s*(?:=\s*[^;]+)?\s*;'
+    )
+    for _, gf in ctx.generated_files.items():
+        if gf.file_type not in ("dto_request", "dto_response"):
+            continue
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+        cls = gf.file_path.split("/")[-1].replace(".java", "")
+        fields: dict[str, str] = {}
+        for m in field_re.finditer(gf.content):
+            ftype = m.group(1).replace(" ", "").strip()
+            fname = m.group(2)
+            fields[fname] = ftype
+        if fields:
+            dto_field_types[cls] = fields
+    return dto_field_types
+
+
+def _is_string_type(t: str) -> bool:
+    return t.replace(" ", "").strip() == "String"
+
+
+def _is_array_type(t: str) -> bool:
+    tt = t.replace(" ", "").strip()
+    return tt.endswith("[]")
+
+
+def _is_list_type(t: str) -> bool:
+    tt = t.replace(" ", "").strip()
+    return bool(re.match(r'^(List|ArrayList|Collection|Set|LinkedList)<', tt))
+
+
+def _is_boolean_type(t: str) -> bool:
+    tt = t.replace(" ", "").strip()
+    return tt in {"boolean", "Boolean"}
+
+
+def _is_numeric_type(t: str) -> bool:
+    tt = t.replace(" ", "").strip()
+    return tt in {
+        "byte", "short", "int", "long", "float", "double",
+        "Byte", "Short", "Integer", "Long", "Float", "Double",
+        "BigDecimal", "BigInteger",
+    }
+
+
+def _normalize_java_type(t: str) -> str:
+    """Normalize Java type for light-weight compatibility checks."""
+    tt = re.sub(r'\s+', ' ', t).strip()
+    if tt.startswith("final "):
+        tt = tt[len("final "):].strip()
+    return tt
+
+
+def _is_type_compatible(lhs_type: str, rhs_type: str) -> bool:
+    """Light-weight compatibility check for assignment expressions.
+
+    This is intentionally conservative: if uncertain, return False so it is fixed upstream.
+    """
+    lhs = _normalize_java_type(lhs_type).replace(" ", "")
+    rhs = _normalize_java_type(rhs_type).replace(" ", "")
+    if lhs == rhs:
+        return True
+    boxing_pairs = {
+        ("int", "Integer"), ("Integer", "int"),
+        ("long", "Long"), ("Long", "long"),
+        ("double", "Double"), ("Double", "double"),
+        ("float", "Float"), ("Float", "float"),
+        ("boolean", "Boolean"), ("Boolean", "boolean"),
+    }
+    if (lhs, rhs) in boxing_pairs:
+        return True
+    # Allow covariant assignment to Object-ish generic containers only when both are list-ish
+    if _is_list_type(lhs) and _is_list_type(rhs):
+        return True
+    return False
+
+
+def _service_dto_type_contract_violations(
+    service_content: str,
+    dto_field_types: dict[str, dict[str, str]],
+) -> list[str]:
+    """Check ServiceImpl getter usage against DTO declared field types.
+
+    Generic type-contract checks (not ids/split hardcoding):
+    - String-only methods must be called on String fields.
+    - List-only methods must be called on List fields.
+    - hasText(...) must receive String.
+    - for-each over getter requires iterable (List/array).
+    - Direct assignment from getter respects declared type compatibility.
+    """
+    violations: list[str] = []
+    if not dto_field_types:
+        return violations
+
+    var_to_dto: dict[str, str] = {}
+    for m in _DTO_VAR_TYPE_RE.finditer(service_content):
+        if m.group(1) and m.group(2):
+            dto_type, var_name = m.group(1), m.group(2)
+        elif m.group(3) and m.group(4):
+            dto_type, var_name = m.group(3), m.group(4)
+        else:
+            continue
+        if dto_type in dto_field_types:
+            var_to_dto[var_name] = dto_type
+
+    if not var_to_dto:
+        return violations
+
+    list_only_methods = {"isEmpty", "size", "iterator", "stream", "forEach", "add", "addAll", "remove", "clear", "get"}
+    has_text_re = re.compile(
+        r'\b(?:StringUtils\s*\.\s*)?hasText\s*\(\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+    )
+    chained_re = re.compile(
+        r'(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\.\s*(\w+)\s*\('
+    )
+    foreach_getter_re = re.compile(
+        r'\bfor\s*\(\s*(?:final\s+)?\S+\s+\w+\s*:\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+    )
+    assign_getter_re = re.compile(
+        r'([\w<>\[\], ?]+?)\s+\w+\s*=\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)'
+    )
+    # Numeric comparison patterns:
+    #   req.getPage() < 1
+    #   1 <= req.getPage()
+    getter_num_cmp_re = re.compile(
+        r'(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*(?:<=|>=|<|>)\s*-?\d+(?:\.\d+)?'
+    )
+    num_getter_cmp_re = re.compile(
+        r'-?\d+(?:\.\d+)?\s*(?:<=|>=|<|>)\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)'
+    )
+
+    def _resolve_declared_type(var_name: str, prop_upper: str) -> tuple[str, str, str] | None:
+        dto = var_to_dto.get(var_name)
+        if not dto:
+            return None
+        prop_name = prop_upper[0].lower() + prop_upper[1:]
+        ftype = dto_field_types.get(dto, {}).get(prop_name)
+        if not ftype:
+            return None
+        return dto, prop_name, ftype
+
+    for m in has_text_re.finditer(service_content):
+        var_name, prop_upper = m.group(1), m.group(2)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if not _is_string_type(ftype):
+            violations.append(
+                f"hasText({var_name}.get{prop_upper}()) requires String, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    for m in chained_re.finditer(service_content):
+        var_name, prop_upper, method = m.group(1), m.group(2), m.group(3)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if method in _STRING_ONLY_METHODS and not _is_string_type(ftype):
+            violations.append(
+                f".{method}() is String-only, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+        if method in list_only_methods and not _is_list_type(ftype):
+            violations.append(
+                f".{method}() is List-only, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    for m in foreach_getter_re.finditer(service_content):
+        var_name, prop_upper = m.group(1), m.group(2)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if not (_is_list_type(ftype) or _is_array_type(ftype)):
+            violations.append(
+                f"for-each over {var_name}.get{prop_upper}() requires List/array, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    for m in assign_getter_re.finditer(service_content):
+        lhs_type, var_name, prop_upper = m.group(1).strip(), m.group(2), m.group(3)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if not _is_type_compatible(lhs_type, ftype):
+            violations.append(
+                f"Assignment type mismatch: `{lhs_type} x = {var_name}.get{prop_upper}()` but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    for m in getter_num_cmp_re.finditer(service_content):
+        var_name, prop_upper = m.group(1), m.group(2)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if not _is_numeric_type(ftype):
+            violations.append(
+                f"Numeric comparison requires numeric getter type, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    for m in num_getter_cmp_re.finditer(service_content):
+        var_name, prop_upper = m.group(1), m.group(2)
+        resolved = _resolve_declared_type(var_name, prop_upper)
+        if not resolved:
+            continue
+        dto, prop_name, ftype = resolved
+        if not _is_numeric_type(ftype):
+            violations.append(
+                f"Numeric comparison requires numeric getter type, but DTO field {dto}.{prop_name} is {ftype}"
+            )
+
+    # Deduplicate while preserving order
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for v in violations:
+        if v in seen:
+            continue
+        seen.add(v)
+        deduped.append(v)
+    return deduped
+
+
+def _downgrade_dto_array_fields(files: list[GeneratedFile]) -> None:
+    """Rewrite `private Type[] xxx;` in DTOs to `private String xxx;` when a Service uses
+    the field with String-only methods (.split, .trim, hasText, etc.).
+
+    Java arrays in DTOs are the #1 source of compile errors with MyBatis/JSON binding/StringUtils.
+    This sweep is safe: it only fires when (a) the DTO field is actually declared as Type[],
+    and (b) at least one ServiceImpl uses the field through a String API.
+
+    For String[] specifically, the downgrade is unconditional — the prompt rules ban String[]
+    entirely from DTOs, so even unused String[] fields get flattened to plain String.
+    """
+    dto_files = [gf for gf in files if gf.file_type in ("dto_request", "dto_response")
+                 and gf.layer == "backend" and gf.file_path.endswith(".java")]
+    svc_files = [gf for gf in files if gf.file_type == "service_impl"
+                 and gf.layer == "backend" and gf.file_path.endswith(".java")]
+
+    if not dto_files:
+        return
+
+    # Map DTO class name → array fields
+    dto_array_fields: dict[str, dict[str, str]] = {}  # class → {field: inner_type}
+    dto_class_to_gf: dict[str, GeneratedFile] = {}
+    for gf in dto_files:
+        cls = gf.file_path.split("/")[-1].replace(".java", "")
+        dto_class_to_gf[cls] = gf
+        for m in _DTO_ARRAY_FIELD_RE.finditer(gf.content):
+            inner = m.group(2).strip()
+            fname = m.group(3)
+            dto_array_fields.setdefault(cls, {})[fname] = inner
+
+    if not dto_array_fields:
+        return
+
+    # Find which (class, field) pairs Service uses via String API
+    string_used: set[tuple[str, str]] = set()
+    for svc_gf in svc_files:
+        var_to_dto: dict[str, str] = {}
+        for vm in _DTO_VAR_TYPE_RE.finditer(svc_gf.content):
+            if vm.group(1) and vm.group(2):
+                _dt, _vn = vm.group(1), vm.group(2)
+            elif vm.group(3) and vm.group(4):
+                _dt, _vn = vm.group(3), vm.group(4)
+            else:
+                continue
+            if _dt in dto_array_fields:
+                var_to_dto[_vn] = _dt
+
+        for m in _HAS_TEXT_GETTER_RE.finditer(svc_gf.content):
+            var_name, prop_upper = m.group(1), m.group(2)
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            if prop_name in dto_array_fields.get(dto, {}):
+                string_used.add((dto, prop_name))
+
+        for m in _CHAINED_GETTER_RE.finditer(svc_gf.content):
+            var_name, prop_upper, method = m.group(1), m.group(2), m.group(3)
+            if method not in _STRING_ONLY_METHODS:
+                continue
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            if prop_name in dto_array_fields.get(dto, {}):
+                string_used.add((dto, prop_name))
+
+    # Apply rewrites
+    for cls, fields in dto_array_fields.items():
+        gf = dto_class_to_gf.get(cls)
+        if not gf:
+            continue
+        new_content = gf.content
+        rewritten_any = False
+
+        def _replace(match: 're.Match[str]') -> str:
+            nonlocal rewritten_any
+            prefix, inner, fname = match.group(1), match.group(2).strip(), match.group(3)
+            # Always downgrade String[] (Java arrays banned in DTOs).
+            # Other arrays only when Service uses the field as String.
+            if inner == "String" or (cls, fname) in string_used:
+                rewritten_any = True
+                logger.info(
+                    "[POSTPROC] DTO array downgrade: %s.%s : %s[] → String",
+                    cls, fname, inner,
+                )
+                return f"{prefix}String {fname};"
+            return match.group(0)
+
+        new_content = _DTO_ARRAY_FIELD_RE.sub(_replace, new_content)
+        if rewritten_any:
+            gf.content = new_content
+
+
+def _downgrade_dto_list_fields_when_used_as_string(files: list[GeneratedFile]) -> None:
+    """If a DTO field is `private List<String> xxx;` but ServiceImpl calls String-only methods on it
+    (.split, hasText, .trim, etc.), the LLM picked the wrong shape. Rewrite the DTO field to
+    `private String xxx;` so the Service code compiles.
+
+    This is the type-mismatch the user reported: LLM emitted `private List<String> ids = new ArrayList<>();`
+    but ServiceImpl uses `param.getIds().split(",")` and `hasText(param.getIds())`.
+
+    The downgrade is only applied when EVERY observed Service usage is String-flavored AND there's no
+    List API usage on the same field. If both flavors are present we leave it for QA/Fix to resolve.
+    """
+    dto_files = [gf for gf in files if gf.file_type in ("dto_request", "dto_response")
+                 and gf.layer == "backend" and gf.file_path.endswith(".java")]
+    svc_files = [gf for gf in files if gf.file_type == "service_impl"
+                 and gf.layer == "backend" and gf.file_path.endswith(".java")]
+    if not dto_files or not svc_files:
+        return
+
+    # Map DTO class → {field_name: inner_generic_type} for List/Collection fields
+    dto_list_fields: dict[str, dict[str, str]] = {}
+    dto_class_to_gf: dict[str, GeneratedFile] = {}
+    for gf in dto_files:
+        cls = gf.file_path.split("/")[-1].replace(".java", "")
+        dto_class_to_gf[cls] = gf
+        for m in _DTO_LIST_FIELD_RE.finditer(gf.content):
+            inner = m.group(2).strip()
+            fname = m.group(3)
+            dto_list_fields.setdefault(cls, {})[fname] = inner
+
+    if not dto_list_fields:
+        return
+
+    # Tally Service usage: String-only vs List-only methods
+    list_only_methods = {"isEmpty", "size", "iterator", "stream", "forEach"}
+    string_used: set[tuple[str, str]] = set()
+    list_used: set[tuple[str, str]] = set()
+    for svc_gf in svc_files:
+        var_to_dto: dict[str, str] = {}
+        for vm in _DTO_VAR_TYPE_RE.finditer(svc_gf.content):
+            if vm.group(1) and vm.group(2):
+                _dt, _vn = vm.group(1), vm.group(2)
+            elif vm.group(3) and vm.group(4):
+                _dt, _vn = vm.group(3), vm.group(4)
+            else:
+                continue
+            if _dt in dto_list_fields:
+                var_to_dto[_vn] = _dt
+
+        for m in _HAS_TEXT_GETTER_RE.finditer(svc_gf.content):
+            var_name, prop_upper = m.group(1), m.group(2)
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            if prop_name in dto_list_fields.get(dto, {}):
+                string_used.add((dto, prop_name))
+
+        for m in _CHAINED_GETTER_RE.finditer(svc_gf.content):
+            var_name, prop_upper, method = m.group(1), m.group(2), m.group(3)
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            if prop_name not in dto_list_fields.get(dto, {}):
+                continue
+            if method in _STRING_ONLY_METHODS:
+                string_used.add((dto, prop_name))
+            elif method in list_only_methods:
+                list_used.add((dto, prop_name))
+
+        # for-each over the list getter counts as List usage
+        for m in re.finditer(
+            r'\bfor\s*\(\s*(?:final\s+)?\S+\s+\w+\s*:\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)',
+            svc_gf.content,
+        ):
+            var_name, prop_upper = m.group(1), m.group(2)
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            if prop_name in dto_list_fields.get(dto, {}):
+                list_used.add((dto, prop_name))
+
+    # Decide downgrade per (class, field): String-only AND no List usage
+    to_downgrade: set[tuple[str, str]] = {
+        key for key in string_used if key not in list_used
+    }
+    if not to_downgrade:
+        return
+
+    for cls, fields in dto_list_fields.items():
+        gf = dto_class_to_gf.get(cls)
+        if not gf:
+            continue
+        rewritten_any = False
+
+        def _replace_list(match: 're.Match[str]') -> str:
+            nonlocal rewritten_any
+            prefix, inner, fname = match.group(1), match.group(2).strip(), match.group(3)
+            if (cls, fname) in to_downgrade:
+                rewritten_any = True
+                logger.info(
+                    "[POSTPROC] DTO List downgrade: %s.%s : List<%s> → String "
+                    "(ServiceImpl uses String-only methods like .split/hasText)",
+                    cls, fname, inner,
+                )
+                return f"{prefix}String {fname};"
+            return match.group(0)
+
+        new_content = _DTO_LIST_FIELD_RE.sub(_replace_list, gf.content)
+        if rewritten_any:
+            gf.content = new_content
+
+
+def _dedupe_dto_fields(files: list[GeneratedFile]) -> None:
+    """Remove duplicate `private <Type> <name>;` declarations within a single DTO file.
+
+    When two declarations use the SAME field name, keep the first occurrence (which is usually
+    the well-typed one with initializer like `List<String> ids = new ArrayList<>();`) and drop
+    the later String fallback that an over-zealous post-fix injected.
+    """
+    for gf in files:
+        if gf.file_type not in ("dto_request", "dto_response"):
+            continue
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+
+        seen_names: set[str] = set()
+        new_lines: list[str] = []
+        removed: list[tuple[str, str]] = []  # (line, field_name)
+        for line in gf.content.split("\n"):
+            m = _DTO_ANY_FIELD_RE.match(line)
+            if not m:
+                new_lines.append(line)
+                continue
+            fname = m.group(2)
+            if fname in seen_names:
+                removed.append((line.strip(), fname))
+                continue
+            seen_names.add(fname)
+            new_lines.append(line)
+
+        if removed:
+            gf.content = "\n".join(new_lines)
+            logger.info(
+                "[POSTPROC] Removed %d duplicate field decl(s) from %s: %s",
+                len(removed),
+                gf.file_path,
+                ", ".join(f"'{l}'" for l, _ in removed[:5]),
+            )
+
+
+def _collect_dto_field_types_from_files(files: list[GeneratedFile]) -> dict[str, dict[str, str]]:
+    """Collect DTO field types from in-memory generated files."""
+    out: dict[str, dict[str, str]] = {}
+    for gf in files:
+        if gf.file_type not in ("dto_request", "dto_response"):
+            continue
+        if gf.layer != "backend" or not gf.file_path.endswith(".java"):
+            continue
+        cls = gf.file_path.split("/")[-1].replace(".java", "")
+        ftypes: dict[str, str] = {}
+        for m in re.finditer(
+            r'private\s+(\S+(?:<[^>]+>)?(?:\s*\[\s*\])?)\s+(\w+)\s*(?:=\s*[^;]+)?\s*;',
+            gf.content,
+        ):
+            ftypes[m.group(2)] = m.group(1).replace(" ", "").strip()
+        if ftypes:
+            out[cls] = ftypes
+    return out
+
+
+def _normalize_service_boolean_getter_usage(
+    service_content: str,
+    dto_field_types: dict[str, dict[str, str]],
+) -> str:
+    """Normalize boolean contexts that directly use dto.getXxx() for non-boolean fields.
+
+    Example fixes:
+      boolean hasIds = req.getIds();             // List<String>
+        -> boolean hasIds = (req.getIds() != null && !req.getIds().isEmpty());
+      if (req.getIds()) { ... }                 // String
+        -> if ((req.getIds() != null && !req.getIds().trim().isEmpty())) { ... }
+    """
+    if not dto_field_types:
+        return service_content
+
+    var_to_dto: dict[str, str] = {}
+    for m in _DTO_VAR_TYPE_RE.finditer(service_content):
+        if m.group(1) and m.group(2):
+            dto_type, var_name = m.group(1), m.group(2)
+        elif m.group(3) and m.group(4):
+            dto_type, var_name = m.group(3), m.group(4)
+        else:
+            continue
+        if dto_type in dto_field_types:
+            var_to_dto[var_name] = dto_type
+
+    if not var_to_dto:
+        return service_content
+
+    def _cond_for_getter(var_name: str, prop_upper: str) -> str | None:
+        dto = var_to_dto.get(var_name)
+        if not dto:
+            return None
+        prop_name = prop_upper[0].lower() + prop_upper[1:]
+        ftype = dto_field_types.get(dto, {}).get(prop_name)
+        if not ftype:
+            return None
+        getter = f"{var_name}.get{prop_upper}()"
+        if _is_boolean_type(ftype):
+            return getter
+        if _is_list_type(ftype):
+            return f"({getter} != null && !{getter}.isEmpty())"
+        if _is_array_type(ftype):
+            return f"({getter} != null && {getter}.length > 0)"
+        if _is_string_type(ftype):
+            return f"({getter} != null && !{getter}.trim().isEmpty())"
+        # Fallback for non-boolean scalar/object
+        return f"({getter} != null)"
+
+    out = service_content
+
+    # 1) boolean x = dto.getXxx();
+    assign_re = re.compile(
+        r'\b(boolean|Boolean)\s+(\w+)\s*=\s*(\w+)\.get([A-Z]\w*)\(\s*\)\s*;'
+    )
+    def _assign_sub(match: 're.Match[str]') -> str:
+        lhs_type = match.group(1)
+        out_var = match.group(2)
+        var_name = match.group(3)
+        prop_upper = match.group(4)
+        cond = _cond_for_getter(var_name, prop_upper)
+        if not cond:
+            return match.group(0)
+        return f"{lhs_type} {out_var} = {cond};"
+    out = assign_re.sub(_assign_sub, out)
+
+    # 2) if (dto.getXxx()) / if (!dto.getXxx())
+    if_re = re.compile(
+        r'\bif\s*\(\s*(!?)\s*(\w+)\.get([A-Z]\w*)\(\s*\)\s*\)'
+    )
+    def _if_sub(match: 're.Match[str]') -> str:
+        neg = match.group(1)
+        var_name = match.group(2)
+        prop_upper = match.group(3)
+        cond = _cond_for_getter(var_name, prop_upper)
+        if not cond:
+            return match.group(0)
+        if neg:
+            return f"if (!({cond}))"
+        return f"if ({cond})"
+    out = if_re.sub(_if_sub, out)
+
+    # 3) numeric x = dto.getXxx(); where getter is String
+    num_assign_re = re.compile(
+        r'\b(int|Integer|long|Long|double|Double|float|Float)\s+(\w+)\s*=\s*(\w+)\.get([A-Z]\w*)\(\s*\)\s*;'
+    )
+    def _num_parse_expr(lhs_type: str, getter: str) -> str:
+        if lhs_type == "int":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? 0 : Integer.parseInt({getter}))"
+        if lhs_type == "Integer":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? null : Integer.valueOf({getter}))"
+        if lhs_type == "long":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? 0L : Long.parseLong({getter}))"
+        if lhs_type == "Long":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? null : Long.valueOf({getter}))"
+        if lhs_type == "double":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? 0.0d : Double.parseDouble({getter}))"
+        if lhs_type == "Double":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? null : Double.valueOf({getter}))"
+        if lhs_type == "float":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? 0.0f : Float.parseFloat({getter}))"
+        if lhs_type == "Float":
+            return f"(({getter} == null || {getter}.trim().isEmpty()) ? null : Float.valueOf({getter}))"
+        return getter
+    def _num_assign_sub(match: 're.Match[str]') -> str:
+        lhs_type = match.group(1)
+        out_var = match.group(2)
+        var_name = match.group(3)
+        prop_upper = match.group(4)
+        dto = var_to_dto.get(var_name)
+        if not dto:
+            return match.group(0)
+        prop_name = prop_upper[0].lower() + prop_upper[1:]
+        ftype = dto_field_types.get(dto, {}).get(prop_name)
+        if not ftype or not _is_string_type(ftype):
+            return match.group(0)
+        getter = f"{var_name}.get{prop_upper}()"
+        parsed = _num_parse_expr(lhs_type, getter)
+        return f"{lhs_type} {out_var} = {parsed};"
+    out = num_assign_re.sub(_num_assign_sub, out)
+
+    return out
+
+
 def postprocess_backend_files(files: list[GeneratedFile]) -> None:
     """Apply all programmatic post-processing to backend files in-place.
 
     Must be called after ANY code generation or fix that produces backend Java:
+    - DTO: downgrade banned Java arrays (Type[]) to String
     - DaoImpl: rename bare CRUD method declarations to Mapper XML statement ids
     - ServiceImpl: fix bare DAO calls, remove log.error() before throw, enforce @Slf4j
 
@@ -949,6 +1821,19 @@ def postprocess_backend_files(files: list[GeneratedFile]) -> None:
     dao_files = [gf for gf in files if gf.file_type == "dao_impl"]
     svc_files = [gf for gf in files if gf.file_type == "service_impl"
                  and gf.layer == "backend" and gf.file_path.endswith(".java")]
+
+    # Phase 0: DTO type-shape sweeps. ORDER MATTERS:
+    #   0a. Downgrade Type[] arrays → String (banned in DTOs).
+    #   0b. Downgrade List<X> → String when ServiceImpl uses the field with String-only API
+    #       (.split, hasText, .trim, ...). Without this, the LLM sometimes emits List but the
+    #       Service uses .split — a guaranteed compile error.
+    #   0c. Dedupe duplicate field declarations. Earlier post-fix passes (or the LLM itself)
+    #       can produce two `private <T> ids;` lines after rewrites — keep the first and drop
+    #       the rest so the file compiles.
+    _downgrade_dto_array_fields(files)
+    _downgrade_dto_list_fields_when_used_as_string(files)
+    _dedupe_dto_fields(files)
+    _dto_type_map = _collect_dto_field_types_from_files(files)
 
     # Phase 1: fix DaoImpl bare method declarations first
     for gf in dao_files:
@@ -963,6 +1848,7 @@ def postprocess_backend_files(files: list[GeneratedFile]) -> None:
         gf.content = _ensure_log_debug_at_method_start(gf.content)
         gf.content = _remove_uuid_usage(gf.content)
         gf.content = _remove_manual_audit_fields(gf.content)
+        gf.content = _normalize_service_boolean_getter_usage(gf.content, _dto_type_map)
 
 
 # ---------------------------------------------------------------------------
@@ -1763,6 +2649,27 @@ class BackendEngineerAgent:
             "     usage in ServiceImpl is compatible with that declared type.\n"
             "   NEVER call getter/setter for a field not declared in the DTO.\n"
             "   NEVER assign a getter result to a variable of an incompatible type.\n\n"
+            "   ★★★ ABSOLUTE BAN — JAVA ARRAYS (String[], int[], etc.) IN DTOs ★★★\n"
+            "   NEVER declare ANY field with `Type[]` syntax in a DTO (Request or Response).\n"
+            "   Java arrays do NOT play well with MyBatis, JSON binding, StringUtils.hasText(), CollectionUtils.isEmpty(),\n"
+            "   and 90% of Service helpers. This is the #1 source of compile errors. PICK ONE pattern and STICK to it:\n"
+            "     Pattern A — comma-separated String:\n"
+            "       DTO:     private String ids;                       // single comma-separated value\n"
+            "       Service: if (StringUtils.hasText(p.getIds())) { for (String id : p.getIds().split(\",\")) { ... } }\n"
+            "     Pattern B — typed List:\n"
+            "       DTO:     private List<String> ids = new ArrayList<>();\n"
+            "       Service: if (p.getIds() != null && !p.getIds().isEmpty()) { for (String id : p.getIds()) { ... } }\n"
+            "   If the spec says the front-end sends an ARRAY of ids → use Pattern B (List<String>), NEVER String[].\n"
+            "   If you choose Pattern A, NEVER call .isEmpty() / for-each on the field — only .split(\",\").\n"
+            "   If you choose Pattern B, NEVER call .split() / hasText() on the field — only List API.\n"
+            "   COMPILE-ERROR EXAMPLES (DO NOT GENERATE THESE):\n"
+            "     WRONG: private String[] ids;  ... if (hasText(p.getIds())) ...   // String[] is not String — hasText only takes String\n"
+            "     WRONG: private String[] ids;  ... p.getIds().split(\",\")          // String[] has no .split() method\n"
+            "     WRONG: private String[] ids;  ... p.getIds().isEmpty()           // String[] has no .isEmpty() method\n"
+            "     WRONG: private List<String> ids; ... p.getIds().split(\",\")      // List has no .split() method\n"
+            "     WRONG: private List<String> ids; ... if (hasText(p.getIds()))   // hasText only takes String\n"
+            "   GOLDEN RULE: Before declaring any list-like field in DTO, decide A or B and write BOTH the DTO\n"
+            "   declaration AND every Service usage in the SAME pattern. NEVER mix.\n\n"
             "9. SERVICE ↔ DAO TYPE CONTRACT — CRITICAL:\n"
             "   The parameter type and return type of every DaoImpl method call in ServiceImpl\n"
             "   MUST exactly match the DaoImpl method signature.\n"
@@ -2645,7 +3552,8 @@ class BackendEngineerAgent:
                     for _path, _gf in ctx.generated_files.items():
                         if _gf.file_type in ("dto_request", "dto_response"):
                             for _fm in re.finditer(
-                                r'private\s+\S+(?:<[^>]+>)?\s+(\w+)\s*;', _gf.content
+                                r'private\s+\S+(?:<[^>]+>)?(?:\s*\[\s*\])?\s+(\w+)\s*(?:=\s*[^;]+)?\s*;',
+                                _gf.content,
                             ):
                                 _valid_dto_fields.add(_fm.group(1))
 
@@ -2693,6 +3601,67 @@ class BackendEngineerAgent:
                             logger.warning(
                                 "[BACKEND_ENG] DTO field fix call failed: %s", _exc
                             )
+
+                # ── DTO/Service type contract check (generic) ─────────────────
+                # This is a deterministic type-compatibility gate:
+                #   - hasText(...) must receive String getter
+                #   - String-only/List-only method calls match getter type
+                #   - for-each getter usage is iterable
+                #   - assignment from getter respects type compatibility
+                # If violations exist, request one targeted rewrite immediately.
+                if file_entry.file_type == "service_impl":
+                    try:
+                        _dto_type_map = _collect_dto_field_types_from_ctx(ctx)
+                        _type_violations = _service_dto_type_contract_violations(content, _dto_type_map)
+                        if _type_violations:
+                            logger.warning(
+                                "[BACKEND_ENG] service_impl has DTO type-contract violations (%d) — "
+                                "running inline type-contract fix for %s",
+                                len(_type_violations), file_entry.file_path,
+                            )
+                            _violations_text = "\n".join(f"  - {v}" for v in _type_violations[:30])
+                            _dto_type_table_lines: list[str] = []
+                            for _dto_cls, _fields in sorted(_dto_type_map.items()):
+                                _dto_type_table_lines.append(f"{_dto_cls}:")
+                                for _fname, _ftype in sorted(_fields.items()):
+                                    _dto_type_table_lines.append(f"  - {_fname}: {_ftype}")
+                            _dto_type_table = "\n".join(_dto_type_table_lines)[:12000]
+
+                            _type_fix_prompt = (
+                                "The ServiceImpl below has DTO data-type contract mismatches.\n"
+                                "You MUST fix type compatibility (compile-safety) without changing business intent.\n\n"
+                                f"Violations:\n{_violations_text}\n\n"
+                                "DTO field type table (source of truth):\n"
+                                f"{_dto_type_table}\n\n"
+                                "Rules:\n"
+                                "  • Never call String-only methods (.split/.trim/...) on List/array/non-String getters.\n"
+                                "  • Never call List-only methods (.isEmpty/.size/.stream/...) on non-List getters.\n"
+                                "  • hasText(...) must only receive String.\n"
+                                "  • for-each over getter requires List/array.\n"
+                                "  • If DTO field type is incompatible with current Service usage, rewrite Service usage\n"
+                                "    to match the declared DTO type (do NOT invent new DTO fields).\n"
+                                "  • Keep method signatures and overall behavior the same.\n\n"
+                                "Output ONLY the complete corrected Java source (no markdown fences):\n\n"
+                                f"{content}"
+                            )
+                            fixed = await codex_client.complete(
+                                system,
+                                _type_fix_prompt,
+                                stream=False,
+                                max_tokens=settings.CODEGEN_MAX_TOKENS,
+                            )
+                            if fixed and isinstance(fixed, str):
+                                content = _strip_fences(fixed)
+                                # Re-run sanitizer after rewrite
+                                content = _sanitize_service_impl(content)
+                                logger.info(
+                                    "[BACKEND_ENG] inline type-contract fix applied for %s",
+                                    file_entry.file_path,
+                                )
+                    except Exception as _exc:
+                        logger.warning(
+                            "[BACKEND_ENG] inline type-contract check/fix failed: %s", _exc
+                        )
 
             gf = GeneratedFile(
                 file_path=file_entry.file_path,
@@ -3448,6 +4417,30 @@ class FixAgent:
                 "  matches how ServiceImpl uses it (String, Integer, List<...>, Boolean, etc.).\n"
                 "- When fixing a DTO issue, output the UPDATED DTO file (not the ServiceImpl) with the new field added.\n"
                 "- NEVER just remove the getter/setter call — always ADD the missing field to the DTO instead.\n\n"
+                "★★★ ARRAY vs SCALAR vs LIST — #1 SOURCE OF COMPILE ERRORS — READ CAREFULLY ★★★\n"
+                "- BANNED: Java arrays (`Type[]`) in DTOs. NEVER keep `private String[] xxx;` in any DTO.\n"
+                "  Java arrays cannot use StringUtils.hasText / .split() / .isEmpty / CollectionUtils.isEmpty\n"
+                "  and cause compilation errors with most Service patterns.\n"
+                "- When you see a TYPE MISMATCH between DTO and ServiceImpl, FIX IT — do not pretend it does not exist.\n"
+                "  EXACT PATTERN you MUST detect and resolve:\n"
+                "    DTO declares:    private String[] ids;       (or List<String> ids)\n"
+                "    Service calls:   hasText(p.getIds())          ← hasText takes String, NOT array/List\n"
+                "    Service calls:   p.getIds().split(\",\")        ← only String has .split()\n"
+                "  RESOLUTION ALGORITHM (run this in your head before outputting):\n"
+                "    1. For every dto.getXxx() call in ServiceImpl, look up the field's declared TYPE in the DTO file above.\n"
+                "    2. If the declared type is `Type[]` (Java array), CHANGE the DTO field to `private String <name>;`\n"
+                "       UNLESS ServiceImpl iterates with for-each — in that case use `private List<String> <name>;`.\n"
+                "    3. Then make ServiceImpl + DTO speak the same shape:\n"
+                "         a) String shape:   DTO `private String ids;`     + Service `hasText(p.getIds())` + `p.getIds().split(\",\")`\n"
+                "         b) List shape:     DTO `private List<String> ids;` + Service `p.getIds() != null && !p.getIds().isEmpty()`\n"
+                "                                                          + `for (String id : p.getIds())`\n"
+                "    4. NEVER mix shapes. NEVER leave `String[]` in the DTO.\n"
+                "  WHEN FIXING A DTO FILE that has `private String[] ids;` and the Service uses .split(\",\") / hasText:\n"
+                "    → output the DTO with `private String ids;` (drop the [] brackets).\n"
+                "  WHEN FIXING A SERVICEIMPL that calls .split(\",\") or hasText(getIds()) but the DTO has String[]:\n"
+                "    → fix the DTO file (output it instead) by removing the [] brackets.\n"
+                "  IMPORTANT: a compile-error fix can never be 'do nothing'. If the issue mentions array/List vs String\n"
+                "  mismatch, you MUST output an updated file that resolves the mismatch.\n\n"
                 "DAO METHOD CALL RULES:\n"
                 "- ServiceImpl MUST call the full wrapper method names defined in DaoImpl.\n"
                 "- NEVER call bare insert()/select()/update()/delete()/selectOne()/selectList() on a DAO variable.\n"
@@ -3490,7 +4483,13 @@ class FixAgent:
                 f"  1. Every DAO method called in ServiceImpl exists in the DaoImpl file above\n"
                 f"  2. Every DTO getter/setter called in ServiceImpl has a matching field in the DTO file above\n"
                 f"  3. No CommonUtils.getUuid() or UUID.randomUUID() anywhere\n"
-                f"  4. No invented methods or fields that don't exist in DTO/DAO\n\n"
+                f"  4. No invented methods or fields that don't exist in DTO/DAO\n"
+                f"  5. NO `private Type[] xxx;` (Java arrays) anywhere in DTO files. If you see one,\n"
+                f"     CHANGE it to `private String xxx;` (when Service uses .split/hasText) or\n"
+                f"     `private List<String> xxx;` (when Service iterates) — NEVER leave Type[] in DTO.\n"
+                f"  6. For every dto.getXxx() call in ServiceImpl, the field's declared type in the DTO\n"
+                f"     supports the operation called on the result (e.g. .split() requires String,\n"
+                f"     hasText() requires String, .isEmpty() requires List, for-each requires List).\n\n"
                 f"Output the complete fixed file."
             )
 
@@ -3536,7 +4535,11 @@ def _post_fix_cross_check(ctx: SharedContext) -> list[dict]:
     """
     repairs: list[dict] = []
 
-    _field_re = re.compile(r'private\s+(\S+)\s+(\w+)\s*;')
+    # Tolerate field initializers (e.g. `private List<String> ids = new ArrayList<>();`).
+    # WITHOUT this, fields with initializers are invisible to the regex, the post-fix thinks the
+    # field is missing, and adds a `private String ids;` next to the existing `private List<String> ids = ...;`,
+    # creating duplicate-field compile errors.
+    _field_re = re.compile(r'private\s+(\S+)\s+(\w+)\s*(?:=\s*[^;]+)?\s*;')
     _accessor_re = re.compile(r'(\w+)\.(get|set|is)([A-Z]\w*)\s*\(')
     _method_def_re = re.compile(r'public\s+(\S+)\s+(\w+)\s*\(([^)]*)\)')
     _dao_call_re = re.compile(r'(\w+(?:Dao|DaoImpl))\s*\.\s*(\w+)\s*\(([^)]*)\)')
@@ -3614,7 +4617,27 @@ def _post_fix_cross_check(ctx: SharedContext) -> list[dict]:
                 continue
             unique_fields = sorted(set(fields_to_add))
             already_in = dto_fields.get(dto_name, {})
+            # First filter: regex-detected fields
             new_fields = [f for f in unique_fields if f not in already_in]
+            # Second filter: defensive content scan — even if regex missed it, do NOT
+            # insert a duplicate `private String foo;` when the file already contains
+            # `private <Anything> foo` with any initializer / wrapping.
+            # This guards against bugs like: regex doesn't capture initializer-suffixed
+            # fields → post-fix adds duplicate declaration → compile error.
+            def _field_already_declared(content: str, fname: str) -> bool:
+                # Match any private declaration of `fname`, with or without initializer:
+                #   private String fname;
+                #   private List<String> fname = new ArrayList<>();
+                #   private int fname = 0;
+                return bool(
+                    re.search(
+                        r'\bprivate\s+\S+(?:\s*<[^>]+>)?(?:\s*\[\s*\])?\s+'
+                        + re.escape(fname)
+                        + r'\s*[=;]',
+                        content,
+                    )
+                )
+            new_fields = [f for f in new_fields if not _field_already_declared(gf.content, f)]
             if not new_fields:
                 continue
 
@@ -3711,6 +4734,103 @@ def _post_fix_cross_check(ctx: SharedContext) -> list[dict]:
             else:
                 repairs.append({"file_path": gf.file_path, "content": gf.content})
             logger.info("[POST_FIX] Removed CommonUtils.getUuid() from %s", gf.file_path)
+
+    # --- Check 4: DTO Java arrays (Type[]) used as String in ServiceImpl → downgrade to String ---
+    # If a DTO field is `private String[] xxx;` and ANY ServiceImpl uses it with String-only methods
+    # (.split, .trim, hasText, .equals, etc.), rewrite the DTO field to `private String xxx;`.
+    # This is the user-reported bug pattern:
+    #   DTO:  private String[] ids;
+    #   Svc:  if (hasText(p.getIds())) { p.getIds().split(",") }
+    _string_only_methods_set = {
+        "split", "trim", "isBlank", "toLowerCase", "toUpperCase",
+        "replace", "replaceAll", "replaceFirst", "matches",
+        "startsWith", "endsWith", "substring", "charAt",
+        "compareTo", "compareToIgnoreCase", "equalsIgnoreCase", "strip", "concat",
+    }
+    _hasText_string_re = re.compile(
+        r'\b(?:StringUtils\s*\.\s*)?hasText\s*\(\s*(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\)'
+    )
+    _chained_string_re = re.compile(
+        r'(\w+)\s*\.\s*get([A-Z]\w*)\s*\(\s*\)\s*\.\s*(\w+)\s*\('
+    )
+
+    # Build var → DTO map across all ServiceImpls
+    fields_used_as_string: dict[tuple[str, str], int] = {}  # (dto_class, field_name) → count
+    for svc_gf in service_files:
+        var_to_dto: dict[str, str] = {}
+        for m in var_type_re.finditer(svc_gf.content):
+            if m.group(1) and m.group(2):
+                _dt, _vn = m.group(1), m.group(2)
+            elif m.group(3) and m.group(4):
+                _dt, _vn = m.group(3), m.group(4)
+            else:
+                continue
+            if _dt in dto_fields:
+                var_to_dto[_vn] = _dt
+
+        for m in _hasText_string_re.finditer(svc_gf.content):
+            var_name, prop_upper = m.group(1), m.group(2)
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            fields_used_as_string[(dto, prop_name)] = fields_used_as_string.get((dto, prop_name), 0) + 1
+
+        for m in _chained_string_re.finditer(svc_gf.content):
+            var_name, prop_upper, method = m.group(1), m.group(2), m.group(3)
+            if method not in _string_only_methods_set:
+                continue
+            dto = var_to_dto.get(var_name)
+            if not dto:
+                continue
+            prop_name = prop_upper[0].lower() + prop_upper[1:]
+            fields_used_as_string[(dto, prop_name)] = fields_used_as_string.get((dto, prop_name), 0) + 1
+
+    # Now downgrade `Type[] xxx;` → `String xxx;` for fields used as String in Service
+    _dto_array_field_re = re.compile(
+        r'(private\s+)(\w+(?:<[^>]+>)?)\s*\[\s*\]\s+(\w+)\s*;'
+    )
+    for dto_name, gf in dto_gf.items():
+        if not _dto_array_field_re.search(gf.content):
+            continue
+
+        original = gf.content
+        modified = False
+
+        def _replace_array(match: 're.Match[str]') -> str:
+            nonlocal modified
+            prefix, _arr_inner_type, fname = match.group(1), match.group(2), match.group(3)
+            if (dto_name, fname) in fields_used_as_string:
+                modified = True
+                logger.info(
+                    "[POST_FIX] Downgrading %s.%s : %s[] → String (used as String in ServiceImpl)",
+                    dto_name, fname, _arr_inner_type,
+                )
+                return f"{prefix}String {fname};"
+            # Field is array but never used as String → still risky; downgrade to String defensively
+            # only when type is one of String / wrapper. For non-String arrays leave alone.
+            if _arr_inner_type == "String":
+                modified = True
+                logger.info(
+                    "[POST_FIX] Defensively downgrading %s.%s : String[] → String "
+                    "(Java arrays banned in DTOs)",
+                    dto_name, fname,
+                )
+                return f"{prefix}String {fname};"
+            return match.group(0)
+
+        new_content = _dto_array_field_re.sub(_replace_array, gf.content)
+        if modified and new_content != original:
+            gf.content = new_content
+            # Also update the local dto_fields type map so subsequent checks see the new type
+            for fname, _ftype in list(dto_fields.get(dto_name, {}).items()):
+                if _ftype.endswith("[]"):
+                    dto_fields[dto_name][fname] = "String"
+            existing = next((r for r in repairs if r["file_path"] == gf.file_path), None)
+            if existing:
+                existing["content"] = gf.content
+            else:
+                repairs.append({"file_path": gf.file_path, "content": gf.content})
 
     return repairs
 
