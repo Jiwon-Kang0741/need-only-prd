@@ -57,14 +57,14 @@ Configuration via `.env` in project root (see `.env.example`). Key vars: `LLM_PR
   5. **Static Check** → regex-based validation, no LLM (UUID, scrollHeight, etc.)
   6. **Backend QA + Frontend QA** → parallel guide-based review (gpt-5.4)
   7. **Fix Agent** → applies QA fixes (gpt-5.4, only if issues found)
-- Uses `codex_client` (gpt-5.3-codex via Azure Responses API) for generation, `llm_client` for QA/fix
+- Uses `codex_client` (gpt-5.5 via Azure Responses API) for generation, `llm_client` for QA/fix
 
 ### Model Routing
 
 | Purpose | Client | Model | API |
 |---------|--------|-------|-----|
 | Spec generation, QA, Fix | `llm_client` | gpt-5.4 | Chat Completions |
-| Code generation (Planner, Engineers) | `codex_client` | gpt-5.3-codex | Responses API |
+| Code generation (Planner, Engineers) | `codex_client` | gpt-5.5 | Responses API |
 
 ### Session Management
 
