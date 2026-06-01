@@ -29,6 +29,7 @@ class CodeGenState(TypedDict, total=False):
     session_id: str
     spec_markdown: str
     confirmed_vue: str
+    page_type: str
     table_info: str
     # ── Contract Extractor 산출 ──
     contract: dict | None

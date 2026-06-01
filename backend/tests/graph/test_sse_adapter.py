@@ -29,6 +29,7 @@ def test_build_graph_input_pulls_vue_and_table(monkeypatch):
 
     class FakeMockup:
         vue_code = "<template>VUE</template>"
+        page_type = "list-detail"
 
     class FakeSession:
         session_id = "s1"
@@ -40,6 +41,7 @@ def test_build_graph_input_pulls_vue_and_table(monkeypatch):
     assert state["spec_markdown"] == "SPEC"
     assert state["confirmed_vue"] == "<template>VUE</template>"
     assert state["table_info"] == "TABLE_INFO"
+    assert state["page_type"] == "list-detail"
     assert state["files"] == {}
 
 
@@ -54,6 +56,7 @@ def test_build_graph_input_handles_missing_mockup(monkeypatch):
 
     state = build_graph_input(FakeSession())
     assert state["confirmed_vue"] == ""
+    assert state["page_type"] == ""  # no mockup → empty, LLM falls back
 
 
 def test_langgraph_event_to_sse_node_start():

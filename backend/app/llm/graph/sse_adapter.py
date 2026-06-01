@@ -34,10 +34,14 @@ def build_graph_input(session) -> dict:
     """
     mockup = getattr(session, "mockup_state", None)
     confirmed_vue = (mockup.vue_code or "") if mockup and getattr(mockup, "vue_code", None) else ""
+    # page_type is already confirmed in the mockup step — use it as the source of
+    # truth for screen.type instead of letting contract_extract guess.
+    page_type = (getattr(mockup, "page_type", "") or "") if mockup else ""
     return {
         "session_id": session.session_id,
         "spec_markdown": session.spec_markdown or "",
         "confirmed_vue": confirmed_vue,
+        "page_type": page_type,
         "table_info": guides.load_table_info(),
         "files": {},
     }
