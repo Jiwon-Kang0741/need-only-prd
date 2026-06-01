@@ -19,7 +19,7 @@ from app.llm.codegen_pipeline import codegen_pipeline
 from app.llm.graph.sse_adapter import stream_codegen, graph_files_to_pydantic
 from app.llm.graph.build import build_graph, make_checkpointer
 from app.llm.graph.sse_adapter import langgraph_event_to_sse
-from app.llm.agents import QAEngineerAgent, _ensure_slf4j_service_impl, organize_imports
+from app.llm.graph.deploy_fix import fix_build_error, postprocess_fixed_file
 from app.models import CodeGenState
 from app.pfy_local import (
     get_pfy_status,
@@ -265,18 +265,15 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                         yield _sse("log", line=f"[FIX] Fixing {target.file_path}...")
 
                         session_store.increment_llm_calls(session.session_id)
-                        qa = QAEngineerAgent()
-                        fixed_content = await qa.fix_file(
+                        fixed_content = await fix_build_error(
                             error_log=err_text,
                             file_path=target.file_path,
                             file_content=target.content,
                             all_files=codegen_state.generated_files,
                         )
-
-                        if target.file_type == "service_impl":
-                            fixed_content = _ensure_slf4j_service_impl(fixed_content)
-                        if target.file_path.endswith(".java"):
-                            fixed_content = organize_imports(fixed_content)
+                        fixed_content = postprocess_fixed_file(
+                            target.file_path, target.file_type, fixed_content
+                        )
                         target.content = fixed_content
                         update_pfy_file_from_generated(
                             codegen_state.generated_files,
@@ -401,18 +398,15 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                     yield _sse("log", line=f"[FIX] Fixing {target.file_path}...")
 
                     session_store.increment_llm_calls(session.session_id)
-                    qa = QAEngineerAgent()
-                    fixed_content = await qa.fix_file(
+                    fixed_content = await fix_build_error(
                         error_log=err_text,
                         file_path=target.file_path,
                         file_content=target.content,
                         all_files=codegen_state.generated_files,
                     )
-
-                    if target.file_type == "service_impl":
-                        fixed_content = _ensure_slf4j_service_impl(fixed_content)
-                    if target.file_path.endswith(".java"):
-                        fixed_content = organize_imports(fixed_content)
+                    fixed_content = postprocess_fixed_file(
+                        target.file_path, target.file_type, fixed_content
+                    )
                     target.content = fixed_content
                     docker_manager.update_file_in_workspace(
                         session.session_id, err_file_path, fixed_content
