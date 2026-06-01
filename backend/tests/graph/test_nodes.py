@@ -73,3 +73,38 @@ async def test_planner_lists_files_and_code_assigns_waves():
     # every file got a wave (1..3) assigned by code, not the LLM
     assert all(f["wave"] in (1, 2, 3) for f in files)
     assert out["current_wave"] == 1
+
+
+_CONTRACT = {
+    "screen": {"id": "EDU001", "name": "교육 프로그램", "type": "list"},
+    "tables": [{"name": "TB_EDU_PGM",
+                "columns": [{"col": "EDU_PGM_ID", "type": "VARCHAR", "pk": True},
+                            {"col": "EDU_PGM_NM", "type": "VARCHAR", "pk": False}]}],
+    "fields": [{"vue_field": "eduPgmNm", "db_column": "EDU_PGM_NM",
+                "type": "string", "label": "교육명"}],
+    "search_conditions": [], "table_columns": [], "api_signatures": [],
+}
+
+
+async def test_generate_file_produces_clean_dto(guide_stub):
+    spec = {"file_path": "CpmsEduResDto.java", "file_type": "dto_response",
+            "layer": "backend", "class_name": "CpmsEduResDto",
+            "description": "교육 프로그램 응답 DTO", "wave": 1}
+    out = await nodes.generate_file({"contract": _CONTRACT, "files": {}, "_file_spec": spec})
+    gf = out["files"]["CpmsEduResDto.java"]
+    assert gf["status"] == "ok"
+    assert gf["wave"] == 1
+    assert "class" in gf["content"]
+    # static_check gate guarantees no banned UUID import slipped through
+    assert "java.util.UUID" not in gf["content"]
+    # no open issues remained after the gate (clean DTO is easy for the model)
+    assert "open_issues" not in out or out["open_issues"] == []
+
+
+async def test_generate_file_emits_file_complete_event(guide_stub):
+    spec = {"file_path": "CpmsEduReqDto.java", "file_type": "dto_request",
+            "layer": "backend", "class_name": "CpmsEduReqDto",
+            "description": "교육 프로그램 검색 DTO", "wave": 1}
+    out = await nodes.generate_file({"contract": _CONTRACT, "files": {}, "_file_spec": spec})
+    assert any(e["type"] == "file_complete" and e["path"] == "CpmsEduReqDto.java"
+               for e in out["events"])
