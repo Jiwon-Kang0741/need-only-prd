@@ -35,9 +35,14 @@ def _wave_gate(state: dict) -> dict:
     """
     finished = state.get("current_wave", 1)
     nxt = finished + 1
-    events: list[dict] = [{"type": "wave_complete", "wave": finished}]
+    plan = state.get("plan", {})
+    events: list[dict] = []
+    # Only emit wave_complete for a wave that actually had files (i.e. a
+    # wave_start was emitted for it). Empty intermediate waves are silent.
+    if files_in_wave(plan, finished):
+        events.append({"type": "wave_complete", "wave": finished})
     if nxt <= MAX_WAVE:
-        n = len(files_in_wave(state.get("plan", {}), nxt))
+        n = len(files_in_wave(plan, nxt))
         if n:
             events.append({"type": "wave_start", "wave": nxt, "file_count": n})
     return {"current_wave": nxt, "events": events}

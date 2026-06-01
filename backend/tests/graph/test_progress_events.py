@@ -39,3 +39,14 @@ def test_wave_gate_skips_empty_wave_start():
     out = build._wave_gate({"current_wave": 1, "plan": plan})
     starts = [e for e in out["events"] if e["type"] == "wave_start"]
     assert starts == []
+
+
+def test_wave_gate_no_complete_for_empty_finished_wave():
+    # finishing the (empty) wave 2 must NOT emit wave_complete(2) — it never started
+    plan = {"files": [{"file_path": "A.java", "file_type": "dto_request", "wave": 1},
+                      {"file_path": "S.java", "file_type": "service_impl", "wave": 3}]}
+    out = build._wave_gate({"current_wave": 2, "plan": plan})
+    completes = [e for e in out["events"] if e["type"] == "wave_complete"]
+    assert completes == []  # wave 2 had no files → no complete
+    # but wave 3 (non-empty) should start
+    assert any(e["type"] == "wave_start" and e["wave"] == 3 for e in out["events"])
