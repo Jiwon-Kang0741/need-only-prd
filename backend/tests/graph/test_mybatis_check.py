@@ -1,5 +1,5 @@
 from app.llm.graph.mybatis_check import (
-    parse_dao, parse_mapper, match_pairs, check_binding,
+    parse_dao, parse_mapper, match_pairs, check_binding, autofix_binding,
 )
 
 
@@ -89,3 +89,30 @@ def test_check_binding_clean_when_aligned():
     }
     errors = [i for i in check_binding(files) if i.get("severity") != "warning"]
     assert errors == []
+
+
+def test_autofix_fixes_namespace_and_close_id():
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", _DAO),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", _MAPPER),
+    }
+    fixed, logs = autofix_binding(files)
+    mapper_content = fixed["b/CpmsEduRsltLstMapper.xml"]["content"]
+    assert 'namespace="com.example.cpms.dao.CpmsEduRsltLstDaoImpl"' in mapper_content
+    assert 'id="selectCpmsEduRsltList"' in mapper_content
+    assert 'id="selectCpmsEduRsltLstList"' not in mapper_content
+    errors = [i for i in check_binding(fixed) if i.get("severity") != "warning"]
+    assert errors == []
+    assert len(logs) >= 2
+
+
+def test_autofix_skips_ambiguous_id():
+    # DAO needs ids far from any mapper id → no rename, left for reviewer
+    dao = _DAO.replace('"selectCpmsEduRsltList"', '"selectTotallyDifferentThing"')
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", dao),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", _MAPPER),
+    }
+    fixed, logs = autofix_binding(files)
+    remaining = check_binding(fixed)
+    assert any("selectTotallyDifferentThing" in i["issue"] for i in remaining)

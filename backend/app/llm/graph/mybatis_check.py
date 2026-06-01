@@ -116,3 +116,74 @@ def check_binding(files: dict) -> list[dict]:
                 "severity": "warning",
             })
     return issues
+
+
+_EDIT_DISTANCE_THRESHOLD = 0.3  # normalized; ≤ this is "obvious variant"
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance."""
+    if a == b:
+        return 0
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _normalized_distance(a: str, b: str) -> float:
+    m = max(len(a), len(b))
+    return _edit_distance(a, b) / m if m else 0.0
+
+
+def autofix_binding(files: dict) -> tuple[dict, list[str]]:
+    """Apply deterministic fixes for obvious mismatches. DAO is source of truth.
+
+    Returns (fixed_files_copy, log_lines). Ambiguous mismatches are left untouched
+    for the reviewer.
+    """
+    fixed = {p: dict(gf) for p, gf in files.items()}
+    logs: list[str] = []
+    pairs, _ = match_pairs(fixed)
+
+    for dao_gf, mapper_gf in pairs:
+        dao = parse_dao(dao_gf["content"])
+        mapper = parse_mapper(mapper_gf["content"])
+        content = mapper_gf["content"]
+
+        # (a) namespace → DaoImpl FQCN (always obvious)
+        if dao["expected_namespace"] and mapper["namespace"] != dao["expected_namespace"]:
+            content = re.sub(
+                r'(<mapper\b[^>]*\bnamespace\s*=\s*")[^"]+(")',
+                lambda m: m.group(1) + dao["expected_namespace"] + m.group(2),
+                content, count=1,
+            )
+            logs.append(f"{mapper_gf['file_path']}: namespace → {dao['expected_namespace']}")
+
+        # (b) greedy 1:1 close-variant id rename (mapper id → dao id)
+        missing = sorted(dao["statement_ids"] - mapper["ids"])   # dao wants, mapper lacks
+        unused = sorted(mapper["ids"] - dao["statement_ids"])    # mapper has, dao ignores
+        used_have: set[str] = set()
+        for want in missing:
+            best, best_d = None, 1.0
+            for have in unused:
+                if have in used_have:
+                    continue
+                d = _normalized_distance(want, have)
+                if d < best_d:
+                    best, best_d = have, d
+            if best is not None and best_d <= _EDIT_DISTANCE_THRESHOLD:
+                used_have.add(best)
+                content = re.sub(
+                    rf'(\bid\s*=\s*"){re.escape(best)}(")',
+                    lambda m, w=want: m.group(1) + w + m.group(2),
+                    content, count=1,
+                )
+                logs.append(f"{mapper_gf['file_path']}: statement id '{best}' → '{want}'")
+
+        fixed[mapper_gf["file_path"]] = {**mapper_gf, "content": content}
+
+    return fixed, logs
