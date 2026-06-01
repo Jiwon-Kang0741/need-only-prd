@@ -51,7 +51,7 @@ _PUBLIC_NODES = {"contract_extract", "planner", "generate_file", "reviewer"}
 # wrapper too, carrying the fully-accumulated `events` (add reducer), which
 # would re-emit every domain event a second time.
 _EMITTING_NODES = {"contract_extract", "planner", "generate_file",
-                   "wave_gate", "reviewer"}
+                   "wave_gate", "mybatis_fix", "reviewer"}
 
 
 def drained_events(ev: dict) -> list[dict]:

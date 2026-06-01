@@ -20,7 +20,7 @@ def _route_waves(state: dict):
     """
     wave = state.get("current_wave", 1)
     if wave > MAX_WAVE:
-        return "reviewer"
+        return "mybatis_fix"
     specs = files_in_wave(state["plan"], wave)
     if not specs:
         # empty wave -> bump again via wave_gate (no-op generation)
@@ -71,15 +71,17 @@ def build_graph(checkpointer=None):
     g.add_node("planner", nodes.planner)
     g.add_node("generate_file", nodes.generate_file)
     g.add_node("wave_gate", _wave_gate)
+    g.add_node("mybatis_fix", mybatis_fix)
     g.add_node("reviewer", react.reviewer)
 
     g.add_edge(START, "contract_extract")
     g.add_edge("contract_extract", "planner")
     g.add_conditional_edges("planner", _route_waves,
-                            ["generate_file", "wave_gate", "reviewer"])
+                            ["generate_file", "wave_gate", "mybatis_fix"])
     g.add_edge("generate_file", "wave_gate")
     g.add_conditional_edges("wave_gate", _route_waves,
-                            ["generate_file", "wave_gate", "reviewer"])
+                            ["generate_file", "wave_gate", "mybatis_fix"])
+    g.add_edge("mybatis_fix", "reviewer")
     g.add_edge("reviewer", END)
 
     return g.compile(checkpointer=checkpointer)
