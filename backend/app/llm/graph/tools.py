@@ -121,3 +121,64 @@ def list_generated_files_impl(files: dict) -> list[dict]:
     """Tool #7: current generation status summary."""
     return [{"file_path": gf["file_path"], "file_type": gf["file_type"],
              "layer": gf["layer"], "status": gf["status"]} for gf in files.values()]
+
+
+# ── Responses API tool specs (gpt-5.5 tool-calling) ──
+TOOL_SPECS: list[dict] = [
+    {"type": "function", "name": "static_check",
+     "description": "Validate a single file against CPMS regex rules. Returns issues.",
+     "parameters": {"type": "object",
+                    "properties": {"file_path": {"type": "string"},
+                                   "content": {"type": "string"},
+                                   "file_type": {"type": "string"},
+                                   "layer": {"type": "string"}},
+                    "required": ["file_path", "content", "file_type", "layer"]}},
+    {"type": "function", "name": "cross_check",
+     "description": "Cross-file consistency check against contract. Returns mismatches.",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+    {"type": "function", "name": "lookup_class",
+     "description": "Look up a class in generated files (fields, methods).",
+     "parameters": {"type": "object",
+                    "properties": {"class_name": {"type": "string"}},
+                    "required": ["class_name"]}},
+    {"type": "function", "name": "get_dto_fields",
+     "description": "Get fields (name+type) of a generated DTO.",
+     "parameters": {"type": "object",
+                    "properties": {"dto_name": {"type": "string"}},
+                    "required": ["dto_name"]}},
+    {"type": "function", "name": "lookup_guide",
+     "description": "Fetch the latest standard guide sections by topic.",
+     "parameters": {"type": "object",
+                    "properties": {"layer": {"type": "string"},
+                                   "topic": {"type": "string"}},
+                    "required": ["layer", "topic"]}},
+    {"type": "function", "name": "validate_sql",
+     "description": "Validate db_init SQL syntax/rules.",
+     "parameters": {"type": "object",
+                    "properties": {"sql": {"type": "string"}},
+                    "required": ["sql"]}},
+    {"type": "function", "name": "list_generated_files",
+     "description": "List current generated files (path/type/layer/status).",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+]
+
+
+def dispatch_tool(name: str, args: dict, files: dict, contract: dict) -> object:
+    """Execute a tool call by name. Used by the Reviewer ReAct loop (Plan 2)."""
+    from app.llm.graph import guides
+    if name == "static_check":
+        return static_check_impl(args["file_path"], args["content"],
+                                 args["file_type"], args["layer"])
+    if name == "cross_check":
+        return cross_check_impl(files, contract)
+    if name == "lookup_class":
+        return lookup_class_impl(args["class_name"], files)
+    if name == "get_dto_fields":
+        return get_dto_fields_impl(args["dto_name"], files)
+    if name == "lookup_guide":
+        return guides.lookup_guide(args["layer"], args["topic"])
+    if name == "validate_sql":
+        return validate_sql_impl(args["sql"])
+    if name == "list_generated_files":
+        return list_generated_files_impl(files)
+    raise ValueError(f"unknown tool: {name}")
