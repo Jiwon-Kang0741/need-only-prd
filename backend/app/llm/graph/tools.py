@@ -18,6 +18,28 @@ _BACKEND_RULES: list[tuple[re.Pattern, str]] = [
      "UUID.randomUUID() found — IDs come from DB sequence or DTO"),
     (re.compile(r"LoggerFactory\.getLogger\s*\("),
      "LoggerFactory.getLogger() — use @Slf4j (lombok) instead"),
+    # HscException.systemError("msg") single-arg — must pass caught exception as 2nd arg
+    (re.compile(r'HscException\.systemError\(\s*"[^"]*"\s*\)'),
+     'HscException.systemError("msg") single-arg — pass the caught exception: '
+     'systemError("메시지", e)'),
+    # log.error/warn immediately before throw HscException — framework already logs
+    (re.compile(r'log\.(?:error|warn)\s*\([^;]*\)\s*;\s*\n\s*throw\s+(?:new\s+)?HscException',
+                re.MULTILINE),
+     "log.error()/warn() right before throw HscException — remove the log call; "
+     "the framework logs thrown exceptions"),
+    # bare DAO base-class method call from ServiceImpl — must use full wrapper names
+    (re.compile(r'\w+(?:Dao|DaoImpl)\s*\.\s*'
+                r'(?:insert|update|delete|selectOne|selectList|select)\s*\('),
+     "Bare DAO base-class method call — use the full wrapper method names defined "
+     "in DaoImpl (insertXxx/selectXxxList/...)"),
+    # DTO field declared as a Java array — banned (breaks MyBatis/StringUtils)
+    (re.compile(r'\bprivate\s+(?:String|Integer|Long|Double|Float|Boolean|int|long|'
+                r'double|float|boolean)\s*\[\]\s*\w+\s*;'),
+     "DTO field declared as a Java array (Type[]) — use 'String' (comma-sep) or "
+     "'List<...>' instead"),
+    # Mapper XML UUID javaType — MyBatis has no UUID TypeHandler
+    (re.compile(r'javaType\s*=\s*["\']?java\.util\.UUID'),
+     "javaType=java.util.UUID in Mapper XML — use java.lang.String"),
 ]
 
 _FRONTEND_RULES: list[tuple[re.Pattern, str]] = [
@@ -30,6 +52,37 @@ _FRONTEND_RULES: list[tuple[re.Pattern, str]] = [
 ]
 
 
+_JAVA_IMPORT_RE = re.compile(r'^\s*import\s+(?:static\s+)?([a-zA-Z0-9_.]+)\s*;', re.MULTILINE)
+
+
+def _check_forbidden_imports(file_path: str, content: str) -> list[dict]:
+    """Flag .java imports from libraries NOT declared in pom.xml (compile will fail).
+
+    Allowed prefixes derived from pom.xml at runtime — no hardcoded list.
+    """
+    from app.llm.codegen_context import get_allowed_import_prefixes
+    try:
+        allowed = get_allowed_import_prefixes()
+    except Exception:
+        return []  # pom not resolvable in this context → skip (don't false-positive)
+    if not allowed:
+        return []
+    issues: list[dict] = []
+    seen: set[str] = set()
+    for m in _JAVA_IMPORT_RE.finditer(content):
+        fqcn = m.group(1)
+        if any(fqcn == p or fqcn.startswith(p + ".") for p in allowed):
+            continue
+        pkg = fqcn.rsplit(".", 1)[0] if "." in fqcn else fqcn
+        if pkg in seen:
+            continue
+        seen.add(pkg)
+        issues.append({"file_path": file_path,
+                       "issue": f"import {pkg}.* — NOT declared in pom.xml; "
+                                f"compilation will fail. Remove it and the code using it."})
+    return issues
+
+
 def static_check_impl(file_path: str, content: str, file_type: str, layer: str) -> list[dict]:
     """Single-file regex validation, scoped to the file's layer."""
     rules = _BACKEND_RULES if layer == "backend" else _FRONTEND_RULES
@@ -37,6 +90,8 @@ def static_check_impl(file_path: str, content: str, file_type: str, layer: str) 
     for pattern, msg in rules:
         if pattern.search(content):
             issues.append({"file_path": file_path, "issue": msg})
+    if layer == "backend" and file_path.endswith(".java"):
+        issues.extend(_check_forbidden_imports(file_path, content))
     return issues
 
 
