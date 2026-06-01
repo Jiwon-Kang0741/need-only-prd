@@ -89,16 +89,54 @@ def _dep_context(state: dict, spec: dict) -> str:
     return "\n\n=== DEPENDENCY FILES ===\n" + "\n\n".join(parts)
 
 
+def _contract_section_for(file_type: str, contract: dict) -> str:
+    """Build a 'REQUIRED IDENTIFIERS' prompt section for a file type. '' if N/A."""
+    ops = (contract or {}).get("operations") or []
+    dtos = {d["name"]: d for d in (contract or {}).get("dtos") or []}
+
+    def _op_lines():
+        return "\n".join(
+            f"- {o['op']}: dao_method={o['dao_method']}, statement_id={o['statement_id']}, "
+            f"param={o['param_type']}, return={o['return_type']}, tag={o['mybatis_tag']}"
+            for o in ops)
+
+    def _dto_block(name):
+        d = dtos.get(name)
+        if not d:
+            return ""
+        flds = "\n".join(f"  - {f['name']}: {f['java_type']}" for f in d["fields"])
+        return f"{name} fields:\n{flds}"
+
+    if file_type == "dao_impl":
+        return "DAO methods (implement EXACTLY):\n" + _op_lines() if ops else ""
+    if file_type == "mapper_xml":
+        return ("Mapper statements (use these EXACT ids/tags; namespace = DaoImpl FQCN):\n"
+                + _op_lines()) if ops else ""
+    if file_type == "service_impl":
+        return "Call these DAO methods:\n" + _op_lines() if ops else ""
+    if file_type == "dto_request":
+        return _dto_block(next((n for n in dtos if n.endswith("ReqDto")), ""))
+    if file_type == "dto_response":
+        return _dto_block(next((n for n in dtos if n.endswith("ResDto")), ""))
+    if file_type == "vue_types":
+        blocks = [_dto_block(n) for n in dtos]
+        return "\n\n".join(b for b in blocks if b)
+    return ""
+
+
 async def generate_file(state: dict) -> dict:
     """Generate ONE file (single-shot) + static_check gate (1 regen). For Send fan-out."""
     spec = state["_file_spec"]
     guide = guides.load_guide_for_file_type(spec["file_type"])
+    req_ids = _contract_section_for(spec["file_type"], state["contract"])
     base_user = (
         f"=== CONTRACT ===\n{json.dumps(state['contract'], ensure_ascii=False)}\n\n"
-        f"=== GUIDE ===\n{guide}\n"
-        f"{_dep_context(state, spec)}\n\n"
-        f"Generate file: {spec['file_path']} (type={spec['file_type']}, "
-        f"class={spec.get('class_name', '')})\n{spec.get('description', '')}"
+        + (f"=== REQUIRED IDENTIFIERS (use EXACTLY, do not rename) ===\n{req_ids}\n\n"
+           if req_ids else "")
+        + f"=== GUIDE ===\n{guide}\n"
+        + f"{_dep_context(state, spec)}\n\n"
+        + f"Generate file: {spec['file_path']} (type={spec['file_type']}, "
+        + f"class={spec.get('class_name', '')})\n{spec.get('description', '')}"
     )
     content = _strip_fences(await gpt55_client.complete(GENERATOR_SYSTEM, base_user))
     issues = _gate_check(spec, content)

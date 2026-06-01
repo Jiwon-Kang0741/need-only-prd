@@ -25,7 +25,9 @@ mapper_xml, service_impl, vue_types, vue_page."""
 GENERATOR_SYSTEM = """\
 You are a senior engineer generating ONE CPMS file. Follow the provided guide \
 sections exactly. Use the contract as the source of truth for field names and \
-types. Output ONLY the file content, no markdown fences, no explanation."""
+types. When REQUIRED IDENTIFIERS are given, use those exact statement ids, \
+method names and DTO field names — never invent or rename them. \
+Output ONLY the file content, no markdown fences, no explanation."""
 
 REVIEWER_SYSTEM = """\
 You are a code reviewer with tools. Inspect the generated files for cross-file \
