@@ -29,6 +29,11 @@ export function useSession() {
             buildLogs: [],
             error: (cg.error as string) ?? null,
             ports: null,
+            currentNode: null,
+            currentWave: null,
+            reactSteps: [],
+            plannedFiles: [],
+            completedPaths: [],
           }
           useSessionStore.setState({ codeGen: restored })
         }
