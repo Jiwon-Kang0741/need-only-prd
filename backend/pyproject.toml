@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings",
     "sse-starlette",
     "aiofiles",
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
 ]
 
 [project.optional-dependencies]
