@@ -153,6 +153,15 @@ export function generateCode(onEvent: (event: SSEEvent) => void, signal?: AbortS
   consumeSSE('/api/codegen/generate', onEvent, {}, signal)
 }
 
+export async function getGeneratedFiles(): Promise<
+  Array<{ file_path: string; file_type: string; content: string; layer: string }>
+> {
+  const res = await fetch('/api/codegen/files', { headers: apiHeaders() })
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.files ?? []
+}
+
 export function deployAndRun(onEvent: (event: SSEEvent) => void): void {
   consumeSSE('/api/codegen/deploy', onEvent, {})
 }
