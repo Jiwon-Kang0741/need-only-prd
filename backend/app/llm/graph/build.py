@@ -28,8 +28,19 @@ def _route_waves(state: dict):
 
 
 def _wave_gate(state: dict) -> dict:
-    """Barrier: increment wave after a wave's files fan in."""
-    return {"current_wave": state.get("current_wave", 1) + 1}
+    """Barrier: increment wave after a wave's files fan in.
+
+    Emits wave_complete for the wave that just finished and wave_start for the
+    next wave (if it has files), so the UI can show parallel-wave progress.
+    """
+    finished = state.get("current_wave", 1)
+    nxt = finished + 1
+    events: list[dict] = [{"type": "wave_complete", "wave": finished}]
+    if nxt <= MAX_WAVE:
+        n = len(files_in_wave(state.get("plan", {}), nxt))
+        if n:
+            events.append({"type": "wave_start", "wave": nxt, "file_count": n})
+    return {"current_wave": nxt, "events": events}
 
 
 def build_graph(checkpointer=None):

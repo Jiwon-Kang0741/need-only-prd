@@ -7,7 +7,7 @@ import json
 from app.llm.graph import guides
 from app.llm.graph.llm import gpt55_client
 from app.llm.graph.prompts import CONTRACT_SYSTEM, GENERATOR_SYSTEM, PLANNER_SYSTEM
-from app.llm.graph.waves import wave_for_file_type
+from app.llm.graph.waves import wave_for_file_type, files_in_wave
 from app.llm.graph.tools import static_check_impl, validate_sql_impl
 from app.llm.graph.config import GATE_MAX_REGEN
 
@@ -52,8 +52,11 @@ async def planner(state: dict) -> dict:
     plan = _parse_json(raw)
     for f in plan.get("files", []):
         f["wave"] = wave_for_file_type(f["file_type"])
-    return {"plan": plan, "current_wave": 1,
-            "events": [{"type": "plan", "files": plan.get("files", [])}]}
+    events = [{"type": "plan", "files": plan.get("files", [])}]
+    wave1 = len(files_in_wave(plan, 1))
+    if wave1:
+        events.append({"type": "wave_start", "wave": 1, "file_count": wave1})
+    return {"plan": plan, "current_wave": 1, "events": events}
 
 
 def _gate_check(spec: dict, content: str) -> list[dict]:

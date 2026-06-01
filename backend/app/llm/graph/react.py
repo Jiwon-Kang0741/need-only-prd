@@ -33,6 +33,11 @@ async def reviewer(state: dict) -> dict:
         resp = await gpt55_client.complete_with_tools(REVIEWER_SYSTEM, user, TOOL_SPECS)
         calls = _extract_function_calls(resp)
 
+        # Emit a react_step for this turn (the model's reasoning text, if any).
+        thought = (getattr(resp, "output_text", "") or "").strip()
+        events.append({"type": "react_step", "iteration": iterations,
+                       "thought": thought[:500]})
+
         if not calls:
             # no tool calls -> model is done (text like "DONE")
             events.append({"type": "react_converged", "iterations": iterations})

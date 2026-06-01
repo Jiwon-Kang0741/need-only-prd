@@ -53,3 +53,16 @@ async def test_reviewer_detects_cross_file_issue_via_tools():
     assert fixed or flagged
     # the loop issued at least one tool call along the way
     assert any(e["type"] == "tool_call" for e in out["events"])
+
+
+async def test_reviewer_emits_react_step_per_turn():
+    """Each ReAct turn emits a react_step event with a monotonic iteration number."""
+    out = await react.reviewer({
+        "files": {"CpmsEduResDto.java": _CLEAN_DTO, "CpmsEduServiceImpl.java": _GOOD_SVC},
+        "contract": {}, "review_iterations": 0, "open_issues": [],
+    })
+    steps = [e for e in out["events"] if e["type"] == "react_step"]
+    assert len(steps) >= 1
+    assert all("iteration" in s for s in steps)
+    iters = [s["iteration"] for s in steps]
+    assert iters == sorted(iters)
