@@ -44,19 +44,20 @@ Phase 2의 해법: **식별자·DTO 필드를 contract가 단일 정의**하고,
   "table_columns": [...], "api_signatures": [...],
 
   // ── 신규 (코드 파생, 결정론) ──
+  // 식별자는 namebook 공식 규칙 = bare (화면당 Mapper 1개라 접두/접미 불필요)
   "operations": [
     {
       "op": "selectList",
-      "statement_id": "selectCpmsEduRsltLstList",
-      "dao_method": "selectCpmsEduRsltLstList",
+      "statement_id": "selectList",
+      "dao_method": "selectList",
       "param_type": "CpmsEduRsltLstReqDto",
       "return_type": "List<CpmsEduRsltLstResDto>",
       "mybatis_tag": "select"
     },
-    {"op": "selectOne", "statement_id": "selectCpmsEduRsltLst", ...},
-    {"op": "count", "statement_id": "selectCpmsEduRsltLstCount", "mybatis_tag": "select", ...},
-    {"op": "insert", "statement_id": "insertCpmsEduRsltLst", "mybatis_tag": "insert", ...},
-    {"op": "update", ...}, {"op": "delete", ...}
+    {"op": "selectOne", "statement_id": "select", "dao_method": "select", "mybatis_tag": "select", ...},
+    {"op": "count", "statement_id": "selectCount", "dao_method": "selectCount", "mybatis_tag": "select", ...},
+    {"op": "insert", "statement_id": "insert", "dao_method": "insert", "mybatis_tag": "insert", ...},
+    {"op": "update", "statement_id": "update", ...}, {"op": "delete", "statement_id": "delete", ...}
   ],
   "dtos": [
     {"name": "CpmsEduRsltLstReqDto", "kind": "request",
@@ -66,8 +67,8 @@ Phase 2의 해법: **식별자·DTO 필드를 contract가 단일 정의**하고,
 }
 ```
 
-**파생 규칙 (코드, namebook 기반):**
-- `statement_id` = `dao_method` = `{op_prefix}` + `{ScreenCode}` + `{op_suffix}` (예: selectList → `select` + `CpmsEduRsltLst` + `List`)
+**파생 규칙 (코드, namebook 공식 = bare 식별자):**
+- `statement_id` = `dao_method` = op별 고정 bare 이름 (selectList→`selectList`, selectOne→`select`, count→`selectCount`, insert→`insert`, update→`update`, delete→`delete`). 화면당 Mapper 1개라 화면코드 접두/접미 불필요.
 - DTO 클래스명 = `{ScreenCode}` + `ReqDto`/`ResDto`
 - DTO 필드 = contract.fields에서 파생 (vue_field → java 필드명, type → java_type)
 - operations 종류 = 화면 type 고정세트 ∪ api_signatures 도출 op
@@ -80,8 +81,8 @@ Phase 2의 해법: **식별자·DTO 필드를 contract가 단일 정의**하고,
 
 ### `naming.py` (순수 함수, LLM·IO 없음)
 ```python
-def statement_id(screen_code: str, op: str) -> str   # ("CpmsEduRsltLst","selectList") → "selectCpmsEduRsltLstList"
-def dao_method(screen_code: str, op: str) -> str      # == statement_id
+def statement_id(op: str) -> str    # "selectList"→"selectList", "selectOne"→"select", "count"→"selectCount"
+def dao_method(op: str) -> str       # == statement_id (bare, namebook 공식)
 def dto_class(screen_code: str, kind: str) -> str     # ("CpmsEduRsltLst","request") → "CpmsEduRsltLstReqDto"
 def java_field(vue_field: str) -> str                 # camelCase 유지
 def java_type(contract_type: str) -> str              # "string"→"String", "number"→"Integer", "date"→"String"...
@@ -89,6 +90,11 @@ def ops_for_screen_type(screen_type: str) -> list[str]
     # "list" → ["selectList","count"]
     # "list-detail" → ["selectList","count","selectOne","insert","update","delete"]
     # "edit"/"tab-detail" → 해당 표준 세트
+
+# op → (statement_id, mybatis_tag) bare 매핑 상수 (namebook):
+#   selectList→("selectList","select"), selectOne→("select","select"),
+#   count→("selectCount","select"), insert→("insert","insert"),
+#   update→("update","update"), delete→("delete","delete")
 ```
 
 op_prefix/op_suffix 매핑(예: selectList→prefix=select,suffix=List; count→prefix=select,suffix=Count; insert→prefix=insert,suffix="")은 namebook 규칙 상수로 `naming.py`에 둔다.
