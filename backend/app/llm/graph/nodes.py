@@ -40,7 +40,12 @@ async def contract_extract(state: dict) -> dict:
         # one retry with explicit instruction
         raw = await gpt55_client.complete(
             CONTRACT_SYSTEM, user + "\n\nReturn ONLY valid JSON.")
-        contract = _parse_json(raw)
+        try:
+            contract = _parse_json(raw)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"contract_extract: model did not return valid JSON after retry: {exc}"
+            ) from exc
     return {"contract": contract,
             "events": [{"type": "contract", "contract": contract}]}
 
@@ -98,9 +103,13 @@ async def generate_file(state: dict) -> dict:
         issues = _gate_check(spec, content)
         regen += 1
 
+    # If the gate still reports issues after the allowed regens, mark the file
+    # 'failed' so downstream (reviewer, deploy) can distinguish it from a clean
+    # one instead of trusting a hardcoded 'ok'.
+    status = "failed" if issues else "ok"
     gf = {"file_path": spec["file_path"], "file_type": spec["file_type"],
           "layer": spec["layer"], "wave": spec["wave"], "content": content,
-          "status": "ok", "status_log": [f"gate regen={regen}"]}
+          "status": status, "status_log": [f"gate regen={regen}, issues={len(issues)}"]}
     result = {"files": {spec["file_path"]: gf},
               "events": [{"type": "file_complete", "path": spec["file_path"],
                           "layer": spec["layer"]}]}
