@@ -198,3 +198,30 @@ def test_autofix_with_contract_fixes_both_dao_and_mapper():
     after_errors = [i for i in check_binding(fixed, _CONTRACT_OPS)
                     if i.get("severity") != "warning"]
     assert after_errors == []
+
+
+from app.llm.graph.mybatis_check import check_dto_fields, autofix_dto_fields
+
+_CONTRACT_DTOS = {
+    "dtos": [
+        {"name": "FooResDto", "kind": "response",
+         "fields": [{"name": "employeeName", "java_type": "String"},
+                    {"name": "score", "java_type": "Integer"}]},
+    ]
+}
+
+
+def test_check_dto_fields_flags_missing():
+    files = {"a/FooResDto.java": _gf("a/FooResDto.java", "dto_response",
+             "public class FooResDto { private String employeeName; }")}
+    issues = check_dto_fields(files, _CONTRACT_DTOS)
+    assert any("score" in i["issue"] for i in issues)
+
+
+def test_autofix_dto_fields_adds_missing():
+    files = {"a/FooResDto.java": _gf("a/FooResDto.java", "dto_response",
+             "public class FooResDto {\n    private String employeeName;\n}")}
+    fixed, logs = autofix_dto_fields(files, _CONTRACT_DTOS)
+    content = fixed["a/FooResDto.java"]["content"]
+    assert "private Integer score;" in content
+    assert check_dto_fields(fixed, _CONTRACT_DTOS) == []

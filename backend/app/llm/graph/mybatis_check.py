@@ -250,3 +250,64 @@ def autofix_binding(files: dict, contract: dict | None = None) -> tuple[dict, li
         fixed[mapper_gf["file_path"]] = {**mapper_gf, "content": mapper_content}
 
     return fixed, logs
+
+
+_FIELD_DECL_RE = re.compile(r'\bprivate\s+\S[\w<>,.\[\]]*\s+(\w+)\s*(?:=[^;]*)?;')
+
+
+def _dto_files_by_class(files: dict) -> dict[str, dict]:
+    out = {}
+    for gf in files.values():
+        if gf["file_path"].endswith(".java") and "Dto" in gf["file_path"]:
+            cls = gf["file_path"].split("/")[-1].replace(".java", "")
+            out[cls] = gf
+    return out
+
+
+def check_dto_fields(files: dict, contract: dict | None = None) -> list[dict]:
+    """Flag contract-required DTO fields missing from the generated DTO."""
+    dtos = (contract or {}).get("dtos") or []
+    by_class = _dto_files_by_class(files)
+    issues = []
+    for d in dtos:
+        gf = by_class.get(d["name"])
+        if not gf:
+            continue
+        present = set(_FIELD_DECL_RE.findall(gf["content"]))
+        for f in d["fields"]:
+            if f["name"] not in present:
+                issues.append({"file_path": gf["file_path"],
+                               "issue": f"DTO {d['name']} missing contract field '{f['name']}'",
+                               "severity": "error"})
+    return issues
+
+
+def autofix_dto_fields(files: dict, contract: dict | None = None) -> tuple[dict, list[str]]:
+    """Insert missing contract fields as `private <java_type> <name>;` before the
+    final closing brace of the class."""
+    fixed = {p: dict(gf) for p, gf in files.items()}
+    logs = []
+    dtos = (contract or {}).get("dtos") or []
+    by_class = _dto_files_by_class(fixed)
+    for d in dtos:
+        gf = by_class.get(d["name"])
+        if not gf:
+            continue
+        content = gf["content"]
+        present = set(_FIELD_DECL_RE.findall(content))
+        additions = []
+        for f in d["fields"]:
+            if f["name"] in present:
+                continue
+            jt = f.get("java_type")
+            if not jt:
+                logs.append(f"{gf['file_path']}: skip field '{f['name']}' (no java_type)")
+                continue
+            additions.append(f"    private {jt} {f['name']};")
+        if additions:
+            idx = content.rfind("}")
+            if idx != -1:
+                content = content[:idx] + "\n".join(additions) + "\n" + content[idx:]
+                logs.append(f"{gf['file_path']}: added {len(additions)} contract field(s)")
+                fixed[gf["file_path"]] = {**gf, "content": content}
+    return fixed, logs
