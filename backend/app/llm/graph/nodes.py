@@ -71,10 +71,26 @@ def _gate_check(spec: dict, content: str) -> list[dict]:
     return static_check_impl(spec["file_path"], content, spec["file_type"], spec["layer"])
 
 
+# Which earlier-wave file types each file type actually needs as context.
+# Avoids dumping ALL earlier files into every prompt (token blowup).
+_DEP_FILE_TYPES: dict[str, set[str]] = {
+    "dao": {"dto_request", "dto_response"},
+    "dao_impl": {"dto_request", "dto_response"},
+    "mapper_xml": {"dto_request", "dto_response"},
+    "vue_page": {"vue_types"},
+    "service": {"dto_request", "dto_response", "dao", "dao_impl"},
+    "service_impl": {"dto_request", "dto_response", "dao", "dao_impl"},
+}
+
+
 def _dep_context(state: dict, spec: dict) -> str:
-    """Inject already-generated files from earlier waves as dependency context."""
+    """Inject only the earlier-wave files this file type actually depends on."""
+    wanted = _DEP_FILE_TYPES.get(spec["file_type"])
+    if wanted is None:
+        return ""
     my_wave = spec["wave"]
-    deps = [gf for gf in state.get("files", {}).values() if gf["wave"] < my_wave]
+    deps = [gf for gf in state.get("files", {}).values()
+            if gf["wave"] < my_wave and gf["file_type"] in wanted]
     if not deps:
         return ""
     parts = [f"--- {gf['file_path']} ---\n{gf['content']}" for gf in deps]
