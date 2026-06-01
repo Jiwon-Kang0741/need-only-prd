@@ -41,6 +41,32 @@ async def test_derive_contract_builds_dtos():
     assert res_fields["score"]["java_type"] == "Integer"
 
 
+async def test_derive_contract_reconciles_plan_dto_files_to_contract():
+    # planner invented 3 request DTOs + 2 response DTOs; contract defines exactly
+    # ReqDto + ResDto. The returned plan must keep only the 2 contract DTO files
+    # (plus non-DTO files untouched) so generator/binding stay consistent.
+    plan = {"files": [
+        {"file_path": "x/CpmsEduRsltLstSearchRequest.java", "file_type": "dto_request"},
+        {"file_path": "x/CpmsEduRsltLstRowRequest.java", "file_type": "dto_request"},
+        {"file_path": "x/CpmsEduRsltLstSaveRequest.java", "file_type": "dto_request"},
+        {"file_path": "x/CpmsEduRsltLstRowResponse.java", "file_type": "dto_response"},
+        {"file_path": "x/CpmsEduRsltLstListResponse.java", "file_type": "dto_response"},
+        {"file_path": "x/CpmsEduRsltLstDaoImpl.java", "file_type": "dao_impl"},
+        {"file_path": "x/CpmsEduRsltLstMapper.xml", "file_type": "mapper_xml"},
+        {"file_path": "x/CpmsEduRsltLstServiceImpl.java", "file_type": "service_impl"},
+    ]}
+    out = await nodes.derive_contract({"contract": _CONTRACT, "plan": plan})
+    files = out["plan"]["files"]
+    req = [f for f in files if f["file_type"] == "dto_request"]
+    res = [f for f in files if f["file_type"] == "dto_response"]
+    # exactly one ReqDto + one ResDto, named per contract
+    assert [f["file_path"].split("/")[-1] for f in req] == ["CpmsEduRsltLstReqDto.java"]
+    assert [f["file_path"].split("/")[-1] for f in res] == ["CpmsEduRsltLstResDto.java"]
+    # non-DTO files untouched
+    assert any(f["file_type"] == "dao_impl" for f in files)
+    assert any(f["file_type"] == "service_impl" for f in files)
+
+
 async def test_derive_contract_skips_op_without_dao_file():
     plan = {"files": [{"file_path": "x/CpmsEduRsltLstResDto.java", "file_type": "dto_response"}]}
     out = await nodes.derive_contract({"contract": _CONTRACT, "plan": plan})

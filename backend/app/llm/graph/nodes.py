@@ -251,10 +251,44 @@ async def derive_contract(state: dict) -> dict:
         ]
         contract["operations"] = operations
         contract["dtos"] = dtos
+
+        # Subordinate planner to the contract: replace planner's free-form DTO
+        # files with exactly the contract's ReqDto/ResDto (non-DTO files kept).
+        reconciled_plan, dropped = _reconcile_plan_dtos(plan, req_dto, res_dto)
     except Exception as e:
         return {"events": [{"type": "log", "line": f"[CONTRACT] derive failed: {e}"}]}
 
-    return {"contract": contract,
-            "events": [{"type": "log",
-                        "line": f"[CONTRACT] derived {len(contract.get('operations', []))} ops, "
-                                f"{len(contract.get('dtos', []))} dtos"}]}
+    log = (f"[CONTRACT] derived {len(operations)} ops, {len(dtos)} dtos"
+           + (f"; reconciled plan DTOs (dropped {dropped})" if dropped else ""))
+    return {"contract": contract, "plan": reconciled_plan,
+            "events": [{"type": "log", "line": log}]}
+
+
+def _reconcile_plan_dtos(plan: dict, req_dto: str, res_dto: str) -> tuple[dict, int]:
+    """Force the plan's DTO files to match the contract's ReqDto/ResDto exactly.
+
+    Non-DTO files are kept as-is. Returns (new_plan, dropped_count)."""
+    files = plan.get("files", [])
+    kept = [f for f in files if f["file_type"] not in ("dto_request", "dto_response")]
+    dropped = len(files) - len(kept)
+
+    # rebuild the canonical pair, preserving a sample path's directory if present
+    def _dir_for(ftype: str) -> str:
+        for f in files:
+            if f["file_type"] == ftype:
+                return "/".join(f["file_path"].split("/")[:-1])
+        return "src/main/java/com/example/cpms/dto"
+
+    new_files = list(kept)
+    new_files.append({"file_path": f"{_dir_for('dto_request')}/{req_dto}.java",
+                      "file_type": "dto_request", "layer": "backend",
+                      "class_name": req_dto, "description": "Request DTO (contract)",
+                      "wave": wave_for_file_type("dto_request")})
+    new_files.append({"file_path": f"{_dir_for('dto_response')}/{res_dto}.java",
+                      "file_type": "dto_response", "layer": "backend",
+                      "class_name": res_dto, "description": "Response DTO (contract)",
+                      "wave": wave_for_file_type("dto_response")})
+    new_plan = dict(plan)
+    new_plan["files"] = new_files
+    # dropped counts original DTO files removed (the 2 we re-added are not "dropped")
+    return new_plan, max(0, dropped - 0)
