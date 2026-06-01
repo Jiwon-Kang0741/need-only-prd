@@ -10,16 +10,7 @@ from app.llm.graph.prompts import CONTRACT_SYSTEM, GENERATOR_SYSTEM, PLANNER_SYS
 from app.llm.graph.waves import wave_for_file_type, files_in_wave
 from app.llm.graph.tools import static_check_impl, validate_sql_impl
 from app.llm.graph.config import GATE_MAX_REGEN
-
-
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        nl = text.index("\n") if "\n" in text else 3
-        text = text[nl + 1:]
-    if text.rstrip().endswith("```"):
-        text = text.rstrip()[:-3].rstrip()
-    return text
+from app.llm.graph._text import strip_fences as _strip_fences
 
 
 def _parse_json(text: str) -> dict:

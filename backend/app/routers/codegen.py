@@ -74,11 +74,8 @@ async def generate_code(session_id: str = Depends(get_session_id)):
             async with make_checkpointer() as cp:
                 async for event in stream_codegen(session, checkpointer=cp):
                     if event.get("type") == "graph_complete":
-                        graph = build_graph(checkpointer=cp)
-                        cfg = {"configurable": {"thread_id": session.session_id}}
-                        snap = await graph.aget_state(cfg)
-                        files = snap.values.get("files", {}) if snap else {}
-                        codegen_state.generated_files = graph_files_to_pydantic(files)
+                        # stream_codegen already converted the final files for us
+                        codegen_state.generated_files = event.get("files", [])
                         codegen_state.status = "generated"
                         session_store.save(session.session_id)
                         if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:

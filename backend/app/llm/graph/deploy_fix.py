@@ -13,20 +13,11 @@ import re
 
 from app.config import settings
 from app.llm.graph.llm import gpt55_client
+from app.llm.graph._text import strip_fences as _strip_fences
 from app.llm.codegen_context import get_allowed_import_prefixes, get_workspace_class_map
 from app.models import GeneratedFile
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        nl = text.index("\n") if "\n" in text else 3
-        text = text[nl + 1:]
-    if text.rstrip().endswith("```"):
-        text = text.rstrip()[:-3].rstrip()
-    return text
 
 
 # ---------------------------------------------------------------------------

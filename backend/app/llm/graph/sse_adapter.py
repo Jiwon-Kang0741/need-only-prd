@@ -106,4 +106,7 @@ async def stream_codegen(session, checkpointer=None):
 
     final = await graph.aget_state(config) if checkpointer else None
     files = final.values.get("files", {}) if final else {}
-    yield {"type": "graph_complete", "total_files": len(files)}
+    # Carry the converted files so the router need not rebuild the graph + re-read
+    # state just to fetch them.
+    yield {"type": "graph_complete", "total_files": len(files),
+           "files": graph_files_to_pydantic(files)}
