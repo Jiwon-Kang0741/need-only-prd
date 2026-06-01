@@ -46,6 +46,29 @@ def build_graph_input(session) -> dict:
 # Only these graph nodes surface as node_start/node_end events.
 _PUBLIC_NODES = {"contract_extract", "planner", "generate_file", "reviewer"}
 
+# Nodes whose returned `events` channel we drain to SSE. MUST exclude the
+# top-level "LangGraph" wrapper: astream_events fires on_chain_end for the
+# wrapper too, carrying the fully-accumulated `events` (add reducer), which
+# would re-emit every domain event a second time.
+_EMITTING_NODES = {"contract_extract", "planner", "generate_file",
+                   "wave_gate", "reviewer"}
+
+
+def drained_events(ev: dict) -> list[dict]:
+    """Return domain events to forward for one astream_events item.
+
+    Only drains on_chain_end from an actual emitting node — never the graph
+    wrapper — so each domain event surfaces exactly once.
+    """
+    if ev.get("event") != "on_chain_end":
+        return []
+    if ev.get("name") not in _EMITTING_NODES:
+        return []
+    output = ev.get("data", {}).get("output")
+    if isinstance(output, dict) and isinstance(output.get("events"), list):
+        return output["events"]
+    return []
+
 
 def langgraph_event_to_sse(ev: dict) -> dict | None:
     """Map a single astream_events item to a new SSE dict, or None to skip."""
@@ -77,12 +100,9 @@ async def stream_codegen(session, checkpointer=None):
         sse = langgraph_event_to_sse(ev)
         if sse is not None:
             yield sse
-        # drain domain events appended to state by nodes (on_chain_end carries output)
-        if ev.get("event") == "on_chain_end":
-            output = ev.get("data", {}).get("output")
-            if isinstance(output, dict) and isinstance(output.get("events"), list):
-                for dom in output["events"]:
-                    yield dom
+        # drain domain events — only from real emitting nodes (not graph wrapper)
+        for dom in drained_events(ev):
+            yield dom
 
     final = await graph.aget_state(config) if checkpointer else None
     files = final.values.get("files", {}) if final else {}
