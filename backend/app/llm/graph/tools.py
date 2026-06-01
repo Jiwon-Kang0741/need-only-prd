@@ -229,8 +229,15 @@ _APPLY_FIX_SPEC = {
                    "required": ["file_path", "content"]},
 }
 
+_VALIDATE_MYBATIS_SPEC = {
+    "type": "function", "name": "validate_mybatis_binding",
+    "description": "Check DAO↔Mapper statement-id and namespace binding across all "
+                   "generated files. Returns binding issues (run apply_fix to fix).",
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
 # The reviewer gets the read-only diagnostic tools plus the mutating apply_fix.
-REVIEWER_TOOL_SPECS: list[dict] = TOOL_SPECS + [_APPLY_FIX_SPEC]
+REVIEWER_TOOL_SPECS: list[dict] = TOOL_SPECS + [_APPLY_FIX_SPEC, _VALIDATE_MYBATIS_SPEC]
 
 
 def dispatch_tool(name: str, args: dict, files: dict, contract: dict) -> object:
@@ -251,4 +258,7 @@ def dispatch_tool(name: str, args: dict, files: dict, contract: dict) -> object:
         return validate_sql_impl(args["sql"])
     if name == "list_generated_files":
         return list_generated_files_impl(files)
+    if name == "validate_mybatis_binding":
+        from app.llm.graph.mybatis_check import check_binding
+        return check_binding(files)
     raise ValueError(f"unknown tool: {name}")
