@@ -50,7 +50,7 @@ _PUBLIC_NODES = {"contract_extract", "planner", "generate_file", "reviewer"}
 # top-level "LangGraph" wrapper: astream_events fires on_chain_end for the
 # wrapper too, carrying the fully-accumulated `events` (add reducer), which
 # would re-emit every domain event a second time.
-_EMITTING_NODES = {"contract_extract", "planner", "generate_file",
+_EMITTING_NODES = {"contract_extract", "planner", "derive_contract", "generate_file",
                    "wave_gate", "mybatis_fix", "reviewer"}
 
 
