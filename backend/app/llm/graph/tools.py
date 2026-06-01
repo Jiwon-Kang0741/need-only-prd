@@ -162,6 +162,21 @@ TOOL_SPECS: list[dict] = [
      "parameters": {"type": "object", "properties": {}, "required": []}},
 ]
 
+# apply_fix mutates the file set; it is handled directly by the reviewer loop
+# (not dispatch_tool, which is read-only). Exposed only to the reviewer.
+_APPLY_FIX_SPEC = {
+    "type": "function", "name": "apply_fix",
+    "description": "Overwrite a generated file with corrected content. "
+                   "Pass the COMPLETE file content, not a diff.",
+    "parameters": {"type": "object",
+                   "properties": {"file_path": {"type": "string"},
+                                  "content": {"type": "string"}},
+                   "required": ["file_path", "content"]},
+}
+
+# The reviewer gets the read-only diagnostic tools plus the mutating apply_fix.
+REVIEWER_TOOL_SPECS: list[dict] = TOOL_SPECS + [_APPLY_FIX_SPEC]
+
 
 def dispatch_tool(name: str, args: dict, files: dict, contract: dict) -> object:
     """Execute a tool call by name. Used by the Reviewer ReAct loop (Plan 2)."""

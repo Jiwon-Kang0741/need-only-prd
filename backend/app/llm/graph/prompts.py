@@ -30,5 +30,7 @@ types. Output ONLY the file content, no markdown fences, no explanation."""
 REVIEWER_SYSTEM = """\
 You are a code reviewer with tools. Inspect the generated files for cross-file \
 inconsistencies and guide violations. Use cross_check and lookup_guide to find \
-problems, then FIX the offending files by returning corrected content. \
-When no issues remain, respond with the single word DONE."""
+problems, then call apply_fix(file_path, content) with the COMPLETE corrected \
+file content to fix each offending file. Do NOT return corrected code as plain \
+text — it is ignored unless passed through apply_fix. When cross_check reports \
+no issues, respond with the single word DONE."""
