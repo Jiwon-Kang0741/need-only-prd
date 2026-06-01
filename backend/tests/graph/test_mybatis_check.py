@@ -116,3 +116,42 @@ def test_autofix_skips_ambiguous_id():
     fixed, logs = autofix_binding(files)
     remaining = check_binding(fixed)
     assert any("selectTotallyDifferentThing" in i["issue"] for i in remaining)
+
+
+# Real defect captured from outputs/code (DAO call vs Mapper id, wrong namespace).
+_REAL_DAO = """package com.example.cpms.dao;
+import aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport;
+public class CpmsEduRsltLstDaoImpl extends AbstractSqlSessionDaoSupport {
+    public java.util.List<X> selectCpmsEduRsltList(X p) {
+        return super.selectList("selectCpmsEduRsltList", p);
+    }
+    public int selectCpmsEduRsltCount(X p) {
+        Integer c = super.selectOne("selectCpmsEduRsltCount", p);
+        return c == null ? 0 : c;
+    }
+}
+"""
+
+_REAL_MAPPER = """<?xml version="1.0" encoding="UTF-8" ?>
+<mapper namespace="com.example.cpms.mapper.CpmsEduRsltLstMapper">
+    <select id="selectCpmsEduRsltLstList" resultType="X">SELECT 1</select>
+    <select id="selectCpmsEduRsltLstCount" resultType="int">SELECT 2</select>
+</mapper>
+"""
+
+
+def test_regression_outputs_code_defect_is_fixed():
+    files = {
+        "x/CpmsEduRsltLstDaoImpl.java": _gf("x/CpmsEduRsltLstDaoImpl.java", "dao_impl", _REAL_DAO),
+        "y/CpmsEduRsltLstMapper.xml": _gf("y/CpmsEduRsltLstMapper.xml", "mapper_xml", _REAL_MAPPER),
+    }
+    before = [i for i in check_binding(files) if i.get("severity") != "warning"]
+    assert len(before) >= 2  # namespace + at least one missing id
+
+    fixed, logs = autofix_binding(files)
+    after = [i for i in check_binding(fixed) if i.get("severity") != "warning"]
+    assert after == [], f"unresolved after autofix: {after}"
+    mc = fixed["y/CpmsEduRsltLstMapper.xml"]["content"]
+    assert 'namespace="com.example.cpms.dao.CpmsEduRsltLstDaoImpl"' in mc
+    assert 'id="selectCpmsEduRsltList"' in mc
+    assert 'id="selectCpmsEduRsltCount"' in mc
