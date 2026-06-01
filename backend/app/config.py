@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str = "2024-12-01-preview"
     AZURE_OPENAI_MODEL_NAME: str = "gpt-5.4"
     AZURE_OPENAI_API_KEY: str = ""
-    CODEX_AZURE_OPENAI_ENDPOINT: str = ""
-    CODEX_AZURE_OPENAI_API_VERSION: str = "2025-04-01-preview"
-    CODEX_AZURE_OPENAI_MODEL_NAME: str = "gpt-5.5"
-    CODEX_AZURE_OPENAI_API_KEY: str = ""
+    GPT55_AZURE_OPENAI_ENDPOINT: str = ""
+    GPT55_AZURE_OPENAI_API_VERSION: str = "2025-04-01-preview"
+    GPT55_AZURE_OPENAI_MODEL_NAME: str = "gpt-5.5"
+    GPT55_AZURE_OPENAI_API_KEY: str = ""
 
     # --- Mockup Pipeline 전용 (원본 pfy-front 사내 게이트웨이 호환) ---
     # .env의 AOAI_* 변수를 우선 사용하고, 없으면 MOCKUP_AOAI_* 로 fallback

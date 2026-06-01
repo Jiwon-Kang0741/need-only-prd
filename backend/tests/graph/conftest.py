@@ -10,14 +10,14 @@ from app.config import settings
 
 
 def _llm_available() -> bool:
-    return bool(settings.CODEX_AZURE_OPENAI_API_KEY and settings.CODEX_AZURE_OPENAI_ENDPOINT)
+    return bool(settings.GPT55_AZURE_OPENAI_API_KEY and settings.GPT55_AZURE_OPENAI_ENDPOINT)
 
 
 @pytest.fixture(autouse=True)
 def _skip_llm_when_unavailable(request):
     """Auto-skip any test marked `llm` when gpt-5.5 credentials are missing."""
     if request.node.get_closest_marker("llm") and not _llm_available():
-        pytest.skip("gpt-5.5 credentials not configured (CODEX_AZURE_OPENAI_*)")
+        pytest.skip("gpt-5.5 credentials not configured (GPT55_AZURE_OPENAI_*)")
 
 
 @pytest.fixture

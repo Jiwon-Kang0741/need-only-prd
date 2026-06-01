@@ -15,7 +15,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
 from app.docker_manager import docker_manager
-from app.llm.codegen_pipeline import codegen_pipeline
 from app.llm.graph.sse_adapter import stream_codegen, graph_files_to_pydantic
 from app.llm.graph.build import build_graph, make_checkpointer
 from app.llm.graph.sse_adapter import langgraph_event_to_sse

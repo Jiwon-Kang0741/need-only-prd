@@ -33,20 +33,20 @@ async def _with_retry(coro_factory, label: str):
 
 
 class Gpt55Client:
-    """gpt-5.5 via Azure Responses API. (env still named CODEX_* — read as-is for now.)"""
+    """gpt-5.5 via Azure Responses API."""
 
     def __init__(self) -> None:
         self._available = bool(
-            settings.CODEX_AZURE_OPENAI_API_KEY and settings.CODEX_AZURE_OPENAI_ENDPOINT
+            settings.GPT55_AZURE_OPENAI_API_KEY and settings.GPT55_AZURE_OPENAI_ENDPOINT
         )
         if self._available:
             self._client = openai.AsyncAzureOpenAI(
-                azure_endpoint=settings.CODEX_AZURE_OPENAI_ENDPOINT,
-                api_version=settings.CODEX_AZURE_OPENAI_API_VERSION,
-                api_key=settings.CODEX_AZURE_OPENAI_API_KEY,
+                azure_endpoint=settings.GPT55_AZURE_OPENAI_ENDPOINT,
+                api_version=settings.GPT55_AZURE_OPENAI_API_VERSION,
+                api_key=settings.GPT55_AZURE_OPENAI_API_KEY,
                 http_client=_HTTP_CLIENT,
             )
-            self._model = settings.CODEX_AZURE_OPENAI_MODEL_NAME
+            self._model = settings.GPT55_AZURE_OPENAI_MODEL_NAME
 
     async def complete(self, system: str, user: str, max_tokens: int = 16384) -> str:
         resp = await _with_retry(
