@@ -8,6 +8,7 @@ from langgraph.types import Send
 from app.llm.graph.state import CodeGenState
 from app.llm.graph.waves import MAX_WAVE, files_in_wave
 from app.llm.graph import nodes, react
+from app.llm.graph.mybatis_check import autofix_binding, check_binding
 
 
 def _route_waves(state: dict):
@@ -46,6 +47,22 @@ def _wave_gate(state: dict) -> dict:
         if n:
             events.append({"type": "wave_start", "wave": nxt, "file_count": n})
     return {"current_wave": nxt, "events": events}
+
+
+def mybatis_fix(state: dict) -> dict:
+    """Deterministic DAO↔Mapper binding autofix before the reviewer (no LLM)."""
+    files = dict(state.get("files", {}))
+    try:
+        fixed_files, fix_logs = autofix_binding(files)
+        remaining = check_binding(fixed_files)
+    except Exception as e:  # verification is a safety net, never a blocker
+        return {"events": [{"type": "log", "line": f"[MYBATIS] error: {e}"}]}
+    events = [{"type": "log", "line": f"[MYBATIS-FIX] {log}"} for log in fix_logs]
+    errors = [i for i in remaining if i.get("severity") != "warning"]
+    if errors:
+        events.append({"type": "log",
+                       "line": f"[MYBATIS] {len(errors)} binding issue(s) left for reviewer"})
+    return {"files": fixed_files, "events": events, "open_issues": remaining}
 
 
 def build_graph(checkpointer=None):
