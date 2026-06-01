@@ -1,4 +1,6 @@
-from app.llm.graph.mybatis_check import parse_dao, parse_mapper, match_pairs
+from app.llm.graph.mybatis_check import (
+    parse_dao, parse_mapper, match_pairs, check_binding,
+)
 
 
 def _gf(path, ftype, content):
@@ -62,3 +64,28 @@ def test_match_pairs_reports_unpaired_dao():
     pairs, unpaired = match_pairs(files)
     assert pairs == []
     assert any("FooDaoImpl" in u["issue"] for u in unpaired)
+
+
+def test_check_binding_flags_namespace_and_missing_id():
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", _DAO),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", _MAPPER),
+    }
+    issues = check_binding(files)
+    kinds = " ".join(i["issue"] for i in issues)
+    assert "namespace" in kinds.lower()
+    assert "selectCpmsEduRsltList" in kinds
+    assert any(i.get("severity") == "warning" for i in issues)
+
+
+def test_check_binding_clean_when_aligned():
+    dao = _DAO.replace('"selectCpmsEduRsltList"', '"selectCpmsEduRsltLstList"')
+    mapper = _MAPPER.replace(
+        'namespace="com.example.cpms.mapper.CpmsEduRsltLstMapper"',
+        'namespace="com.example.cpms.dao.CpmsEduRsltLstDaoImpl"')
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", dao),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", mapper),
+    }
+    errors = [i for i in check_binding(files) if i.get("severity") != "warning"]
+    assert errors == []

@@ -79,3 +79,40 @@ def match_pairs(files: dict) -> tuple[list[tuple[dict, dict]], list[dict]]:
                              "issue": f"{base}Mapper xml has no matching DaoImpl",
                              "severity": "warning"})
     return pairs, unpaired
+
+
+def check_binding(files: dict) -> list[dict]:
+    """Detect namespace mismatch, missing statements, unused statements."""
+    pairs, issues = match_pairs(files)
+    issues = list(issues)  # copy unpaired issues
+
+    for dao_gf, mapper_gf in pairs:
+        dao = parse_dao(dao_gf["content"])
+        mapper = parse_mapper(mapper_gf["content"])
+
+        # 1. namespace must equal DaoImpl FQCN
+        if dao["expected_namespace"] and mapper["namespace"] != dao["expected_namespace"]:
+            issues.append({
+                "file_path": mapper_gf["file_path"],
+                "issue": (f"Mapper namespace '{mapper['namespace']}' != DaoImpl FQCN "
+                          f"'{dao['expected_namespace']}'"),
+                "severity": "error",
+            })
+
+        # 2. DAO calls an id the Mapper does not define (runtime binding failure)
+        for sid in sorted(dao["statement_ids"] - mapper["ids"]):
+            issues.append({
+                "file_path": mapper_gf["file_path"],
+                "issue": (f"DAO calls statement '{sid}' but Mapper has no matching "
+                          f"<statement id=\"{sid}\">"),
+                "severity": "error",
+            })
+
+        # 3. Mapper defines an id no DAO calls (warning only)
+        for sid in sorted(mapper["ids"] - dao["statement_ids"]):
+            issues.append({
+                "file_path": mapper_gf["file_path"],
+                "issue": f"Mapper statement '{sid}' is not called by any DAO method",
+                "severity": "warning",
+            })
+    return issues
