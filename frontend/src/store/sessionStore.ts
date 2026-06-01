@@ -250,17 +250,31 @@ export const useSessionStore = create<SessionStore>()(persist((set, get) => ({
         }))
       } else if (event.type === 'complete') {
         // file_complete carried only paths; fetch full file contents now
-        apiGetGeneratedFiles().then((data) => {
-          set((state) => ({
-            codeGen: {
-              ...state.codeGen,
-              status: 'generated',
-              generatedFiles: data.files,
-            },
-            statusMessage: null,
-            _codegenAbort: null,
-          }))
-        })
+        apiGetGeneratedFiles()
+          .then((data) => {
+            set((state) => ({
+              codeGen: {
+                ...state.codeGen,
+                status: 'generated',
+                generatedFiles: data.files,
+              },
+              statusMessage: null,
+              _codegenAbort: null,
+            }))
+          })
+          .catch((err) => {
+            // generation finished but fetching file bodies failed — surface it
+            // rather than leaving the panel stuck on the spinner.
+            set((state) => ({
+              codeGen: {
+                ...state.codeGen,
+                status: 'error',
+                error: `생성은 완료됐으나 파일을 불러오지 못했습니다: ${err?.message ?? err}`,
+              },
+              statusMessage: null,
+              _codegenAbort: null,
+            }))
+          })
       } else if (event.type === 'error') {
         set((state) => ({
           codeGen: { ...state.codeGen, status: 'error', error: event.content ?? event.message ?? 'Generation failed' },
