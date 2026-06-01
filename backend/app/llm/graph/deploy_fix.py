@@ -126,7 +126,10 @@ def organize_imports(content: str) -> str:
             continue
 
         simple_name = fqcn.rsplit(".", 1)[-1] if "." in fqcn else fqcn
-        if simple_name == "*" or simple_name in code_body:
+        # Word-boundary match so `List` is not considered "used" by `ArrayList`.
+        used = simple_name == "*" or bool(
+            re.search(rf"\b{re.escape(simple_name)}\b", code_body))
+        if used:
             key = f"{static_prefix.strip()} {fqcn}".strip()
             if key not in processed:
                 processed[key] = (f"import static {fqcn};" if static_prefix
