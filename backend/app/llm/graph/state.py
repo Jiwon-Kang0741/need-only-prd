@@ -38,7 +38,9 @@ class CodeGenState(TypedDict, total=False):
     files: Annotated[dict[str, GeneratedFile], merge_files]
     # ── Reviewer ──
     review_iterations: int
-    open_issues: list[dict]
+    # add-reducer: generate_file fan-out may write residual gate issues in
+    # parallel; without a reducer concurrent writes raise InvalidUpdateError.
+    open_issues: Annotated[list[dict], add]
     # ── 진행/관찰 ──
     current_wave: int
     events: Annotated[list[dict], add]
