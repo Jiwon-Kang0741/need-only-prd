@@ -81,10 +81,18 @@ def match_pairs(files: dict) -> tuple[list[tuple[dict, dict]], list[dict]]:
     return pairs, unpaired
 
 
-def check_binding(files: dict) -> list[dict]:
-    """Detect namespace mismatch, missing statements, unused statements."""
+def _contract_ids(contract) -> set[str]:
+    ops = (contract or {}).get("operations") or []
+    return {o["statement_id"] for o in ops}
+
+
+def check_binding(files: dict, contract: dict | None = None) -> list[dict]:
+    """Detect namespace/id mismatches. If contract has operations, that id set is
+    the source of truth (both DAO and Mapper must match it); otherwise the DAO
+    super(...) calls are the truth (Phase 1, backward compatible)."""
     pairs, issues = match_pairs(files)
     issues = list(issues)  # copy unpaired issues
+    truth_ids = _contract_ids(contract)
 
     for dao_gf, mapper_gf in pairs:
         dao = parse_dao(dao_gf["content"])
@@ -99,22 +107,39 @@ def check_binding(files: dict) -> list[dict]:
                 "severity": "error",
             })
 
-        # 2. DAO calls an id the Mapper does not define (runtime binding failure)
-        for sid in sorted(dao["statement_ids"] - mapper["ids"]):
-            issues.append({
-                "file_path": mapper_gf["file_path"],
-                "issue": (f"DAO calls statement '{sid}' but Mapper has no matching "
-                          f"<statement id=\"{sid}\">"),
-                "severity": "error",
-            })
-
-        # 3. Mapper defines an id no DAO calls (warning only)
-        for sid in sorted(mapper["ids"] - dao["statement_ids"]):
-            issues.append({
-                "file_path": mapper_gf["file_path"],
-                "issue": f"Mapper statement '{sid}' is not called by any DAO method",
-                "severity": "warning",
-            })
+        if truth_ids:
+            # contract is truth: DAO and Mapper ids must each equal truth_ids
+            for sid in sorted(dao["statement_ids"] - truth_ids):
+                issues.append({"file_path": dao_gf["file_path"],
+                               "issue": f"DAO statement '{sid}' is not in contract operations",
+                               "severity": "error"})
+            for sid in sorted(mapper["ids"] - truth_ids):
+                issues.append({"file_path": mapper_gf["file_path"],
+                               "issue": f"Mapper statement '{sid}' is not in contract operations",
+                               "severity": "error"})
+            for sid in sorted(truth_ids - dao["statement_ids"]):
+                issues.append({"file_path": dao_gf["file_path"],
+                               "issue": f"DAO missing contract statement '{sid}'",
+                               "severity": "error"})
+            for sid in sorted(truth_ids - mapper["ids"]):
+                issues.append({"file_path": mapper_gf["file_path"],
+                               "issue": f"Mapper missing contract statement '{sid}'",
+                               "severity": "error"})
+        else:
+            # Phase 1: DAO super calls are truth
+            for sid in sorted(dao["statement_ids"] - mapper["ids"]):
+                issues.append({
+                    "file_path": mapper_gf["file_path"],
+                    "issue": (f"DAO calls statement '{sid}' but Mapper has no matching "
+                              f"<statement id=\"{sid}\">"),
+                    "severity": "error",
+                })
+            for sid in sorted(mapper["ids"] - dao["statement_ids"]):
+                issues.append({
+                    "file_path": mapper_gf["file_path"],
+                    "issue": f"Mapper statement '{sid}' is not called by any DAO method",
+                    "severity": "warning",
+                })
     return issues
 
 
@@ -139,51 +164,89 @@ def _normalized_distance(a: str, b: str) -> float:
     return _edit_distance(a, b) / m if m else 0.0
 
 
-def autofix_binding(files: dict) -> tuple[dict, list[str]]:
-    """Apply deterministic fixes for obvious mismatches. DAO is source of truth.
+def _align_ids_to_truth(content, current_ids, truth_ids, pattern_tmpl, file_path):
+    """Rename each current id not in truth_ids to its nearest truth id (≤ threshold,
+    1:1 greedy). pattern_tmpl uses {have} placeholder for the id being replaced."""
+    logs = []
+    wrong = [i for i in current_ids if i not in truth_ids]
+    available = [t for t in truth_ids if t not in current_ids]
+    used: set[str] = set()
+    for have in wrong:
+        best, best_d = None, 1.0
+        for want in available:
+            if want in used:
+                continue
+            d = _normalized_distance(have, want)
+            if d < best_d:
+                best, best_d = want, d
+        if best is not None and best_d <= _EDIT_DISTANCE_THRESHOLD:
+            used.add(best)
+            pat = pattern_tmpl.replace("{have}", re.escape(have))
+            content = re.sub(pat, lambda m, w=best: m.group(1) + w + m.group(2),
+                             content, count=1)
+            logs.append(f"{file_path}: id '{have}' → '{best}' (contract)")
+    return content, logs
 
-    Returns (fixed_files_copy, log_lines). Ambiguous mismatches are left untouched
-    for the reviewer.
+
+def autofix_binding(files: dict, contract: dict | None = None) -> tuple[dict, list[str]]:
+    """Apply deterministic fixes. With contract.operations, both DAO and Mapper ids
+    are aligned to contract bare ids; without, DAO super calls are truth (Phase 1).
+
+    Returns (fixed_files_copy, log_lines). Ambiguous mismatches are left untouched.
     """
     fixed = {p: dict(gf) for p, gf in files.items()}
     logs: list[str] = []
     pairs, _ = match_pairs(fixed)
+    truth_ids = sorted(_contract_ids(contract))
 
     for dao_gf, mapper_gf in pairs:
         dao = parse_dao(dao_gf["content"])
         mapper = parse_mapper(mapper_gf["content"])
-        content = mapper_gf["content"]
+        dao_content = dao_gf["content"]
+        mapper_content = mapper_gf["content"]
 
-        # (a) namespace → DaoImpl FQCN (always obvious)
+        # namespace → DaoImpl FQCN (always obvious)
         if dao["expected_namespace"] and mapper["namespace"] != dao["expected_namespace"]:
-            content = re.sub(
+            mapper_content = re.sub(
                 r'(<mapper\b[^>]*\bnamespace\s*=\s*")[^"]+(")',
                 lambda m: m.group(1) + dao["expected_namespace"] + m.group(2),
-                content, count=1,
+                mapper_content, count=1,
             )
             logs.append(f"{mapper_gf['file_path']}: namespace → {dao['expected_namespace']}")
 
-        # (b) greedy 1:1 close-variant id rename (mapper id → dao id)
-        missing = sorted(dao["statement_ids"] - mapper["ids"])   # dao wants, mapper lacks
-        unused = sorted(mapper["ids"] - dao["statement_ids"])    # mapper has, dao ignores
-        used_have: set[str] = set()
-        for want in missing:
-            best, best_d = None, 1.0
-            for have in unused:
-                if have in used_have:
-                    continue
-                d = _normalized_distance(want, have)
-                if d < best_d:
-                    best, best_d = have, d
-            if best is not None and best_d <= _EDIT_DISTANCE_THRESHOLD:
-                used_have.add(best)
-                content = re.sub(
-                    rf'(\bid\s*=\s*"){re.escape(best)}(")',
-                    lambda m, w=want: m.group(1) + w + m.group(2),
-                    content, count=1,
-                )
-                logs.append(f"{mapper_gf['file_path']}: statement id '{best}' → '{want}'")
+        if truth_ids:
+            # contract is truth: align both Mapper ids and DAO super-call ids to it
+            mapper_content, mlogs = _align_ids_to_truth(
+                mapper_content, sorted(mapper["ids"]), truth_ids,
+                r'(\bid\s*=\s*"){have}(")', mapper_gf["file_path"])
+            logs += mlogs
+            dao_content, dlogs = _align_ids_to_truth(
+                dao_content, sorted(dao["statement_ids"]), truth_ids,
+                r'(super\s*\.\s*\w+\s*\(\s*"){have}(")', dao_gf["file_path"])
+            logs += dlogs
+        else:
+            # Phase 1: align Mapper ids to DAO super-call ids (greedy 1:1)
+            missing = sorted(dao["statement_ids"] - mapper["ids"])
+            unused = sorted(mapper["ids"] - dao["statement_ids"])
+            used_have: set[str] = set()
+            for want in missing:
+                best, best_d = None, 1.0
+                for have in unused:
+                    if have in used_have:
+                        continue
+                    d = _normalized_distance(want, have)
+                    if d < best_d:
+                        best, best_d = have, d
+                if best is not None and best_d <= _EDIT_DISTANCE_THRESHOLD:
+                    used_have.add(best)
+                    mapper_content = re.sub(
+                        rf'(\bid\s*=\s*"){re.escape(best)}(")',
+                        lambda m, w=want: m.group(1) + w + m.group(2),
+                        mapper_content, count=1,
+                    )
+                    logs.append(f"{mapper_gf['file_path']}: statement id '{best}' → '{want}'")
 
-        fixed[mapper_gf["file_path"]] = {**mapper_gf, "content": content}
+        fixed[dao_gf["file_path"]] = {**dao_gf, "content": dao_content}
+        fixed[mapper_gf["file_path"]] = {**mapper_gf, "content": mapper_content}
 
     return fixed, logs

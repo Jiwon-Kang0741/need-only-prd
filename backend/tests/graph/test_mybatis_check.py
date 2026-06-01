@@ -155,3 +155,46 @@ def test_regression_outputs_code_defect_is_fixed():
     assert 'namespace="com.example.cpms.dao.CpmsEduRsltLstDaoImpl"' in mc
     assert 'id="selectCpmsEduRsltList"' in mc
     assert 'id="selectCpmsEduRsltCount"' in mc
+
+
+_CONTRACT_OPS = {
+    "operations": [
+        {"op": "selectList", "statement_id": "selectList", "dao_method": "selectList",
+         "mybatis_tag": "select"},
+        {"op": "count", "statement_id": "selectCount", "dao_method": "selectCount",
+         "mybatis_tag": "select"},
+    ]
+}
+
+
+def test_check_binding_backward_compatible_without_contract():
+    # Phase 1 behavior unchanged when contract=None (DAO super call is truth)
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", _DAO),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", _MAPPER),
+    }
+    issues = check_binding(files)  # no contract arg
+    assert any("namespace" in i["issue"].lower() for i in issues)
+
+
+def test_autofix_with_contract_fixes_both_dao_and_mapper():
+    # DAO calls "selectListX", Mapper has "selectLst" — BOTH close variants of
+    # contract bare ids "selectList"/"selectCount" → both aligned to contract.
+    dao = """package p; public class FooDaoImpl extends B {
+        public int a(X q){ return super.selectList("selectListX", q); }
+        public int c(X q){ Integer n=super.selectOne("selectCnt", q); return n; } }"""
+    mapper = ('<mapper namespace="p.FooDaoImpl">'
+              '<select id="selectLst">S</select>'
+              '<select id="selectCnt">C</select></mapper>')
+    files = {
+        "a/FooDaoImpl.java": _gf("a/FooDaoImpl.java", "dao_impl", dao),
+        "b/FooMapper.xml": _gf("b/FooMapper.xml", "mapper_xml", mapper),
+    }
+    fixed, logs = autofix_binding(files, _CONTRACT_OPS)
+    dao_c = fixed["a/FooDaoImpl.java"]["content"]
+    mapper_c = fixed["b/FooMapper.xml"]["content"]
+    assert '"selectList"' in dao_c
+    assert 'id="selectList"' in mapper_c
+    after_errors = [i for i in check_binding(fixed, _CONTRACT_OPS)
+                    if i.get("severity") != "warning"]
+    assert after_errors == []
