@@ -23,6 +23,12 @@ dev = [
     "httpx",
 ]
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "llm: integration test that calls the real gpt-5.5 LLM (skipped if keys absent)",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
