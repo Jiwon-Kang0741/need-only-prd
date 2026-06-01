@@ -38,3 +38,44 @@ def parse_mapper(content: str) -> dict:
     ns_m = _MAPPER_NS_RE.search(content)
     ids = set(_MAPPER_STMT_RE.findall(content))
     return {"ids": ids, "namespace": ns_m.group(1) if ns_m else None}
+
+
+def _basename(file_path: str, suffix: str) -> str | None:
+    """'.../CpmsEduRsltLstDaoImpl.java' + 'DaoImpl' -> 'CpmsEduRsltLst'."""
+    fname = file_path.replace("\\", "/").split("/")[-1]
+    stem = fname.rsplit(".", 1)[0]  # drop extension
+    if stem.endswith(suffix):
+        return stem[: -len(suffix)]
+    return None
+
+
+def match_pairs(files: dict) -> tuple[list[tuple[dict, dict]], list[dict]]:
+    """Pair DaoImpl ↔ Mapper by name rule. Returns (pairs, unpaired_issues)."""
+    daos: dict[str, dict] = {}
+    mappers: dict[str, dict] = {}
+    for gf in files.values():
+        fp = gf["file_path"]
+        if fp.endswith("DaoImpl.java"):
+            base = _basename(fp, "DaoImpl")
+            if base:
+                daos[base] = gf
+        elif fp.endswith("Mapper.xml"):
+            base = _basename(fp, "Mapper")
+            if base:
+                mappers[base] = gf
+
+    pairs: list[tuple[dict, dict]] = []
+    unpaired: list[dict] = []
+    for base, dao_gf in daos.items():
+        if base in mappers:
+            pairs.append((dao_gf, mappers[base]))
+        else:
+            unpaired.append({"file_path": dao_gf["file_path"],
+                             "issue": f"{base}DaoImpl has no matching Mapper xml",
+                             "severity": "error"})
+    for base, mapper_gf in mappers.items():
+        if base not in daos:
+            unpaired.append({"file_path": mapper_gf["file_path"],
+                             "issue": f"{base}Mapper xml has no matching DaoImpl",
+                             "severity": "warning"})
+    return pairs, unpaired

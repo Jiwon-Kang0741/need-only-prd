@@ -1,4 +1,9 @@
-from app.llm.graph.mybatis_check import parse_dao, parse_mapper
+from app.llm.graph.mybatis_check import parse_dao, parse_mapper, match_pairs
+
+
+def _gf(path, ftype, content):
+    return {"file_path": path, "file_type": ftype, "layer": "backend",
+            "wave": 2, "status": "ok", "status_log": [], "content": content}
 
 _DAO = """package com.example.cpms.dao;
 import aondev.framework.dao.mybatis.support.AbstractSqlSessionDaoSupport;
@@ -35,3 +40,25 @@ def test_parse_mapper_extracts_ids_and_namespace():
     assert info["namespace"] == "com.example.cpms.mapper.CpmsEduRsltLstMapper"
     assert info["ids"] == {
         "selectCpmsEduRsltLstList", "selectCpmsEduRsltCount", "insertCpmsEduRslt"}
+
+
+def test_match_pairs_by_name_rule():
+    files = {
+        "a/CpmsEduRsltLstDaoImpl.java": _gf("a/CpmsEduRsltLstDaoImpl.java", "dao_impl", _DAO),
+        "b/CpmsEduRsltLstMapper.xml": _gf("b/CpmsEduRsltLstMapper.xml", "mapper_xml", _MAPPER),
+    }
+    pairs, unpaired = match_pairs(files)
+    assert len(pairs) == 1
+    dao_gf, mapper_gf = pairs[0]
+    assert dao_gf["file_path"].endswith("DaoImpl.java")
+    assert mapper_gf["file_path"].endswith("Mapper.xml")
+    assert unpaired == []
+
+
+def test_match_pairs_reports_unpaired_dao():
+    files = {
+        "a/FooDaoImpl.java": _gf("a/FooDaoImpl.java", "dao_impl", _DAO),
+    }
+    pairs, unpaired = match_pairs(files)
+    assert pairs == []
+    assert any("FooDaoImpl" in u["issue"] for u in unpaired)
