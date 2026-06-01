@@ -39,3 +39,21 @@ def test_mybatis_fix_node_clean_input_noop():
     out = mybatis_fix(state)
     errs = [i for i in out.get("open_issues", []) if i.get("severity") != "warning"]
     assert errs == []
+
+
+def test_mybatis_fix_uses_contract_when_present():
+    dao = """package p; public class FooDaoImpl extends B {
+        public int a(X q){ return super.selectList("selectListX", q); } }"""
+    mapper = '<mapper namespace="p.FooDaoImpl"><select id="selectLst">S</select></mapper>'
+    contract = {"operations": [
+        {"op": "selectList", "statement_id": "selectList", "dao_method": "selectList",
+         "mybatis_tag": "select"}]}
+    state = {"files": {
+        "a/FooDaoImpl.java": _gf("a/FooDaoImpl.java", "dao_impl", dao),
+        "b/FooMapper.xml": _gf("b/FooMapper.xml", "mapper_xml", mapper),
+    }, "contract": contract}
+    out = mybatis_fix(state)
+    dao_c = out["files"]["a/FooDaoImpl.java"]["content"]
+    mapper_c = out["files"]["b/FooMapper.xml"]["content"]
+    assert '"selectList"' in dao_c
+    assert 'id="selectList"' in mapper_c

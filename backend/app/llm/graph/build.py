@@ -8,7 +8,9 @@ from langgraph.types import Send
 from app.llm.graph.state import CodeGenState
 from app.llm.graph.waves import MAX_WAVE, files_in_wave
 from app.llm.graph import nodes, react
-from app.llm.graph.mybatis_check import autofix_binding, check_binding
+from app.llm.graph.mybatis_check import (
+    autofix_binding, check_binding, autofix_dto_fields, check_dto_fields,
+)
 
 
 def _route_waves(state: dict):
@@ -50,11 +52,21 @@ def _wave_gate(state: dict) -> dict:
 
 
 def mybatis_fix(state: dict) -> dict:
-    """Deterministic DAO↔Mapper binding autofix before the reviewer (no LLM)."""
+    """Deterministic DAO↔Mapper + DTO-field autofix before the reviewer (no LLM).
+
+    Uses contract.operations/dtos as the source of truth when present; otherwise
+    falls back to Phase 1 behavior (DAO super calls).
+    """
     files = dict(state.get("files", {}))
+    contract = state.get("contract")
     try:
-        fixed_files, fix_logs = autofix_binding(files)
-        remaining = check_binding(fixed_files)
+        fixed_files, fix_logs = autofix_binding(files, contract)
+        if contract:
+            fixed_files, dto_logs = autofix_dto_fields(fixed_files, contract)
+            fix_logs = fix_logs + dto_logs
+        remaining = check_binding(fixed_files, contract)
+        if contract:
+            remaining = remaining + check_dto_fields(fixed_files, contract)
     except Exception as e:  # verification is a safety net, never a blocker
         return {"events": [{"type": "log", "line": f"[MYBATIS] error: {e}"}]}
     events = [{"type": "log", "line": f"[MYBATIS-FIX] {log}"} for log in fix_logs]
