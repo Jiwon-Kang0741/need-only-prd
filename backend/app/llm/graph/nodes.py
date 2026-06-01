@@ -11,6 +11,7 @@ from app.llm.graph.waves import wave_for_file_type, files_in_wave
 from app.llm.graph.tools import static_check_impl, validate_sql_impl
 from app.llm.graph.config import GATE_MAX_REGEN
 from app.llm.graph._text import strip_fences as _strip_fences
+from app.llm.graph import naming
 
 
 def _parse_json(text: str) -> dict:
@@ -123,3 +124,93 @@ async def generate_file(state: dict) -> dict:
     if issues:
         result["open_issues"] = issues  # passed through; reviewer will handle
     return result
+
+
+def _screen_code_from_plan(plan: dict, fallback: str) -> str:
+    """Derive the ScreenCode (e.g. 'CpmsEduRsltLst') from a planned DTO/DAO file name."""
+    for f in plan.get("files", []):
+        name = f["file_path"].split("/")[-1]
+        for suffix in ("ReqDto.java", "ResDto.java", "DaoImpl.java", "Mapper.xml"):
+            if name.endswith(suffix):
+                return name[: -len(suffix)]
+    return fallback
+
+
+# op → required file_type for that op to be generated (skip op if file absent)
+_OP_REQUIRES = {
+    "selectList": "dao_impl", "selectOne": "dao_impl", "count": "dao_impl",
+    "insert": "dao_impl", "update": "dao_impl", "delete": "dao_impl",
+}
+
+
+def _api_signature_ops(api_signatures: list) -> list[str]:
+    """Map api_signatures to standard ops (best-effort)."""
+    ops: list[str] = []
+    for sig in api_signatures or []:
+        path = (sig.get("path") or "").lower()
+        if "count" in path:
+            ops.append("count")
+        elif "list" in path:
+            ops.append("selectList")
+        elif "save" in path or "insert" in path:
+            ops.append("insert")
+        elif "update" in path:
+            ops.append("update")
+        elif "delete" in path:
+            ops.append("delete")
+    return ops
+
+
+async def derive_contract(state: dict) -> dict:
+    """Augment contract with code-level identifiers (operations + dtos). Code only."""
+    contract = dict(state.get("contract") or {})
+    plan = state.get("plan") or {}
+    screen = contract.get("screen") or {}
+    try:
+        screen_code = _screen_code_from_plan(plan, screen.get("id", "Screen"))
+        req_dto = naming.dto_class(screen_code, "request")
+        res_dto = naming.dto_class(screen_code, "response")
+
+        planned_types = {f["file_type"] for f in plan.get("files", [])}
+        ops = naming.ops_for_screen_type(screen.get("type", "list"))
+        for extra in _api_signature_ops(contract.get("api_signatures", [])):
+            if extra not in ops:
+                ops.append(extra)
+
+        operations = []
+        for op in ops:
+            required = _OP_REQUIRES.get(op)
+            if required and required not in planned_types:
+                continue
+            is_list = op == "selectList"
+            ret = (f"List<{res_dto}>" if is_list
+                   else "int" if op == "count"
+                   else res_dto)
+            operations.append({
+                "op": op,
+                "statement_id": naming.statement_id(op),
+                "dao_method": naming.dao_method(op),
+                "param_type": req_dto,
+                "return_type": ret,
+                "mybatis_tag": naming.mybatis_tag(op),
+            })
+
+        def _fields():
+            return [{"name": f["vue_field"],
+                     "java_type": naming.java_type(f.get("type", "string")),
+                     "db_column": f.get("db_column", "")}
+                    for f in contract.get("fields", [])]
+
+        dtos = [
+            {"name": req_dto, "kind": "request", "fields": _fields()},
+            {"name": res_dto, "kind": "response", "fields": _fields()},
+        ]
+        contract["operations"] = operations
+        contract["dtos"] = dtos
+    except Exception as e:
+        return {"events": [{"type": "log", "line": f"[CONTRACT] derive failed: {e}"}]}
+
+    return {"contract": contract,
+            "events": [{"type": "log",
+                        "line": f"[CONTRACT] derived {len(contract.get('operations', []))} ops, "
+                                f"{len(contract.get('dtos', []))} dtos"}]}
