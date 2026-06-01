@@ -38,6 +38,12 @@ async def contract_extract(state: dict) -> dict:
             raise ValueError(
                 f"contract_extract: model did not return valid JSON after retry: {exc}"
             ) from exc
+    # The confirmed mockup page_type is authoritative — override the LLM's guess so
+    # a CRUD screen (list-detail) is not silently narrowed to list.
+    page_type = state.get("page_type") or ""
+    if page_type:
+        contract.setdefault("screen", {})
+        contract["screen"]["type"] = page_type
     return {"contract": contract,
             "events": [{"type": "contract", "contract": contract}]}
 

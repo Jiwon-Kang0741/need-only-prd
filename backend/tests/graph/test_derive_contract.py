@@ -51,3 +51,35 @@ async def test_derive_contract_empty_fields_no_crash():
     contract = {"screen": {"id": "X", "type": "list"}, "fields": [], "api_signatures": []}
     out = await nodes.derive_contract({"contract": contract, "plan": _PLAN})
     assert "dtos" in out["contract"]
+
+
+import json as _json
+
+
+class _ScriptedClient:
+    def __init__(self, reply):
+        self._reply = reply
+    async def complete(self, system, user, max_tokens=16384):
+        return self._reply
+
+
+async def test_contract_extract_overrides_screen_type_with_page_type(monkeypatch):
+    # LLM returns type=list, but confirmed page_type=list-detail must win
+    llm_contract = {"screen": {"id": "X", "name": "n", "type": "list"},
+                    "fields": [], "tables": [], "search_conditions": [],
+                    "table_columns": [], "api_signatures": []}
+    monkeypatch.setattr(nodes, "gpt55_client", _ScriptedClient(_json.dumps(llm_contract)))
+    out = await nodes.contract_extract({
+        "spec_markdown": "s", "confirmed_vue": "v", "table_info": "t",
+        "page_type": "list-detail"})
+    assert out["contract"]["screen"]["type"] == "list-detail"
+
+
+async def test_contract_extract_keeps_llm_type_without_page_type(monkeypatch):
+    llm_contract = {"screen": {"id": "X", "name": "n", "type": "edit"},
+                    "fields": [], "tables": [], "search_conditions": [],
+                    "table_columns": [], "api_signatures": []}
+    monkeypatch.setattr(nodes, "gpt55_client", _ScriptedClient(_json.dumps(llm_contract)))
+    out = await nodes.contract_extract({
+        "spec_markdown": "s", "confirmed_vue": "v", "table_info": "t", "page_type": ""})
+    assert out["contract"]["screen"]["type"] == "edit"
