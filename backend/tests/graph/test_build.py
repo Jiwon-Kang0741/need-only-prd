@@ -1,8 +1,12 @@
 """Graph assembly tests. Compile test is offline; e2e uses the real gpt-5.5 LLM."""
 
+import re
+
 import pytest
 
 from app.llm.graph import build
+from app.llm.graph.naming import BASE_DAO_METHODS
+from app.llm.graph.tools import static_check_impl
 
 pytestmark = pytest.mark.asyncio
 
@@ -34,3 +38,25 @@ async def test_end_to_end_real_llm(guide_stub):
     for gf in final["files"].values():
         assert gf["wave"] in (1, 2, 3)
         assert gf["status"] == "ok"
+
+    # --- suffixed-naming consistency (SX5) ---
+    files = final["files"]
+    mappers = [gf["content"] for fp, gf in files.items() if fp.endswith(".xml")]
+    assert mappers, "expected at least one mapper XML"
+    bare = {f'id="{m}"' for m in BASE_DAO_METHODS}
+    for xml in mappers:
+        ids = re.findall(r'<(?:select|insert|update|delete)\s+id="([^"]+)"', xml)
+        assert ids, "mapper has no statement ids"
+        # no bare base-class id (e.g. id="select" / id="selectList")
+        assert not any(b in xml for b in bare), f"bare statement id in mapper: {ids}"
+        # every id is domain-suffixed: prefix + non-empty ScreenCode (+ optional suffix)
+        for sid in ids:
+            assert re.match(r'^(?:select|insert|update|delete)[A-Z]\w+', sid), \
+                f"non-suffixed statement id: {sid}"
+
+    # ServiceImpl must call suffixed wrappers, never a bare DAO base-class method
+    for fp, gf in files.items():
+        if fp.endswith("ServiceImpl.java"):
+            issues = static_check_impl(fp, gf["content"], "service_impl", "backend")
+            assert not any("base-class" in i["issue"].lower() for i in issues), \
+                f"bare DAO base-call in {fp}: {issues}"
