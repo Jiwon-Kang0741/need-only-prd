@@ -123,33 +123,50 @@ CpmsEduRegLstResDto search(CpmsEduRegLstReqDto request);
 void save(CpmsEduRegLstReqDto request);
 ```
 
-### 3.2 Mapper 계층 메서드
+### 3.2 Mapper / DAO 계층 메서드 (도메인 접미사형)
 
-| 메서드명 | 용도 | 사용 Dto |
-|---------|------|----------|
-| `select` | 조회 | ResDto |
-| `insert` | 등록 | ReqDto |
-| `update` | 수정 | ReqDto |
-| `delete` | 삭제 | ReqDto |
+statement id 및 DaoImpl 래퍼 메서드명은 **`{prefix}{화면명}{suffix}`** 형식으로 화면별 고유하게 짓는다. 화면별 고유 id는 ① 로그/에러에서 출처 추적이 쉽고 ② base-class 내부 메서드(`select`/`insert` 등)를 직접 호출하는 오용을 정적 검증으로 잡을 수 있게 한다.
 
-**예시**:
+| op | statement id / DAO 메서드 | MyBatis 태그 | 사용 Dto |
+|----|--------------------------|-------------|----------|
+| 목록조회 | `select{화면명}List` | `<select>` | Req→Res |
+| 단건조회 | `select{화면명}` | `<select>` | Req→Res |
+| 건수조회 | `select{화면명}Count` | `<select>` | Req→int |
+| 등록 | `insert{화면명}` | `<insert>` | Req |
+| 수정 | `update{화면명}` | `<update>` | Req |
+| 삭제 | `delete{화면명}` | `<delete>` | Req |
+
+> ⚠️ **금지**: ServiceImpl/DaoImpl에서 base-class 메서드(`select`, `selectList`, `selectOne`, `insert`, `update`, `delete`, `batchUpdateReturnSumAffectedRows`)를 DAO 변수에 **접미사 없이** 직접 호출하지 말 것. 반드시 위 접미사형 래퍼 메서드를 호출한다.
+
+**예시** (화면명 = `CpmsEduRegLst`):
 ```xml
-<!-- CpmsEduRegLstMapper.xml -->
-<select id="select" resultType="CpmsEduRegLstResDto">
+<!-- CpmsEduRegLstMapper.xml (namespace = DaoImpl FQCN) -->
+<select id="selectCpmsEduRegLstList" resultType="CpmsEduRegLstResDto">
   ...
 </select>
 
-<insert id="insert" parameterType="CpmsEduRegLstReqDto">
+<select id="selectCpmsEduRegLstCount" resultType="int">
+  ...
+</select>
+
+<insert id="insertCpmsEduRegLst" parameterType="CpmsEduRegLstReqDto">
   ...
 </insert>
 
-<update id="update" parameterType="CpmsEduRegLstReqDto">
+<update id="updateCpmsEduRegLst" parameterType="CpmsEduRegLstReqDto">
   ...
 </update>
 
-<delete id="delete" parameterType="CpmsEduRegLstReqDto">
+<delete id="deleteCpmsEduRegLst" parameterType="CpmsEduRegLstReqDto">
   ...
 </delete>
+```
+
+```java
+// CpmsEduRegLstDaoImpl.java — super.xxx("statementId", ...) delegate
+public List<CpmsEduRegLstResDto> selectCpmsEduRegLstList(CpmsEduRegLstReqDto p) {
+    return super.selectList("selectCpmsEduRegLstList", p);
+}
 ```
 
 ---
@@ -167,12 +184,12 @@ void save(CpmsEduRegLstReqDto request);
 
 **XML Mapper 기준**으로 Dto를 구분합니다:
 
-| 작업 유형 | 사용 Dto | Mapper 메서드 |
+| 작업 유형 | 사용 Dto | Mapper 메서드 (접미사형) |
 |----------|----------|--------------|
-| 조회 (Read) | ResDto | `select` |
-| 등록 (Create) | ReqDto | `insert` |
-| 수정 (Update) | ReqDto | `update` |
-| 삭제 (Delete) | ReqDto | `delete` |
+| 조회 (Read) | ResDto | `select{화면명}List` / `select{화면명}` |
+| 등록 (Create) | ReqDto | `insert{화면명}` |
+| 수정 (Update) | ReqDto | `update{화면명}` |
+| 삭제 (Delete) | ReqDto | `delete{화면명}` |
 
 ### 4.3 예시
 
@@ -248,7 +265,8 @@ public class CpmsEduRegLstReqDto {
 - [ ] Dao, DaoImpl, Service, ServiceImpl, Mapper 파일이 모두 생성되었는가?
 - [ ] ReqDto와 ResDto가 모두 생성되었는가?
 - [ ] Service 메서드명이 `search`, `save`로 통일되었는가?
-- [ ] Mapper 메서드명이 `select`, `insert`, `update`, `delete`로 통일되었는가?
+- [ ] Mapper statement id / DAO 메서드명이 접미사형(`select{화면명}List`, `insert{화면명}` 등)으로 통일되었는가?
+- [ ] DAO base-class 메서드(`select`/`insert`/...)를 접미사 없이 직접 호출한 곳이 없는가?
 - [ ] Dto가 적절하게 사용되었는가? (select → ResponseDto, insert/update/delete → RequestDto)
 
 ---
