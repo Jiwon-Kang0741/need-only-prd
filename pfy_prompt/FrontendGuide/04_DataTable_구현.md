@@ -8,6 +8,22 @@
 > 반드시 `@/components/common/dataTable2`의 **DataTable2 래퍼**를 사용해야 합니다.
 > DataTable2 래퍼는 DataTableHeader(제목, 건수, 유틸리티 버튼)를 자동으로 렌더링합니다.
 
+> **SPEC·날짜 컬럼**: 등록일·업무 일시(`reg_dt` 등)는 DB **`timestamptz`** / **`date`**( `DATA_STANDARD.md` §3.5, `spec.template.md` 공통 주의)로 모델링한다. 화면 표시용 문자열은 **아래 Step의 행 전처리(`getRows()` 등)** 또는 `watch`+`nextTick`으로만 만들고, **컬럼 template 슬롯에서 날짜 포맷 금지**이다.
+
+## 🏷️ 라벨 ID / i18n 규칙 (필수)
+
+- 컬럼 `header`, 버튼/타이틀 라벨도 i18n 키 기반으로 작성합니다.
+- **Vue에서 `t()`에 넣는 키**는 반드시 `{대컴포넌트명}.{라벨ID}` 두 단계만 사용합니다.
+  - 예: `t('DataTable.userName')`
+- **DB 시드 `cmn_lbl.lbl_cd`**(및 스펙상 화면 라벨 ID)는 `{화면코드}.{대컴포넌트명}.{라벨ID}` 형태일 수 있습니다.  
+  이 **전체 문자열을 Vue의 `t('…')` 인자로 쓰지 마세요.** 화면 루트(`index.vue` 등)가 이미 화면 스코프를 붙이므로 **`t('CPMSMONXXX.DataTable.xxx')`처럼 화면코드를 `t` 안에 넣으면 이중 접두어**가 됩니다.
+- `utils/index.ts`는 컴포넌트가 아니므로 `useI18n()`을 쓰지 않고, **`getColumns(t)`처럼 `t` 함수를 인자로 받아** 헤더 문자열을 만듭니다. 호출부(DataTable `.vue`)에서 `const { t } = useI18n();` 후 `computed(() => getColumns(t))`로 넘깁니다.
+- 예시:
+
+```typescript
+{ field: 'userName', header: t('DataTable.userName'), width: '140px' }
+```
+
 ---
 
 ## 📝 Step 1: DataTable2 래퍼 vs PrimeVue DataTable 차이
@@ -51,7 +67,7 @@ src/pages/{module}/{category}/{screenId}/
         ├── {ScreenId}DataTable.vue       ← DataTable2 래퍼 사용
         ├── {ScreenId}DataTable.scss      ← GPU 가속 CSS
         └── utils/
-            └── index.ts                  ← getColumns(), getRows() — TableColumn 타입 사용
+            └── index.ts                  ← getColumns(t), getRows() — TableColumn 타입 사용
 ```
 
 ---
@@ -106,11 +122,12 @@ const formatDate = (value?: string | null): string => {
 };
 
 // ⭐⭐⭐ CRITICAL: TableColumn 타입 사용, objectId와 visible 필수!
-export const getColumns = (): TableColumn[] => [
+// ⭐ header는 반드시 t('DataTable.{라벨ID}') — 화면코드 접두어 금지 (위 i18n 규칙 참고)
+export const getColumns = (t: (key: string) => string): TableColumn[] => [
   {
     objectId: 'userId',      // ⭐ field와 동일
     field: 'userId',
-    header: '사용자 ID',
+    header: t('DataTable.userId'),
     width: '140px',
     frozen: true,
     columnClass: 'left',    // 헤더 왼쪽 정렬
@@ -120,7 +137,7 @@ export const getColumns = (): TableColumn[] => [
   {
     objectId: 'userName',
     field: 'userName',
-    header: '사용자명',
+    header: t('DataTable.userName'),
     width: '140px',
     columnClass: 'left',
     rowClass: 'left',
@@ -129,7 +146,7 @@ export const getColumns = (): TableColumn[] => [
   {
     objectId: 'deptName',
     field: 'deptName',
-    header: '부서명',
+    header: t('DataTable.deptName'),
     width: '180px',
     columnClass: 'left',
     rowClass: 'left',
@@ -138,7 +155,7 @@ export const getColumns = (): TableColumn[] => [
   {
     objectId: 'eduDateFormatted',  // ⭐ 포맷팅된 필드 사용
     field: 'eduDateFormatted',
-    header: '교육일자',
+    header: t('DataTable.eduDate'),
     width: '130px',
     columnClass: 'center',
     rowClass: 'center',
@@ -147,7 +164,7 @@ export const getColumns = (): TableColumn[] => [
   {
     objectId: 'eduStatus',
     field: 'eduStatus',
-    header: '교육상태',
+    header: t('DataTable.eduStatus'),
     width: '120px',
     columnClass: 'center',
     rowClass: 'center',
@@ -198,7 +215,8 @@ export const getRows = (data?: CpmsEduProgLstResDto[] | null): CpmsEduProgLstDis
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { DataTable } from '@/components/common/dataTable2';
 import type { CpmsEduProgLstResDto } from '@/api/pages/edu/prog/types';
 import { getColumns, getRows, type CpmsEduProgLstDisplayRow } from './utils';
@@ -219,8 +237,10 @@ const props = withDefaults(defineProps<Props>(), {
   first: 0,
 });
 
-// ⭐ 컬럼 정의 — getColumns()에서 TableColumn[] 반환
-const columns = getColumns();
+const { t } = useI18n();
+
+// ⭐ 컬럼 정의 — utils의 getColumns(t)에 화면 스코프가 적용된 t 전달
+const columns = computed(() => getColumns(t));
 
 // ⭐ 데이터 변환 — getRows()에서 날짜 포맷팅 전처리
 const displayRows = computed(() => getRows(props.fetchedMainData));
@@ -476,6 +496,8 @@ DataTable2에서 `:scrollHeight` / `:virtualScrollerOptions`는 내부 PrimeVue 
 ### 컬럼 정의 (utils/index.ts)
 - [ ] `TableColumn` 타입을 `'@/components/common/dataTable2/types'`에서 import
 - [ ] 커스텀 컬럼 타입 정의 없음 (TableColumn만 사용)
+- [ ] `export const getColumns = (t: (key: string) => string) => [...]` 형태로 `t` 인자 사용
+- [ ] 모든 컬럼 `header`는 `t('DataTable.{라벨ID}')`만 사용 (화면코드·`lbl_cd` 전체 문자열을 `t`에 넣지 않음)
 - [ ] 모든 컬럼에 `objectId` 필드 설정 (field와 동일한 값)
 - [ ] 모든 컬럼에 `visible: true` 설정
 - [ ] `width`는 `"140px"` 형태 (minWidth 아님)
@@ -486,7 +508,8 @@ DataTable2에서 `:scrollHeight` / `:virtualScrollerOptions`는 내부 PrimeVue 
 - [ ] `import { DataTable } from '@/components/common/dataTable2'`
 - [ ] `Column from 'primevue/column'` import 없음
 - [ ] `<Column>` 자식 요소 없음
-- [ ] `:columns="columns"` prop 전달 (getColumns() 결과)
+- [ ] `const { t } = useI18n()` 후 `const columns = computed(() => getColumns(t))`
+- [ ] `:columns="columns"` prop 전달 (`computed(() => getColumns(t))` 결과)
 - [ ] `:value="displayRows"` (computed from getRows())
 - [ ] `title` prop 설정
 - [ ] `:enableRowCheck` prop 설정 (체크박스 필요 시)
@@ -608,6 +631,28 @@ export const getRows = (data) => data.map(row => ({
   ...row,
   eduDateFormatted: formatDate(row.eduDate), // 로딩 시 1회만 실행
 }));
+```
+
+### 6. 헤더가 `undefined`이거나 번역 키가 `화면코드.화면코드.DataTable...`처럼 중복됨
+
+**원인 A**: `utils/index.ts`에서 `t('CPMSMONXXX.DataTable.colYyy')`처럼 **DB `lbl_cd` 전체**를 `t`에 넣음. 화면 루트가 이미 `program_id`/화면 스코프를 적용하므로 **`t` 인자에는 `DataTable.{라벨ID}`만** 사용합니다.
+
+```typescript
+// ❌ WRONG
+header: t('CPMSMONRISKLST.DataTable.colRiskStatus'),
+
+// ✅ CORRECT — getColumns(t) 시그니처 + 짧은 키
+header: t('DataTable.colRiskStatus'),
+```
+
+**원인 B**: `getColumns()`를 인자 없이 호출해 `t`가 utils 안에서 정의되지 않음.
+
+```typescript
+// ❌ WRONG — utils에서 useI18n() 호출 시도 또는 header에 한글 하드코딩만 두고 i18n 미연결
+
+// ✅ CORRECT — .vue에서
+const { t } = useI18n();
+const columns = computed(() => getColumns(t));
 ```
 
 ---

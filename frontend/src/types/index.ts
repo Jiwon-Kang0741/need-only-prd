@@ -166,6 +166,18 @@ export interface MockupState {
   screenName: string
   pageType: string
   fields: Record<string, unknown>[]
+  menuContext?: {
+    menu_id?: string
+    menu_name?: string
+    p_menu_id?: string
+    parent_menu_id?: string
+    component_key?: string | null
+    lv2_pascal?: string | null
+    sort_num?: number
+    screen_id?: string
+    roles?: string[]
+    source?: string
+  } | null
   vueCode: string | null
   annotations: Record<string, unknown>[] | null
   annotationMarkdown: string | null
@@ -178,7 +190,11 @@ export interface MockupState {
 
 export interface AiGenerateResult {
   success: boolean
+  /** 백엔드·LLM이 도출한 CPMS PascalCase 화면코드 */
+  screen_id?: string
+  screen_name?: string
   domain?: string
+  menu_context?: Record<string, unknown>
   fields?: Record<string, unknown>[]
   searchFields?: Record<string, unknown>[]
   tableColumns?: Record<string, unknown>[]

@@ -191,12 +191,28 @@ export async function getGeneratedFiles(layer?: string): Promise<{ files: import
 // --- Mockup Pipeline API ---
 
 export async function mockupAiGenerate(
-  title: string, pageType: string, description?: string,
+  title: string,
+  pageType: string,
+  description?: string,
+  options?: {
+    menuId?: string
+    menuName?: string
+    pMenuId?: string
+    screenId?: string
+  },
 ): Promise<import('../types').AiGenerateResult> {
   const res = await fetch('/api/mockup/ai-generate', {
     method: 'POST',
     headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, page_type: pageType, description }),
+    body: JSON.stringify({
+      title,
+      page_type: pageType,
+      description,
+      menu_id: options?.menuId ?? null,
+      menu_name: options?.menuName ?? null,
+      p_menu_id: options?.pMenuId ?? null,
+      screen_id: options?.screenId ?? null,
+    }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))

@@ -330,6 +330,9 @@ need-only-prd/
 │   ├── BackendGuide/               # CPMS Spring Boot 가이드 (7 docs)
 │   ├── FrontendGuide/              # CPMS Vue3 가이드 (12 docs)
 │   ├── masterPrompt.md             # Mockup → Spec 생성 마스터 프롬프트
+│   ├── spec.template.md            # spec 골격(LLM 주입 SSOT)
+│   ├── spec.example.md             # 채워진 spec 샘플 + load-file 폴백
+│   ├── spec.md                     # (선택) import/생성 캐시 — .gitignore
 │   ├── namebook.md / CPMS_namebook.md
 │   └── componentCatalog.md         # pfy-front 컴포넌트 목록
 ├── skeleton/                       # Docker 프로젝트 템플릿

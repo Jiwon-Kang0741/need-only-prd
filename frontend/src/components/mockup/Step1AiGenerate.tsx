@@ -1,6 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSessionStore } from '../../store/sessionStore'
 import { SCREEN_ID_INVALID_CHARS } from '../../types'
+
+// ── 메뉴 선택 팝업 통신 타입 ──────────────────────
+interface MenuPathItem {
+  menuId: string
+  menuName: string
+  componentKey: string | null
+}
+
+const MENU_POPUP_URL = '/?page=menu'
+const MENU_POPUP_FEATURES = 'width=1280,height=760,resizable=yes,scrollbars=yes'
 
 const PAGE_TYPES = [
   {
@@ -93,6 +103,10 @@ export default function Step1AiGenerate() {
   const [description, setDescription] = useState('')
   const [screenId, setScreenId] = useState('')
 
+  // ── 메뉴 선택 상태 ────────────────────────────
+  const [menuPath, setMenuPath] = useState<MenuPathItem[]>([])
+  const popupRef = useRef<Window | null>(null)
+
   // Phase 2 editable fields
   const [searchFields, setSearchFields] = useState<SearchField[]>([])
   const [tableColumns, setTableColumns] = useState<TableColumn[]>([])
@@ -109,6 +123,26 @@ export default function Step1AiGenerate() {
   const goToStep = useSessionStore((s) => s.mockupGoToStep)
 
   const hasAiResult = mockupState !== null && mockupState.fields.length > 0
+
+  // ── 메뉴 팝업 열기 ────────────────────────────
+  function openMenuPicker() {
+    if (popupRef.current && !popupRef.current.closed) {
+      popupRef.current.focus()
+      return
+    }
+    popupRef.current = window.open(MENU_POPUP_URL, 'menuTreePicker', MENU_POPUP_FEATURES)
+  }
+
+  // ── postMessage 수신 (메뉴 선택 완료) ─────────
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type !== 'MENU_SELECTED') return
+      const path = e.data.path as MenuPathItem[]
+      setMenuPath(path)
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   // Populate local editable fields from AI result
   useEffect(() => {
@@ -137,7 +171,22 @@ export default function Step1AiGenerate() {
 
   async function handleAiGenerate() {
     if (!title.trim() || loading) return
-    await aiGenerate(title.trim(), pageType, description.trim() || undefined)
+    const leaf = menuPath.length ? menuPath[menuPath.length - 1] : undefined
+    /** 리프의 직계 부모 menu_id (예: ROOT0201 → ROOT02). componentKey(mon 등)는 p_menu_id에 쓰지 않는다. */
+    const immediateParent =
+      menuPath.length >= 2 ? menuPath[menuPath.length - 2] : undefined
+
+    await aiGenerate(
+      title.trim(),
+      pageType,
+      description.trim() || undefined,
+      {
+        menuId: leaf?.menuId,
+        menuName: leaf?.menuName,
+        pMenuId: immediateParent?.menuId,
+        screenId: screenId.trim() || undefined,
+      },
+    )
   }
 
   async function handleScaffold() {
@@ -229,9 +278,56 @@ export default function Step1AiGenerate() {
 
         {/* 화면 제목 */}
         <div>
-          <label className="block text-sm font-semibold text-white mb-2">
-            화면 제목 <span style={{ color: '#f4821f' }}>*</span>
-          </label>
+          {/* 레이블 행: 화면 제목 + 메뉴 선택 버튼 + 선택된 경로 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+            <label className="text-sm font-semibold text-white" style={{ whiteSpace: 'nowrap' }}>
+              화면 제목 <span style={{ color: '#f4821f' }}>*</span>
+            </label>
+
+            {/* 메뉴 선택 버튼 */}
+            <button
+              type="button"
+              onClick={openMenuPicker}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '3px 10px', fontSize: 12, fontWeight: 600,
+                background: 'transparent', border: '1px solid #f4821f',
+                color: '#f4821f', borderRadius: 6, cursor: 'pointer',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 13 }}>☰</span>
+              메뉴 선택
+            </button>
+
+            {/* 선택된 메뉴 경로 표시 */}
+            {menuPath.length > 0 && (
+              <span style={{
+                fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center',
+                gap: 4, flexWrap: 'wrap', minWidth: 0,
+              }}>
+                {menuPath.map((m, i) => (
+                  <span key={m.menuId} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {i > 0 && <span style={{ color: '#4b5563' }}>›</span>}
+                    <span>
+                      {m.menuName}
+                      <span style={{ color: '#6b7280', fontSize: 11, marginLeft: 2 }}>({m.menuId})</span>
+                    </span>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setMenuPath([])}
+                  title="메뉴 선택 초기화"
+                  style={{
+                    background: 'none', border: 'none', color: '#4b5563',
+                    cursor: 'pointer', fontSize: 11, padding: '0 2px', lineHeight: 1,
+                  }}
+                >✕</button>
+              </span>
+            )}
+          </div>
+
           <input
             type="text"
             value={title}
@@ -630,7 +726,7 @@ export default function Step1AiGenerate() {
                 type="text"
                 value={screenId}
                 onChange={(e) => setScreenId(e.target.value.replace(SCREEN_ID_INVALID_CHARS, ''))}
-                placeholder="예: EDU_A001"
+                placeholder="비우면 AI 생성(PascalCase). 예: CpmsEduPonlLst"
                 style={{ ...inputStyle, fontFamily: 'Consolas, Monaco, monospace' }}
               />
             </section>

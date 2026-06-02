@@ -1,0 +1,58 @@
+[
+  {
+    "menuId": "ROOT0101",
+    "menuName": "메뉴 관리",
+    "parentId": "ROOT01",
+    "sortOrder": 1,
+    "menuType": "PROGRAM",
+    "useYn": "Y",
+    "roles": []
+  },
+  {
+    "menuId": "ROOT0201",
+    "menuName": "리스크식별관리",
+    "parentId": "ROOT02",
+    "sortOrder": 1,
+    "menuType": "PROGRAM",
+    "useYn": "Y",
+    "roles": [
+      "ITO_ADM",
+      "GEN_USER"
+    ],
+    "level": 1,
+    "hasChildren": false
+  },
+  {
+    "menuId": "ROOT01",
+    "menuName": "시스템 관리",
+    "parentId": "ROOT",
+    "sortOrder": 2,
+    "menuType": "FOLDER",
+    "useYn": "Y",
+    "roles": [],
+    "level": 0,
+    "hasChildren": true,
+    "componentKey": "sy"
+  },
+  {
+    "menuId": "ROOT0102",
+    "menuName": "권한 관리",
+    "parentId": "ROOT01",
+    "sortOrder": 2,
+    "menuType": "PROGRAM",
+    "useYn": "Y",
+    "roles": []
+  },
+  {
+    "menuId": "ROOT02",
+    "menuName": "모니터링",
+    "parentId": "ROOT",
+    "sortOrder": 2,
+    "menuType": "FOLDER",
+    "useYn": "Y",
+    "roles": [],
+    "level": 0,
+    "hasChildren": true,
+    "componentKey": "mon"
+  }
+]

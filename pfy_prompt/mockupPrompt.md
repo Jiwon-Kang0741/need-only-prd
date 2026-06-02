@@ -258,6 +258,36 @@ Template 패턴에 따라 다음 인터랙션을 구현한다:
 - **Props**: `name` (String, required)
 - **Slots**: `default`
 
+#### SearchFormField + Select (공통코드 추출용 — CRITICAL)
+
+목업이 **SPEC `# 10.3` → `cmn_class`/`cmn_code` 시드**로 이어지려면 아래를 만족해야 한다.
+
+- `SearchFormField`에 **`name`**(= 이후 `cls_id` / SPEC `class_cd`)을 반드시 둔다.
+- 하위에 PrimeVue **`Select`**를 두고 **`optionLabel`**, **`optionValue`**를 명시한다.
+- 옵션은 **`ref([{ label, value }, ...])` 또는 동등의 스크립트 내 상수 배열**로 **파일 안에 전부** 나열한다(API만으로 채우는 Select는 본 패턴에 해당하지 않음).
+- 예:
+  ```vue
+  <SearchFormField name="riskGrdCd">
+    <SearchFormLabel>리스크 등급</SearchFormLabel>
+    <SearchFormContent>
+      <Select
+        v-model="searchParams.riskGrdCd"
+        :options="riskGrdCdOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="전체"
+      />
+    </SearchFormContent>
+  </SearchFormField>
+  ```
+  ```ts
+  const riskGrdCdOptions = ref([
+    { label: 'Low', value: 'L' },
+    { label: 'Medium', value: 'M' },
+    { label: 'High', value: 'H' },
+  ]);
+  ```
+
 #### SearchFormLabel
 - **Purpose**: 검색 필드 라벨 텍스트.
 - **Slots**: `default`
