@@ -288,5 +288,5 @@ def dispatch_tool(name: str, args: dict, files: dict, contract: dict) -> object:
         return list_generated_files_impl(files)
     if name == "validate_mybatis_binding":
         from app.llm.graph.mybatis_check import check_binding
-        return check_binding(files)
+        return check_binding(files, contract)
     raise ValueError(f"unknown tool: {name}")

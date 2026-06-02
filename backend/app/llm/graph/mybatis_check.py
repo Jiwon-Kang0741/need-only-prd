@@ -254,6 +254,64 @@ def autofix_binding(files: dict, contract: dict | None = None) -> tuple[dict, li
 
 _FIELD_DECL_RE = re.compile(r'\bprivate\s+\S[\w<>,.\[\]]*\s+(\w+)\s*(?:=[^;]*)?;')
 
+# Per-line `private <Type> <name>[ = init];` — for the duplicate-field cleaner.
+_DTO_ANY_FIELD_RE = re.compile(
+    r'^(\s*private\s+\S+(?:\s*<[^>]+>)?(?:\s*\[\s*\])?\s+)(\w+)(\s*(?:=\s*[^;]+)?\s*;.*)$')
+# `private <BannedScalar>[] <name>[ = init];` — Java arrays banned in DTOs
+# (break MyBatis/StringUtils). Same type set the static_check array rule flags.
+_DTO_BANNED_ARRAY_RE = re.compile(
+    r'(private\s+)(?:String|Integer|Long|Double|Float|Boolean|'
+    r'int|long|double|float|boolean)\s*\[\s*\]\s+(\w+)\s*(?:=\s*[^;]+)?\s*;')
+
+_DTO_FILE_TYPES = ("dto_request", "dto_response")
+
+
+def _is_backend_dto(gf: dict) -> bool:
+    return (gf.get("file_type") in _DTO_FILE_TYPES
+            and gf.get("file_path", "").endswith(".java"))
+
+
+def autofix_dedupe_dto_fields(files: dict) -> tuple[dict, list[str]]:
+    """Drop duplicate `private <Type> <name>;` decls within a DTO, keeping the
+    first occurrence (usually the well-typed one). Ported from agents.py."""
+    fixed = {p: dict(gf) for p, gf in files.items()}
+    logs: list[str] = []
+    for gf in fixed.values():
+        if not _is_backend_dto(gf):
+            continue
+        seen: set[str] = set()
+        new_lines: list[str] = []
+        removed = 0
+        for line in gf["content"].split("\n"):
+            m = _DTO_ANY_FIELD_RE.match(line)
+            if m and m.group(2) in seen:
+                removed += 1
+                continue
+            if m:
+                seen.add(m.group(2))
+            new_lines.append(line)
+        if removed:
+            gf["content"] = "\n".join(new_lines)
+            logs.append(f"{gf['file_path']}: removed {removed} duplicate field decl(s)")
+    return fixed, logs
+
+
+def autofix_dto_array_fields(files: dict) -> tuple[dict, list[str]]:
+    """Downgrade banned `private <Scalar>[] x [=...];` DTO fields to
+    `private String x;` (CPMS comma-separated convention; no new import).
+    Java arrays in DTOs break MyBatis/JSON binding. Ported from agents.py."""
+    fixed = {p: dict(gf) for p, gf in files.items()}
+    logs: list[str] = []
+    for gf in fixed.values():
+        if not _is_backend_dto(gf):
+            continue
+        new_content, n = _DTO_BANNED_ARRAY_RE.subn(
+            lambda m: f"{m.group(1)}String {m.group(2)};", gf["content"])
+        if n:
+            gf["content"] = new_content
+            logs.append(f"{gf['file_path']}: downgraded {n} array field(s) → String")
+    return fixed, logs
+
 
 def _dto_files_by_class(files: dict) -> dict[str, dict]:
     out = {}

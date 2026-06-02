@@ -217,9 +217,11 @@ def check_frontend_local_imports(files: dict) -> list[dict]:
 # but resolution then depends on the LLM complying within GATE_MAX_REGEN or the
 # reviewer choosing to fix it — neither is guaranteed. Removing the redundant log
 # line is a deterministic transform, so we autofix it before the reviewer runs.
+# Lookahead uses \s* (not [ \t]*) so blank line(s) between the log statement and
+# the throw are tolerated — matching the gate detector's coverage (review #2).
 _LOG_BEFORE_THROW_RE = re.compile(
     r'^[ \t]*log\.(?:error|warn)\s*\([^;]*\)\s*;[ \t]*\r?\n'
-    r'(?=[ \t]*throw\s+(?:new\s+)?HscException)',
+    r'(?=\s*throw\s+(?:new\s+)?HscException)',
     re.MULTILINE,
 )
 

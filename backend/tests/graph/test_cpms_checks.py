@@ -130,3 +130,25 @@ def test_autofix_log_before_throw_keeps_unrelated_logs():
     fixed, logs = autofix_log_before_throw(files)
     assert fixed["Y.java"]["content"] == src       # no throw nearby -> untouched
     assert not logs
+
+
+def test_autofix_log_before_throw_handles_blank_line_between():
+    # Gate detector flags log+blank-line+throw; the autofix must remove it too
+    # (review #2: detector/fixer regex divergence).
+    src = ('public class Z {\n'
+           '    void m() {\n'
+           '        try { x(); } catch (Exception e) {\n'
+           '            log.error("oops", e);\n'
+           '\n'
+           '            throw HscException.systemError("failed", e);\n'
+           '        }\n'
+           '    }\n'
+           '}\n')
+    files = {"Z.java": _gf("a/ZServiceImpl.java", "service_impl", "backend", src)}
+    fixed, logs = autofix_log_before_throw(files)
+    c = fixed["Z.java"]["content"]
+    assert "log.error" not in c
+    assert 'throw HscException.systemError("failed", e);' in c
+    assert logs
+    assert not any("before throw" in i["issue"].lower()
+                   for i in static_check_impl("a/ZServiceImpl.java", c, "service_impl", "backend"))

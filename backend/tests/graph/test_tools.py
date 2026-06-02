@@ -83,3 +83,31 @@ def test_list_generated_files_summary():
     out = list_generated_files_impl({"CpmsEduResDto.java": _DTO})
     assert out == [{"file_path": "CpmsEduResDto.java", "file_type": "dto_response",
                     "layer": "backend", "status": "ok"}]
+
+
+def test_validate_mybatis_binding_tool_forwards_contract_phase2():
+    # review #3: dispatch_tool must pass `contract` to check_binding so the
+    # reviewer tool uses Phase-2 (contract truth), same as the mybatis_fix node.
+    from app.llm.graph.tools import dispatch_tool
+    from app.llm.graph.mybatis_check import check_binding
+    dao = ("package com.x.dao;\n"
+           "public class FooDaoImpl extends AbstractSqlSessionDaoSupport {\n"
+           "  public Object selectFooList(Object p){return super.selectList(\"selectFooList\", p);}\n"
+           "}\n")
+    mapper = ('<mapper namespace="com.x.dao.FooDaoImpl">\n'
+              '  <select id="selectFooList">SELECT 1</select>\n</mapper>\n')
+    files = {
+        "d": {"file_path": "a/FooDaoImpl.java", "file_type": "dao_impl",
+              "layer": "backend", "content": dao},
+        "m": {"file_path": "a/FooMapper.xml", "file_type": "mapper_xml",
+              "layer": "backend", "content": mapper},
+    }
+    # contract truth differs from the (self-consistent) DAO/Mapper ids
+    contract = {"operations": [{"statement_id": "selectBarList"}]}
+    # Phase-1 (no contract) sees DAO==Mapper -> clean
+    assert check_binding(files) == []
+    # The tool must now report the Phase-2 contract mismatch (contract forwarded)
+    result = dispatch_tool("validate_mybatis_binding", {}, files, contract)
+    assert result == check_binding(files, contract)
+    assert result != []
+    assert any("contract" in i["issue"].lower() for i in result)

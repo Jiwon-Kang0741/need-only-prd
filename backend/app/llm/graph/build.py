@@ -10,6 +10,7 @@ from app.llm.graph.waves import MAX_WAVE, files_in_wave
 from app.llm.graph import nodes, react
 from app.llm.graph.mybatis_check import (
     autofix_binding, check_binding, autofix_dto_fields, check_dto_fields,
+    autofix_dedupe_dto_fields, autofix_dto_array_fields,
 )
 from app.llm.graph.cpms_checks import (
     check_db_seed_sql, check_frontend_local_imports, check_lv2_whitelist,
@@ -69,6 +70,11 @@ def mybatis_fix(state: dict) -> dict:
         if contract:
             fixed_files, dto_logs = autofix_dto_fields(fixed_files, contract)
             fix_logs = fix_logs + dto_logs
+        # Deterministic DTO source fixes (compile-error preventers, no LLM):
+        # dedupe duplicate field decls + downgrade banned Java-array fields.
+        fixed_files, dedup_logs = autofix_dedupe_dto_fields(fixed_files)
+        fixed_files, arr_logs = autofix_dto_array_fields(fixed_files)
+        fix_logs = fix_logs + dedup_logs + arr_logs
         # Deterministic CPMS source fix: drop redundant log-before-throw lines.
         fixed_files, log_logs = autofix_log_before_throw(fixed_files)
         fix_logs = fix_logs + log_logs

@@ -225,3 +225,60 @@ def test_autofix_dto_fields_adds_missing():
     content = fixed["a/FooResDto.java"]["content"]
     assert "private Integer score;" in content
     assert check_dto_fields(fixed, _CONTRACT_DTOS) == []
+
+
+# --- deterministic DTO autofixes ported from agents.py (review #1) ---
+from app.llm.graph.mybatis_check import (
+    autofix_dedupe_dto_fields, autofix_dto_array_fields,
+)
+
+
+def test_dedupe_dto_fields_keeps_first_drops_later_duplicate():
+    src = ("public class FooReqDto {\n"
+           "    private List<String> ids = new ArrayList<>();\n"
+           "    private String name;\n"
+           "    private String ids;\n"   # duplicate name 'ids' -> drop this one
+           "}\n")
+    files = {"f": _gf("a/FooReqDto.java", "dto_request", src)}
+    fixed, logs = autofix_dedupe_dto_fields(files)
+    c = fixed["f"]["content"]
+    assert c.count(" ids") == 1                     # only one decl mentions ids
+    assert "private List<String> ids" in c          # the first (well-typed) is kept
+    assert "private String ids;" not in c           # the later String dup is gone
+    assert "private String name;" in c              # unrelated field untouched
+    assert logs
+
+
+def test_dedupe_dto_fields_noop_when_unique():
+    src = ("public class FooResDto {\n"
+           "    private String a;\n    private String b;\n}\n")
+    files = {"f": _gf("a/FooResDto.java", "dto_response", src)}
+    fixed, logs = autofix_dedupe_dto_fields(files)
+    assert fixed["f"]["content"] == src
+    assert not logs
+
+
+def test_array_field_downgraded_to_string():
+    src = ("public class FooReqDto {\n"
+           "    private String[] ids;\n"
+           "    private Integer[] codes = new Integer[]{1,2};\n"
+           "    private String name;\n}\n")
+    files = {"f": _gf("a/FooReqDto.java", "dto_request", src)}
+    fixed, logs = autofix_dto_array_fields(files)
+    c = fixed["f"]["content"]
+    assert "String[]" not in c and "Integer[]" not in c   # arrays gone
+    assert "private String ids;" in c
+    assert "private String codes;" in c                    # initializer dropped too
+    assert "private String name;" in c
+    assert logs
+    # and static_check no longer flags arrays
+    from app.llm.graph.tools import static_check_impl
+    assert not any("array" in i["issue"].lower()
+                   for i in static_check_impl("a/FooReqDto.java", c, "dto_request", "backend"))
+
+
+def test_array_downgrade_noop_without_arrays():
+    src = "public class FooResDto {\n    private String a;\n}\n"
+    files = {"f": _gf("a/FooResDto.java", "dto_response", src)}
+    fixed, logs = autofix_dto_array_fields(files)
+    assert fixed["f"]["content"] == src and not logs
