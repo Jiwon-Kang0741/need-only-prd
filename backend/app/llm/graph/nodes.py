@@ -334,4 +334,4 @@ def _reconcile_plan_dtos(plan: dict, req_dto: str, res_dto: str) -> tuple[dict, 
     new_plan = dict(plan)
     new_plan["files"] = new_files
     # dropped counts original DTO files removed (the 2 we re-added are not "dropped")
-    return new_plan, max(0, dropped - 0)
+    return new_plan, dropped

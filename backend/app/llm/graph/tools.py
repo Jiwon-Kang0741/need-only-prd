@@ -6,7 +6,10 @@ Core functions (_impl) are called directly by graph nodes (no LLM).
 
 from __future__ import annotations
 
+import functools
 import re
+
+from app.llm.graph.naming import class_name_from_path
 
 # ── static_check rules (layer-scoped) ──
 _BACKEND_RULES: list[tuple[re.Pattern, str]] = [
@@ -141,17 +144,26 @@ def validate_sql_impl(sql: str) -> list[dict]:
 _GETTER_RE = re.compile(r"(\w+)\.get([A-Z]\w*)\s*\(")
 
 
+@functools.lru_cache(maxsize=256)
+def _dto_field_tuples(content: str) -> tuple[tuple[str, str], ...]:
+    """Cache the regex scan keyed on file content. cross_check rebuilds the
+    DTO-field map every reviewer iteration; unchanged files are a cache hit,
+    a file rewritten by apply_fix is a (correct) miss."""
+    return tuple(
+        (m.group(2), m.group(1))
+        for m in re.finditer(r"private\s+(\S+(?:<[^>]+>)?)\s+(\w+)\s*(?:=[^;]+)?;", content)
+    )
+
+
 def _dto_field_names(content: str) -> list[dict]:
-    out = []
-    for m in re.finditer(r"private\s+(\S+(?:<[^>]+>)?)\s+(\w+)\s*(?:=[^;]+)?;", content):
-        out.append({"name": m.group(2), "type": m.group(1)})
-    return out
+    # Fresh dict list each call (cache holds immutable tuples) so callers may mutate.
+    return [{"name": n, "type": t} for n, t in _dto_field_tuples(content)]
 
 
 def get_dto_fields_impl(dto_name: str, files: dict) -> list[dict]:
     """Tool #4: fields of a generated DTO (name+type)."""
     for gf in files.values():
-        cls = gf["file_path"].split("/")[-1].replace(".java", "")
+        cls = class_name_from_path(gf["file_path"])
         if cls == dto_name:
             return _dto_field_names(gf["content"])
     return []
@@ -160,7 +172,7 @@ def get_dto_fields_impl(dto_name: str, files: dict) -> list[dict]:
 def lookup_class_impl(class_name: str, files: dict) -> dict | None:
     """Tool #3: lookup a class in generated files only."""
     for gf in files.values():
-        cls = gf["file_path"].split("/")[-1].replace(".java", "")
+        cls = class_name_from_path(gf["file_path"])
         if cls == class_name:
             methods = re.findall(r"public\s+\S+\s+(\w+)\s*\(", gf["content"])
             return {"class_name": class_name, "file_path": gf["file_path"],
@@ -173,7 +185,7 @@ def cross_check_impl(files: dict, contract: dict) -> list[dict]:
     # build dto -> set(field names)
     dto_fields: dict[str, set[str]] = {}
     for gf in files.values():
-        cls = gf["file_path"].split("/")[-1].replace(".java", "")
+        cls = class_name_from_path(gf["file_path"])
         if "Dto" in cls:
             dto_fields[cls] = {f["name"] for f in _dto_field_names(gf["content"])}
 

@@ -152,3 +152,14 @@ def test_autofix_log_before_throw_handles_blank_line_between():
     assert logs
     assert not any("before throw" in i["issue"].lower()
                    for i in static_check_impl("a/ZServiceImpl.java", c, "service_impl", "backend"))
+
+
+def test_autofix_log_before_throw_does_not_mutate_input(monkeypatch):
+    # review #5: copy-on-write — the caller's dict and gf must be untouched.
+    src = ('public class W {\n  void m(){ try{x();}catch(Exception e){\n'
+           '    log.error("o", e);\n    throw HscException.systemError("f", e);\n  }}\n}\n')
+    files = {"W.java": _gf("a/WServiceImpl.java", "service_impl", "backend", src)}
+    fixed, logs = autofix_log_before_throw(files)
+    assert files["W.java"]["content"] == src          # input gf NOT mutated
+    assert fixed["W.java"]["content"] != src           # returned copy IS fixed
+    assert "log.error" not in fixed["W.java"]["content"]

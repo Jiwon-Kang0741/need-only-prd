@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import traceback
+
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
@@ -17,6 +20,8 @@ from app.llm.graph.cpms_checks import (
     autofix_log_before_throw,
 )
 from app.llm.graph.tools import check_forbidden_imports
+
+logger = logging.getLogger(__name__)
 
 
 def _route_waves(state: dict):
@@ -87,8 +92,23 @@ def mybatis_fix(state: dict) -> dict:
                      + check_forbidden_imports(fixed_files))
         screen_code = ((contract or {}).get("screen") or {}).get("id", "")
         remaining = remaining + check_lv2_whitelist(screen_code)
-    except Exception as e:  # verification is a safety net, never a blocker
-        return {"events": [{"type": "log", "line": f"[MYBATIS] error: {e}"}]}
+    except Exception as e:  # non-blocking, but must NOT vanish into a single log line
+        tb = traceback.format_exc(limit=4)
+        logger.exception("mybatis_fix verification crashed: %s", e)
+        # Surface as a visible event AND an open_issue so the reviewer knows the
+        # deterministic pass did not run for these files (instead of silent skip).
+        return {
+            "events": [{"type": "log",
+                        "line": f"[MYBATIS] verification ERROR ({type(e).__name__}): {e} — "
+                                "deterministic autofix/checks skipped; reviewer must verify"}],
+            "open_issues": [{
+                "file_path": "*",
+                "issue": (f"Deterministic mybatis_fix crashed ({type(e).__name__}: {e}); "
+                          "DAO↔Mapper binding / DTO fields were NOT auto-verified. "
+                          f"Review carefully.\n{tb}"),
+                "severity": "warning",
+            }],
+        }
     events = [{"type": "log", "line": f"[MYBATIS-FIX] {log}"} for log in fix_logs]
     errors = [i for i in remaining if i.get("severity") != "warning"]
     if errors:

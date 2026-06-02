@@ -44,6 +44,11 @@ _TYPE_MAP: dict[str, str] = {
 }
 
 
+def class_name_from_path(file_path: str) -> str:
+    """'.../a/FooDaoImpl.java' -> 'FooDaoImpl' (single source for this extraction)."""
+    return file_path.split("/")[-1].replace(".java", "")
+
+
 def statement_id(op: str, screen_code: str) -> str:
     """Suffixed id: {prefix}{ScreenCode}{suffix} (e.g. selectCpmsEduRsltLstList)."""
     entry = _OP_TABLE.get(op)

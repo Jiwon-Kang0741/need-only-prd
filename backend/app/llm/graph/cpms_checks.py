@@ -228,9 +228,13 @@ _LOG_BEFORE_THROW_RE = re.compile(
 
 def autofix_log_before_throw(files: dict) -> tuple[dict, list[str]]:
     """Delete any `log.error/warn(...)` statement that sits immediately before a
-    `throw ... HscException`. Backend .java files only. Returns (files, logs)."""
+    `throw ... HscException`. Backend .java files only. Returns (copy, logs).
+
+    Copy-on-write (like the mybatis_check autofixes) so callers' input dicts and
+    prior checkpoint snapshots are never mutated, regardless of call order."""
+    fixed = {p: dict(gf) for p, gf in files.items()}
     logs: list[str] = []
-    for gf in files.values():
+    for gf in fixed.values():
         if not gf.get("file_path", "").endswith(".java"):
             continue
         content = gf["content"]
@@ -238,4 +242,4 @@ def autofix_log_before_throw(files: dict) -> tuple[dict, list[str]]:
         if n:
             gf["content"] = new_content
             logs.append(f"removed {n} log-before-throw line(s) in {gf['file_path']}")
-    return files, logs
+    return fixed, logs

@@ -282,3 +282,27 @@ def test_array_downgrade_noop_without_arrays():
     files = {"f": _gf("a/FooResDto.java", "dto_response", src)}
     fixed, logs = autofix_dto_array_fields(files)
     assert fixed["f"]["content"] == src and not logs
+
+
+# --- review #8: id-rename must skip commented-out code ---
+from app.llm.graph.mybatis_check import _align_ids_to_truth, _is_commented
+
+
+def test_align_ids_skips_line_comment_and_fixes_real_one():
+    # A // commented bogus id appears BEFORE the real one; only the real id is renamed.
+    content = ('    // <select id="selectFooLst">old</select>\n'
+               '    <select id="selectFooLst">SELECT 1</select>\n')
+    out, logs = _align_ids_to_truth(
+        content, ["selectFooLst"], ["selectFooList"],
+        r'(\bid\s*=\s*"){have}(")', "a/FooMapper.xml")
+    assert out.count('id="selectFooList"') == 1      # real one renamed
+    assert '// <select id="selectFooLst">' in out     # comment left untouched
+    assert logs
+
+
+def test_is_commented_detects_block_and_line():
+    c = 'A // x B\n/* y */ C <!-- z --> D'
+    assert _is_commented(c, c.index("x"))      # // line comment
+    assert _is_commented(c, c.index("y"))      # /* */ block
+    assert _is_commented(c, c.index("z"))      # <!-- --> block
+    assert not _is_commented(c, c.index("D"))  # plain code

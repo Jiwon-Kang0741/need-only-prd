@@ -14,10 +14,14 @@ from app.config import settings
 
 # path -> (mtime, text). Per-file cache keyed by absolute path.
 _FILE_CACHE: dict[str, tuple[float, str]] = {}
+# (dir, prefix) -> (dir_mtime, [Path]). Avoids re-globbing the guide dir on every
+# generate_file call in a wave fan-out; invalidated when the directory changes.
+_GLOB_CACHE: dict[tuple[str, str], tuple[float, list]] = {}
 
 
 def _reset_cache_for_test() -> None:
     _FILE_CACHE.clear()
+    _GLOB_CACHE.clear()
 
 
 def _read_fresh(path: Path) -> str:
@@ -72,9 +76,17 @@ _LAYER_DIR = {"backend": "BackendGuide", "frontend": "FrontendGuide"}
 
 def _guide_files(layer: str, prefix: str) -> list[Path]:
     base = Path(settings.PROMPT_REFERENCE_DIR) / _LAYER_DIR[layer]
-    if not base.exists():
+    try:
+        dir_mtime = base.stat().st_mtime
+    except FileNotFoundError:
         return []
-    return [f for f in sorted(base.glob("*.md")) if f.name.startswith(prefix)]
+    key = (str(base), prefix)
+    cached = _GLOB_CACHE.get(key)
+    if cached is not None and cached[0] == dir_mtime:
+        return cached[1]
+    files = [f for f in sorted(base.glob("*.md")) if f.name.startswith(prefix)]
+    _GLOB_CACHE[key] = (dir_mtime, files)
+    return files
 
 
 def load_guide_for_file_type(file_type: str) -> str:

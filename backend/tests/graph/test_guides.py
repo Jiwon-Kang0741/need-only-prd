@@ -56,3 +56,25 @@ def test_lookup_guide_by_topic(guide_dir):
 def test_load_table_info(guide_dir):
     text = guides.load_table_info()
     assert "TB_X" in text
+
+
+def test_guide_files_glob_is_cached_by_dir_mtime(monkeypatch, tmp_path):
+    # review #6: repeated calls must not re-glob when the directory is unchanged.
+    from app.llm.graph import guides
+    guides._reset_cache_for_test()
+    d = tmp_path / "BackendGuide"
+    d.mkdir()
+    (d / "표준.md").write_text("hi", encoding="utf-8")
+    monkeypatch.setattr(guides.settings, "PROMPT_REFERENCE_DIR", str(tmp_path))
+
+    calls = {"n": 0}
+    real_glob = guides.Path.glob
+    def counting_glob(self, pat):
+        calls["n"] += 1
+        return real_glob(self, pat)
+    monkeypatch.setattr(guides.Path, "glob", counting_glob)
+
+    a = guides._guide_files("backend", "표준")
+    b = guides._guide_files("backend", "표준")
+    assert [p.name for p in a] == ["표준.md"] == [p.name for p in b]
+    assert calls["n"] == 1            # second call served from cache (no re-glob)

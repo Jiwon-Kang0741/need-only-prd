@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+from app.llm.graph.naming import class_name_from_path
+
 # super.{method}("statementId" ...)
 _SUPER_CALL_RE = re.compile(
     r'super\s*\.\s*(?:select|selectOne|selectList|insert|update|delete|'
@@ -164,9 +166,25 @@ def _normalized_distance(a: str, b: str) -> float:
     return _edit_distance(a, b) / m if m else 0.0
 
 
+def _is_commented(content: str, pos: int) -> bool:
+    """True if `pos` falls inside a // line comment, or a /* */ or <!-- --> block
+    comment. Keeps regex source rewrites from editing identifiers in comments."""
+    line_start = content.rfind("\n", 0, pos) + 1
+    if "//" in content[line_start:pos]:
+        return True
+    for open_d, close_d in (("/*", "*/"), ("<!--", "-->")):
+        o = content.rfind(open_d, 0, pos)
+        if o != -1:
+            c = content.find(close_d, o)
+            if c == -1 or c >= pos:  # open before pos, close missing or after pos
+                return True
+    return False
+
+
 def _align_ids_to_truth(content, current_ids, truth_ids, pattern_tmpl, file_path):
     """Rename each current id not in truth_ids to its nearest truth id (≤ threshold,
-    1:1 greedy). pattern_tmpl uses {have} placeholder for the id being replaced."""
+    1:1 greedy). pattern_tmpl uses {have} placeholder for the id being replaced.
+    Skips matches inside comments so commented-out code is never rewritten."""
     logs = []
     wrong = [i for i in current_ids if i not in truth_ids]
     available = [t for t in truth_ids if t not in current_ids]
@@ -180,11 +198,15 @@ def _align_ids_to_truth(content, current_ids, truth_ids, pattern_tmpl, file_path
             if d < best_d:
                 best, best_d = want, d
         if best is not None and best_d <= _EDIT_DISTANCE_THRESHOLD:
-            used.add(best)
-            pat = pattern_tmpl.replace("{have}", re.escape(have))
-            content = re.sub(pat, lambda m, w=best: m.group(1) + w + m.group(2),
-                             content, count=1)
-            logs.append(f"{file_path}: id '{have}' → '{best}' (contract)")
+            pat = re.compile(pattern_tmpl.replace("{have}", re.escape(have)))
+            # Replace the first match that is NOT inside a comment (count=1 semantics).
+            for m in pat.finditer(content):
+                if _is_commented(content, m.start()):
+                    continue
+                content = content[:m.start()] + m.group(1) + best + m.group(2) + content[m.end():]
+                used.add(best)
+                logs.append(f"{file_path}: id '{have}' → '{best}' (contract)")
+                break
     return content, logs
 
 
@@ -317,7 +339,7 @@ def _dto_files_by_class(files: dict) -> dict[str, dict]:
     out = {}
     for gf in files.values():
         if gf["file_path"].endswith(".java") and "Dto" in gf["file_path"]:
-            cls = gf["file_path"].split("/")[-1].replace(".java", "")
+            cls = class_name_from_path(gf["file_path"])
             out[cls] = gf
     return out
 

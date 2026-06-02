@@ -67,3 +67,22 @@ def test_mybatis_fix_includes_cpms_checks():
     }}
     out = mybatis_fix(state)
     assert any("seed tables" in i["issue"] for i in out.get("open_issues", []))
+
+
+def test_mybatis_fix_surfaces_crash_as_open_issue(monkeypatch):
+    # review #4: a crash in the deterministic pass must NOT vanish — it should be
+    # surfaced as a visible event AND a warning open_issue for the reviewer.
+    import app.llm.graph.build as build
+
+    def boom(*a, **k):
+        raise RuntimeError("kaboom")
+    monkeypatch.setattr(build, "autofix_binding", boom)
+
+    out = build.mybatis_fix({"files": {"a/FooDaoImpl.java":
+                                       _gf("a/FooDaoImpl.java", "dao_impl", _DAO)},
+                             "contract": {}})
+    assert any("ERROR" in e.get("line", "") and "kaboom" in e.get("line", "")
+               for e in out["events"])
+    issues = out["open_issues"]
+    assert issues and issues[0]["severity"] == "warning"
+    assert "kaboom" in issues[0]["issue"]
