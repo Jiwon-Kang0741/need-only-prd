@@ -210,3 +210,30 @@ def check_frontend_local_imports(files: dict) -> list[dict]:
                                     "generate the missing file."),
             })
     return issues
+
+
+# log.error()/warn() immediately before `throw ... HscException` — CPMS convention
+# forbids it (the framework logs thrown exceptions). The static_check gate flags it,
+# but resolution then depends on the LLM complying within GATE_MAX_REGEN or the
+# reviewer choosing to fix it — neither is guaranteed. Removing the redundant log
+# line is a deterministic transform, so we autofix it before the reviewer runs.
+_LOG_BEFORE_THROW_RE = re.compile(
+    r'^[ \t]*log\.(?:error|warn)\s*\([^;]*\)\s*;[ \t]*\r?\n'
+    r'(?=[ \t]*throw\s+(?:new\s+)?HscException)',
+    re.MULTILINE,
+)
+
+
+def autofix_log_before_throw(files: dict) -> tuple[dict, list[str]]:
+    """Delete any `log.error/warn(...)` statement that sits immediately before a
+    `throw ... HscException`. Backend .java files only. Returns (files, logs)."""
+    logs: list[str] = []
+    for gf in files.values():
+        if not gf.get("file_path", "").endswith(".java"):
+            continue
+        content = gf["content"]
+        new_content, n = _LOG_BEFORE_THROW_RE.subn("", content)
+        if n:
+            gf["content"] = new_content
+            logs.append(f"removed {n} log-before-throw line(s) in {gf['file_path']}")
+    return files, logs

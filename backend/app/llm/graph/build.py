@@ -13,6 +13,7 @@ from app.llm.graph.mybatis_check import (
 )
 from app.llm.graph.cpms_checks import (
     check_db_seed_sql, check_frontend_local_imports, check_lv2_whitelist,
+    autofix_log_before_throw,
 )
 from app.llm.graph.tools import check_forbidden_imports
 
@@ -68,6 +69,9 @@ def mybatis_fix(state: dict) -> dict:
         if contract:
             fixed_files, dto_logs = autofix_dto_fields(fixed_files, contract)
             fix_logs = fix_logs + dto_logs
+        # Deterministic CPMS source fix: drop redundant log-before-throw lines.
+        fixed_files, log_logs = autofix_log_before_throw(fixed_files)
+        fix_logs = fix_logs + log_logs
         remaining = check_binding(fixed_files, contract)
         if contract:
             remaining = remaining + check_dto_fields(fixed_files, contract)

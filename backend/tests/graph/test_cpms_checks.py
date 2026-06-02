@@ -85,3 +85,48 @@ def test_lv2_whitelist_non_cpms_skipped():
 
 def test_lv2_whitelist_empty_skipped():
     assert check_lv2_whitelist("") == []
+
+
+# --- deterministic log-before-throw autofix (real-app finding) ---
+from app.llm.graph.cpms_checks import autofix_log_before_throw
+from app.llm.graph.tools import static_check_impl
+
+
+_SVC_WITH_LOG = (
+    "package com.cpms.edu.service;\n"
+    "public class XServiceImpl {\n"
+    "    public void search() {\n"
+    "        try {\n"
+    "            dao.selectXList(req);\n"
+    "        } catch (Exception e) {\n"
+    '            log.error("service=search, message=oops", e);\n'
+    '            throw HscException.systemError("failed", e);\n'
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_autofix_removes_log_before_throw():
+    files = {"X.java": _gf("a/XServiceImpl.java", "service_impl", "backend", _SVC_WITH_LOG)}
+    fixed, logs = autofix_log_before_throw(files)
+    content = fixed["X.java"]["content"]
+    assert "log.error" not in content              # offending log line removed
+    assert 'throw HscException.systemError("failed", e);' in content  # throw kept
+    assert logs                                    # reported what it did
+    # and the static_check no longer flags it
+    issues = static_check_impl("a/XServiceImpl.java", content, "service_impl", "backend")
+    assert not any("before throw" in i["issue"].lower() for i in issues)
+
+
+def test_autofix_log_before_throw_keeps_unrelated_logs():
+    src = ('public class Y {\n'
+           '    void m() {\n'
+           '        log.info("just info");\n'
+           '        doWork();\n'
+           '    }\n'
+           '}\n')
+    files = {"Y.java": _gf("a/Y.java", "service_impl", "backend", src)}
+    fixed, logs = autofix_log_before_throw(files)
+    assert fixed["Y.java"]["content"] == src       # no throw nearby -> untouched
+    assert not logs
