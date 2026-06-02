@@ -27,10 +27,15 @@ _BACKEND_RULES: list[tuple[re.Pattern, str]] = [
                 re.MULTILINE),
      "log.error()/warn() right before throw HscException — remove the log call; "
      "the framework logs thrown exceptions"),
-    # NOTE: the legacy "bare DAO call" rule was removed — under Phase 2's bare-naming
-    # contract (selectList/select/insert/...), `dao.selectList(...)` IS the legitimate
-    # wrapper call, so a regex can't distinguish it from a base-class misuse. DAO
-    # method existence is now enforced by contract binding (mybatis_check), not regex.
+    # Bare DAO base-class call: under suffixed naming, calling the EXACT base method
+    # name (select/selectList/insert/...) on a dao var is a misuse — wrappers are
+    # suffixed (selectXxxList). The trailing \( with no extra identifier chars after
+    # the name distinguishes `dao.selectList(` (bad) from `dao.selectXxxList(` (ok).
+    (re.compile(r'\w+(?:Dao|DaoImpl)\s*\.\s*'
+                r'(?:selectList|selectOne|select|insert|update|delete|'
+                r'batchUpdateReturnSumAffectedRows)\s*\('),
+     "Bare DAO base-class method call — these are AbstractSqlSessionDaoSupport "
+     "internals. Call the suffixed wrapper method (e.g. selectXxxList, insertXxx)."),
     # DTO field declared as a Java array — banned (breaks MyBatis/StringUtils)
     (re.compile(r'\bprivate\s+(?:String|Integer|Long|Double|Float|Boolean|int|long|'
                 r'double|float|boolean)\s*\[\]\s*\w+\s*;'),
