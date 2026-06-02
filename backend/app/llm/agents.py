@@ -17,6 +17,7 @@ from app.llm.codegen_context import (
     get_all_frontend_guide,
     get_allowed_import_prefixes,
     get_context_for_file_type,
+    get_dataguide_data_engineer_excerpt,
     get_naming_context,
     get_parent_class_fields,
     get_parent_class_source_block,
@@ -994,6 +995,199 @@ def static_check(files: list[GeneratedFile]) -> list[dict]:
 
     issues.extend(_check_dto_layer_conventions(files))
     issues.extend(_check_cross_file_consistency(files))
+    issues.extend(_check_db_seed_sql(files))
+    return issues
+
+
+def _extract_markdown_section(markdown: str, heading_prefix: str) -> str:
+    """Extract a markdown section by heading prefix (e.g., '## 7.')."""
+    if not markdown:
+        return ""
+    m = re.search(rf"^{re.escape(heading_prefix)}.*$", markdown, flags=re.MULTILINE)
+    if not m:
+        return ""
+    start = m.start()
+    tail = markdown[start:]
+    n = re.search(r"^##\s+\d+[\.\-]?\s", tail[len(m.group(0)):], flags=re.MULTILINE)
+    if not n:
+        return tail.strip()
+    end = start + len(m.group(0)) + n.start()
+    return markdown[start:end].strip()
+
+
+def _build_section7_extract_block(
+    spec_markdown: str,
+    derived_screen_ids: list[str],
+    derived_pgm_urls: list[str],
+    screen_code: str,
+) -> str:
+    """Build focused DB seed guidance extracted from spec Section 7."""
+    sec7 = _extract_markdown_section(spec_markdown, "## 7.")
+    derived_screen = ", ".join(derived_screen_ids) if derived_screen_ids else "(none)"
+    derived_urls = ", ".join(derived_pgm_urls) if derived_pgm_urls else "(none)"
+    return (
+        "\n--- SECTION_7_DB_SEED_EXTRACT (SPEC PRIORITY) ---\n"
+        f"{sec7 or '(Section 7 not found in spec; follow global DB seed rules strictly)'}\n\n"
+        "MUST APPLY THESE CONSTRAINTS TO db_init_sql:\n"
+        "- Required tables: cmn_lbl, cmn_pgm, cmn_menu, cmn_role_pgm, cmn_role_menu\n"
+        "- Optional (only when SPEC # 10.3 / Section 10.3 has data rows): cmn_class, cmn_code — if seeded, BOTH must appear\n"
+        "- Required insert order: cmn_class (if any) -> cmn_code (if any) -> cmn_lbl -> cmn_pgm -> cmn_menu -> cmn_role_pgm -> cmn_role_menu\n"
+        "- Map SPEC # 10.3 code_nm to cmn_code.code_desc when DDL has no code_nm column (SEED_STANDARD §16.4, 테이블정보.md)\n"
+        "- PostgreSQL upsert only: INSERT ... ON CONFLICT ... DO UPDATE (do not use MERGE)\n"
+        "- cmn_lbl.lang_cd default must be 'ko-KR'\n"
+        "- Include DEV_AUTO role in both cmn_role_pgm and cmn_role_menu\n"
+        "- Fallback: ROOT98 + ROOT98_YYMMDD_NNN when menu context is missing\n"
+        "- For cmn_lbl seed rows, screen label IDs must follow {화면코드}.{대컴포넌트명}.{라벨ID}\n"
+        "- Vue i18n label calls must use {대컴포넌트명}.{라벨ID}\n"
+        f"- Preferred screenId candidates from plan: {derived_screen}\n"
+        f"- Preferred pgm_url candidates from vue_page: {derived_urls}\n"
+        f"- Preferred screen_code: {screen_code or '(unknown)'}\n"
+        "--- END SECTION_7_DB_SEED_EXTRACT ---\n\n"
+    )
+
+
+def _check_db_seed_sql(files: list[GeneratedFile]) -> list[dict]:
+    """Validate db_init_sql minimum seed rules."""
+    issues: list[dict] = []
+    db_files = [gf for gf in files if gf.file_type == "db_init_sql"]
+    if not db_files:
+        return issues
+    expected_pgm_urls: list[str] = []
+    for gf in files:
+        if gf.file_type != "vue_page":
+            continue
+        fp = gf.file_path.replace("\\", "/")
+        if "/pages/" in fp and fp.endswith("/index.vue"):
+            rel = fp.split("/pages/", 1)[1].removesuffix("/index.vue").strip("/")
+            if rel:
+                expected_pgm_urls.append(f"/pages/{rel}/index.vue".lower())
+
+    for gf in db_files:
+        content = gf.content.lower()
+        required_tables = ["cmn_lbl", "cmn_pgm", "cmn_menu", "cmn_role_pgm", "cmn_role_menu"]
+        missing = [t for t in required_tables if t not in content]
+        if missing:
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": f"[STATIC] db_init_sql missing required seed tables: {', '.join(missing)}",
+                "fix_instruction": (
+                    "Include seed SQL for cmn_lbl, cmn_pgm, cmn_menu, cmn_role_pgm, cmn_role_menu "
+                    "following Section 7 DB Seed rules."
+                ),
+            })
+        else:
+            seed_order = [
+                "cmn_class",
+                "cmn_code",
+                "cmn_lbl",
+                "cmn_pgm",
+                "cmn_menu",
+                "cmn_role_pgm",
+                "cmn_role_menu",
+            ]
+            idx = {t: content.find(t) for t in seed_order}
+            if "cmn_code" in content and "cmn_class" not in content:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": "[STATIC] db_init_sql has cmn_code without cmn_class",
+                    "fix_instruction": "Insert cmn_class rows before cmn_code per SEED_STANDARD §3 / §16.4.",
+                })
+            if "cmn_class" in content and "cmn_code" not in content:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": "[STATIC] db_init_sql has cmn_class without cmn_code",
+                    "fix_instruction": "Add cmn_code rows for each class or remove cmn_class if not used.",
+                })
+            for a, b in zip(seed_order, seed_order[1:]):
+                ia, ib = idx[a], idx[b]
+                if ia != -1 and ib != -1 and ia >= ib:
+                    issues.append({
+                        "file_path": gf.file_path,
+                        "issue": "[STATIC] db_init_sql seed table order does not follow Section 7 / SEED_STANDARD",
+                        "fix_instruction": (
+                            "Reorder seed blocks as: cmn_class (if any) -> cmn_code (if any) -> "
+                            "cmn_lbl -> cmn_pgm -> cmn_menu -> cmn_role_pgm -> cmn_role_menu."
+                        ),
+                    })
+                    break
+
+        if "dev_auto" not in content:
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": "[STATIC] db_init_sql missing DEV_AUTO role mapping",
+                "fix_instruction": "Insert DEV_AUTO into both cmn_role_pgm and cmn_role_menu mappings.",
+            })
+
+        if "root98" not in content:
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": "[STATIC] db_init_sql missing ROOT98 fallback rule",
+                "fix_instruction": "Add fallback menu parent ROOT98 and ROOT98_YYMMDD_NNN menu_id generation handling.",
+            })
+
+        if "cmn_lbl" in content and "on conflict" not in content:
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": "[STATIC] db_init_sql missing PostgreSQL upsert style for cmn_lbl",
+                "fix_instruction": (
+                    "Use INSERT ... ON CONFLICT ... DO UPDATE for cmn_lbl seed rows "
+                    "(do not use MERGE)."
+                ),
+            })
+        if "cmn_lbl" in content and "ko_kr" not in content and "ko-kr" not in content:
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": "[STATIC] db_init_sql missing default lang_cd='ko-KR' for cmn_lbl",
+                "fix_instruction": (
+                    "Ensure cmn_lbl seed rows include lang_cd with default 'ko-KR' "
+                    "(legacy 'ko_KR' is also accepted by this validator)."
+                ),
+            })
+
+        label_key_pattern = re.compile(r"'[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+'")
+        if "cmn_lbl" in content and not label_key_pattern.search(gf.content):
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": "[STATIC] db_init_sql missing screen label keys for cmn_lbl",
+                "fix_instruction": (
+                    "Include screen UI label IDs in cmn_lbl with pattern "
+                    "{화면코드}.{대컴포넌트명}.{라벨ID}; Vue should call t('{대컴포넌트명}.{라벨ID}')."
+                ),
+            })
+        if "cmn_lbl" in content:
+            component_markers = (
+                "searchform.",
+                "datatable.",
+                "sumgrid.",
+                "editdialog.",
+                "detaildialog.",
+                "detailpanel.",
+                "tabpanel.",
+            )
+            has_expected_prefix = any(marker in content for marker in component_markers)
+            if not has_expected_prefix:
+                issues.append({
+                    "file_path": gf.file_path,
+                    "issue": "[STATIC] db_init_sql label prefix does not match generated screen/component names",
+                    "fix_instruction": (
+                        "Use actual generated component prefixes for cmn_lbl keys "
+                        "(e.g. SearchForm.*, DataTable.*, SumGrid.*), "
+                        "not inferred component names."
+                    ),
+                })
+
+        if expected_pgm_urls and not any(url in content for url in expected_pgm_urls):
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": (
+                    "[STATIC] db_init_sql missing cmn_pgm.pgm_url derived from actual vue_page path"
+                ),
+                "fix_instruction": (
+                    "Set cmn_pgm.pgm_url using vue_page path rule: "
+                    "src/pages/{module}/{category}/{screenId}/index.vue -> /pages/{module}/{category}/{screenId}/index.vue."
+                ),
+            })
+
     return issues
 
 
@@ -2373,6 +2567,17 @@ def _remove_manual_audit_fields(content: str) -> str:
 
 class PlannerAgent:
     role = "planner"
+    _LV2_WHITELIST = {"EDU", "ACT", "MON", "PRA", "CNR", "SYS", "CMN", "TOP"}
+    _MODULE_TO_LV2 = {
+        "edu": "EDU",
+        "act": "ACT",
+        "mon": "MON",
+        "pra": "PRA",
+        "cnr": "CNR",
+        "sys": "SYS",
+        "cmn": "CMN",
+        "top": "TOP",
+    }
 
     async def execute(self, ctx: SharedContext) -> CodeGenPlan:
         naming = get_naming_context()
@@ -2394,7 +2599,7 @@ class PlannerAgent:
             "- vue_page:       index.vue — orchestrator ONLY (ContentHeader + provide/inject + import children). NO inline SearchForm/DataTable/SumGrid logic.\n"
             "- vue_search_form: SearchForm component (.vue) — search form UI + defineExpose + watch/setFieldValue\n"
             "- vue_data_table:  DataTable component (.vue) — grid display + virtual scroll + date preformat\n"
-            "- vue_data_table_utils: utils/index.ts — getColumns, getRows helper functions for DataTable\n"
+            "- vue_data_table_utils: utils/index.ts — getColumns(t), getRows helper functions for DataTable\n"
             "- vue_sum_grid:    SumGrid component (.vue) — CONDITIONAL, see rules below\n"
             "- vue_api:         API module (.ts) — axios calls, parameter conversion\n"
             "- vue_scss:        Page-level SCSS (.scss) — page layout styles\n"
@@ -2475,8 +2680,232 @@ class PlannerAgent:
             screen_code=data.get("screen_code", ""),
             files=[CodeGenPlanFile(**f) for f in data.get("files", [])],
         )
+        PlannerAgent._normalize_plan_with_spec(ctx.spec_markdown, plan)
+        PlannerAgent._enforce_lv2_whitelist(ctx.spec_markdown, plan)
         ctx.plan = plan
         return plan
+
+    @staticmethod
+    def _normalize_plan_with_spec(spec_markdown: str, plan: CodeGenPlan) -> None:
+        """spec에 명시된 화면명/화면코드를 우선 적용해 plan 경로를 정규화한다."""
+        desired_screen_code = PlannerAgent._extract_screen_code(spec_markdown)
+        desired_pascal = PlannerAgent._extract_screen_name_pascal(spec_markdown)
+        desired_camel = PlannerAgent._pascal_to_camel(desired_pascal) if desired_pascal else None
+
+        current_pascal = PlannerAgent._infer_plan_pascal_name(plan)
+        current_camel = PlannerAgent._infer_plan_camel_screen_id(plan)
+
+        if desired_screen_code:
+            plan.screen_code = desired_screen_code
+
+        # 화면명/경로가 이미 맞으면 그대로 둔다.
+        if not desired_pascal or (
+            current_pascal == desired_pascal and (not current_camel or current_camel == desired_camel)
+        ):
+            return
+
+        def _rewrite_path(path: str) -> str:
+            new_path = path
+            if current_pascal and desired_pascal:
+                new_path = new_path.replace(current_pascal, desired_pascal)
+            if current_camel and desired_camel and ("src/pages/" in new_path or "src/api/pages/" in new_path):
+                new_path = new_path.replace(current_camel, desired_camel)
+            return new_path
+
+        for f in plan.files:
+            f.file_path = _rewrite_path(f.file_path)
+            f.depends_on = [_rewrite_path(dep) for dep in f.depends_on]
+
+    @staticmethod
+    def _extract_screen_code(spec_markdown: str) -> str | None:
+        """SSOT: spec.md §1 Screen Metadata — | program_id | VALUE | (화면코드와 동일)."""
+        m = re.search(r"\|\s*program_id\s*\|\s*([A-Z][A-Z0-9_]*)\s*\|", spec_markdown)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    @staticmethod
+    def _extract_screen_name_pascal(spec_markdown: str) -> str | None:
+        """SSOT: spec.md §1 Screen Metadata — | screen_id | Value | (Vue 폴더명 PascalCase)."""
+        m = re.search(r"\|\s*screen_id\s*\|\s*([A-Z][A-Za-z0-9]+)\s*\|", spec_markdown)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    @staticmethod
+    def _infer_plan_pascal_name(plan: CodeGenPlan) -> str | None:
+        for f in plan.files:
+            base = f.file_path.replace("\\", "/").split("/")[-1]
+            for suffix in ("ReqDto.java", "ResDto.java", "DaoImpl.java", "ServiceImpl.java", "Mapper.xml"):
+                if base.endswith(suffix):
+                    return base[: -len(suffix)]
+        return None
+
+    @staticmethod
+    def _infer_plan_camel_screen_id(plan: CodeGenPlan) -> str | None:
+        for f in plan.files:
+            fp = f.file_path.replace("\\", "/")
+            if f.file_type == "vue_page" and "/pages/" in fp and fp.endswith("/index.vue"):
+                rel = fp.split("/pages/", 1)[1].removesuffix("/index.vue").strip("/")
+                parts = rel.split("/")
+                if parts:
+                    return parts[-1]
+        return None
+
+    @staticmethod
+    def _pascal_to_camel(value: str | None) -> str | None:
+        if not value:
+            return None
+        return value[:1].lower() + value[1:]
+
+    @staticmethod
+    def _extract_lv2_from_screen_code(screen_code: str | None) -> str | None:
+        if not screen_code:
+            return None
+        m = re.match(r"^CPMS([A-Z]{3})[A-Z0-9_]*$", screen_code.strip().upper())
+        if not m:
+            return None
+        return m.group(1)
+
+    @staticmethod
+    def _extract_lv2_from_pascal(screen_name: str | None) -> str | None:
+        if not screen_name:
+            return None
+        m = re.match(r"^Cpms([A-Z][a-z]{2}).*$", screen_name.strip())
+        if not m:
+            return None
+        return m.group(1).upper()
+
+    @staticmethod
+    def _replace_lv2_in_screen_code(screen_code: str, target_lv2: str) -> str:
+        code = (screen_code or "").strip().upper()
+        if code.startswith("CPMS") and len(code) >= 7:
+            return f"CPMS{target_lv2}{code[7:]}"
+        return code
+
+    @staticmethod
+    def _replace_lv2_in_pascal(screen_name: str, target_lv2: str) -> str:
+        tokens = re.findall(r"[A-Z][a-z0-9]*|[A-Z]+(?![a-z])", screen_name or "")
+        if len(tokens) < 2 or tokens[0] != "Cpms":
+            return screen_name
+        pascal_lv2 = target_lv2[:1] + target_lv2[1:].lower()
+        tokens[1] = pascal_lv2
+        return "".join(tokens)
+
+    @staticmethod
+    def _infer_expected_lv2(spec_markdown: str, plan: CodeGenPlan) -> str | None:
+        spec_screen_code = PlannerAgent._extract_screen_code(spec_markdown)
+        lv2_from_spec = PlannerAgent._extract_lv2_from_screen_code(spec_screen_code)
+        if lv2_from_spec in PlannerAgent._LV2_WHITELIST:
+            return lv2_from_spec
+
+        module_lv2 = PlannerAgent._MODULE_TO_LV2.get((plan.module_code or "").strip().lower())
+        if module_lv2:
+            return module_lv2
+
+        for f in plan.files:
+            fp = f.file_path.replace("\\", "/")
+            if "/pages/" in fp:
+                rel = fp.split("/pages/", 1)[1].strip("/")
+                parts = rel.split("/")
+                if len(parts) >= 3:
+                    inferred = PlannerAgent._MODULE_TO_LV2.get(parts[0].lower())
+                    if inferred:
+                        return inferred
+        return None
+
+    @staticmethod
+    def _rewrite_plan_names(
+        plan: CodeGenPlan,
+        old_pascal: str | None,
+        new_pascal: str | None,
+        old_camel: str | None,
+        new_camel: str | None,
+    ) -> None:
+        if not new_pascal and not new_camel:
+            return
+
+        def _rewrite_path(path: str) -> str:
+            new_path = path
+            if old_pascal and new_pascal:
+                new_path = new_path.replace(old_pascal, new_pascal)
+            if old_camel and new_camel and ("src/pages/" in new_path or "src/api/pages/" in new_path):
+                new_path = new_path.replace(old_camel, new_camel)
+            return new_path
+
+        for f in plan.files:
+            f.file_path = _rewrite_path(f.file_path)
+            f.depends_on = [_rewrite_path(dep) for dep in f.depends_on]
+
+    @staticmethod
+    def _enforce_lv2_whitelist(spec_markdown: str, plan: CodeGenPlan) -> None:
+        current_lv2 = PlannerAgent._extract_lv2_from_screen_code(plan.screen_code)
+        if current_lv2 in PlannerAgent._LV2_WHITELIST:
+            return
+
+        expected_lv2 = PlannerAgent._infer_expected_lv2(spec_markdown, plan)
+        current_pascal = PlannerAgent._infer_plan_pascal_name(plan)
+        current_camel = PlannerAgent._infer_plan_camel_screen_id(plan)
+        pascal_lv2 = PlannerAgent._extract_lv2_from_pascal(current_pascal)
+
+        if pascal_lv2 in PlannerAgent._LV2_WHITELIST and current_pascal:
+            plan.screen_code = current_pascal.upper()
+            return
+
+        if expected_lv2:
+            corrected = False
+            if current_pascal:
+                corrected_pascal = PlannerAgent._replace_lv2_in_pascal(current_pascal, expected_lv2)
+                corrected_camel = PlannerAgent._pascal_to_camel(corrected_pascal)
+                plan.screen_code = corrected_pascal.upper()
+                PlannerAgent._rewrite_plan_names(
+                    plan,
+                    current_pascal,
+                    corrected_pascal,
+                    current_camel,
+                    corrected_camel,
+                )
+                corrected = True
+            elif current_camel and current_camel.startswith("cpms"):
+                # vue_page 경로만 있는 경우 camel -> pascal로 승격 후 LV2 보정
+                guessed_pascal = current_camel[:1].upper() + current_camel[1:]
+                corrected_pascal = PlannerAgent._replace_lv2_in_pascal(guessed_pascal, expected_lv2)
+                corrected_camel = PlannerAgent._pascal_to_camel(corrected_pascal)
+                plan.screen_code = corrected_pascal.upper()
+                PlannerAgent._rewrite_plan_names(
+                    plan,
+                    guessed_pascal,
+                    corrected_pascal,
+                    current_camel,
+                    corrected_camel,
+                )
+                corrected = True
+            elif plan.screen_code and plan.screen_code.strip().upper().startswith("CPMS"):
+                # 최소 교정: pascal 파일명이 없을 때는 screen_code LV2만 교정
+                code = plan.screen_code.strip().upper()
+                if len(code) >= 7:
+                    plan.screen_code = f"CPMS{expected_lv2}{code[7:]}"
+                    corrected = True
+
+            if PlannerAgent._extract_lv2_from_screen_code(plan.screen_code) in PlannerAgent._LV2_WHITELIST:
+                return
+
+            logger.warning(
+                "LV2 whitelist correction could not be finalized (expected=%s, corrected=%s, screen_code=%s). "
+                "Proceeding without hard-fail.",
+                expected_lv2,
+                corrected,
+                plan.screen_code,
+            )
+            return
+
+        # expected_lv2를 추론할 근거가 없으면 생성 중단 대신 경고만 남기고 진행
+        logger.warning(
+            "Skip LV2 hard-fail: unable to infer expected LV2 for screen_code=%s module_code=%s",
+            plan.screen_code,
+            plan.module_code,
+        )
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -2493,6 +2922,23 @@ class DataEngineerAgent:
         assert ctx.plan is not None
         my_files = self._get_my_files(ctx.plan)
         results: list[GeneratedFile] = []
+        plan_files = ctx.plan.files
+
+        # Derive pgm_url candidates from planned vue_page paths:
+        # src/pages/{module}/{category}/{screenId}/index.vue -> /pages/{module}/{category}/{screenId}/index.vue
+        derived_pgm_urls: list[str] = []
+        derived_screen_ids: list[str] = []
+        for f in plan_files:
+            if f.file_type != "vue_page":
+                continue
+            fp = f.file_path.replace("\\", "/")
+            if "/pages/" in fp and fp.endswith("/index.vue"):
+                rel = fp.split("/pages/", 1)[1].removesuffix("/index.vue").strip("/")
+                if rel:
+                    derived_pgm_urls.append(f"/pages/{rel}/index.vue")
+                    screen_id = rel.split("/")[-1].strip()
+                    if screen_id:
+                        derived_screen_ids.append(screen_id)
 
         table_info = get_table_info()
         table_info_block = (
@@ -2503,17 +2949,37 @@ class DataEngineerAgent:
             f"already exists in the list above. If it does, DO NOT create a new table — instead,\n"
             f"write your queries directly against the existing table using its exact column names.\n"
         ) if table_info else ""
+        section7_ctx = _build_section7_extract_block(
+            ctx.spec_markdown,
+            derived_screen_ids,
+            derived_pgm_urls,
+            ctx.plan.screen_code,
+        )
+
+        dataguide_excerpt = get_dataguide_data_engineer_excerpt()
+        dataguide_block = (
+            "\n--- AUTHORITATIVE: pfy_prompt/DataGuide (하단 발췌) — 업무 테이블 DDL·Audit·Soft Delete·FK 배치·"
+            "cmn_* 시드 순서·pgm_url·lbl_cd 규칙의 1차 근거. 아래 발췌와 충돌 시 발췌를 우선한다. ---\n"
+            f"{dataguide_excerpt}\n"
+            "--- END DataGuide excerpt ---\n\n"
+        ) if dataguide_excerpt else ""
 
         system = (
             "You are a Data Engineer specializing in database schema design and TypeScript type definitions.\n"
-            "You create DB init SQL (PostgreSQL) and TypeScript types that mirror backend DTOs.\n\n"
+            "You create DB init SQL (PostgreSQL) and TypeScript types that mirror backend DTOs.\n"
+            "The user message begins with a mandatory excerpt from pfy_prompt/DataGuide (lower sections): "
+            "follow it for table DDL shape (PK/FK via ALTER at end of file), audit columns, del_yn CHAR(1), "
+            "and for db_init_sql the cmn_* seed order, upsert style, pgm_url and lbl_cd rules.\n\n"
             "RULES:\n"
             "- Output ONLY the file content. No markdown fences, no explanations.\n"
             "- SQL: PostgreSQL syntax ONLY. Use snake_case for table/column names.\n"
             "- Use CREATE TABLE IF NOT EXISTS.\n"
             "- Auto-increment PK: use SERIAL or BIGSERIAL (NOT AUTO_INCREMENT).\n"
-            "- Boolean: use BOOLEAN (NOT TINYINT(1)).\n"
+            "- Boolean: use BOOLEAN (NOT TINYINT(1)) for generic boolean columns.\n"
+            "- CPMS soft-delete column `del_yn`: MUST be CHAR(1) with values 'Y'/'N' only (NOT BOOLEAN). Align with DATA_STANDARD §6 / §6.1 and spec logical_type yn_flag.\n"
             "- Timestamps: use TIMESTAMP or TIMESTAMPTZ (NOT DATETIME).\n"
+            "- Business date/time columns (e.g. reg_dt, occurrence_dt): use TIMESTAMPTZ or DATE per DATA_STANDARD §3.5; do NOT model them as varchar(255) display-only strings unless spec explicitly marks [NEEDS CLARIFICATION] legacy.\n"
+            "- Code display-name fields (*_nm): do NOT add physical *_nm columns to cptb_* CREATE TABLE in db_init_sql; fill *_nm only in SELECT via join/subquery to code/master data per DATA_STANDARD §2.4 and spec §11.\n"
             "- Long text: use TEXT (NOT LONGTEXT or MEDIUMTEXT).\n"
             "- Default timestamp: use NOW() or CURRENT_TIMESTAMP.\n"
             "- String functions: use COALESCE (NOT IFNULL), TO_CHAR for date formatting (NOT DATE_FORMAT).\n"
@@ -2523,13 +2989,68 @@ class DataEngineerAgent:
             "- TypeScript: Use camelCase for fields. Export interfaces matching backend DTO fields.\n"
             "- Include all fields from the spec's Domain Model section.\n"
             "- If the required table matches an existing PFY table, reuse it instead of creating a new one.\n"
+            "- For db_init_sql, ALWAYS follow Section 7 DB Seed Data rules from the spec.\n"
+            "- Required seed tables: cmn_lbl, cmn_pgm, cmn_menu, cmn_role_pgm, cmn_role_menu "
+            "(add cmn_class + cmn_code only when SPEC # 10.3 has rows; then both are required before cmn_lbl).\n"
+            "- Required insert order: cmn_class (if any) -> cmn_code (if any) -> cmn_lbl -> cmn_pgm -> cmn_menu -> cmn_role_pgm -> cmn_role_menu.\n"
+            "- Include DEV_AUTO role mapping in BOTH cmn_role_pgm and cmn_role_menu (no duplicates).\n"
+            "- For cmn_lbl seed rows, set lang_cd default to 'ko-KR'.\n"
+            "- If menu context is missing, use fallback p_menu_id='ROOT98' and menu_id pattern ROOT98_YYMMDD_NNN.\n"
+            "- Use PostgreSQL-safe upsert (INSERT ... ON CONFLICT ... DO UPDATE) for seed updates.\n"
+            "- Keep ID reference consistency: cmn_menu.lbl_cd == menu_id, cmn_pgm.lbl_cd == menu_id, cmn_lbl.lbl_cd exists.\n"
+            "- For screen UI labels, include cmn_lbl rows using lbl_cd pattern "
+            "{화면코드}.{대컴포넌트명}.{라벨ID}.\n"
+            "- Ensure Vue labels use i18n key calls t('{대컴포넌트명}.{라벨ID}').\n"
         )
 
         for file_entry in my_files:
             table_ctx = table_info_block if file_entry.file_type == "db_init_sql" else ""
+            pgm_url_ctx = ""
+            sec7_ctx = section7_ctx if file_entry.file_type == "db_init_sql" else ""
+            if file_entry.file_type == "db_init_sql":
+                if derived_pgm_urls:
+                    pgm_url_ctx = (
+                        "\n--- DERIVED PGM_URL CONTEXT (from planned vue_page paths) ---\n"
+                        f"Primary pgm_url: {derived_pgm_urls[0]}\n"
+                        f"All candidates: {', '.join(derived_pgm_urls)}\n"
+                        "RULE: cmn_pgm.pgm_url MUST be derived from actual vue_page path "
+                        "(src/pages/{module}/{category}/{screenId}/index.vue -> /pages/{module}/{category}/{screenId}/index.vue).\n"
+                        "--- END DERIVED PGM_URL CONTEXT ---\n\n"
+                    )
+                else:
+                    pgm_url_ctx = (
+                        "\n--- DERIVED PGM_URL CONTEXT ---\n"
+                        "No vue_page path found in plan. Infer pgm_url strictly using the rule:\n"
+                        "src/pages/{module}/{category}/{screenId}/index.vue -> /pages/{module}/{category}/{screenId}/index.vue\n"
+                        "--- END DERIVED PGM_URL CONTEXT ---\n\n"
+                    )
+                label_ctx = (
+                    "--- SCREEN LABEL CONTEXT ---\n"
+                    "Use screen label IDs for cmn_lbl with pattern:\n"
+                    "{화면코드}.{대컴포넌트명}.{라벨ID}\n"
+                    "IMPORTANT: {대컴포넌트명} prefix must use actual generated component/folder names, "
+                    "not inferred names.\n"
+                    "Set cmn_lbl.lang_cd default to 'ko-KR'.\n"
+                    f"Derived screen_id candidates from vue_page: {', '.join(derived_screen_ids) if derived_screen_ids else '(none)'}\n"
+                    "Example when screen_id=cpmsMonRiskLst:\n"
+                    "- CPMSMONRISKLST.SearchForm.searchDate\n"
+                    "- CPMSMONRISKLST.DataTable.colRiskStatus\n"
+                    "Vue code must call t('SearchForm.searchDate'), t('DataTable.colRiskStatus'), etc. "
+                    "ONLY the {대컴포넌트명}.{라벨ID} suffix — NEVER pass the full cmn_lbl.lbl_cd string "
+                    "(e.g. NEVER t('CPMSMONRISKLST.DataTable.colRiskStatus')) because the screen root "
+                    "already applies the program/screen scope (avoids double prefix).\n"
+                    "cmn_lbl upsert must use PostgreSQL INSERT ... ON CONFLICT ... DO UPDATE.\n"
+                    "--- END SCREEN LABEL CONTEXT ---\n\n"
+                )
+            else:
+                label_ctx = ""
             user = (
+                f"{dataguide_block}"
                 f"Specification:\n{ctx.spec_markdown}\n\n"
+                f"{sec7_ctx}"
                 f"{table_ctx}"
+                f"{pgm_url_ctx}"
+                f"{label_ctx}"
                 f"Generate: {file_entry.file_path}\nType: {file_entry.file_type}\nDescription: {file_entry.description}\n"
             )
 
@@ -3866,7 +4387,8 @@ class FrontendEngineerAgent:
             "- watch(() => searchParams.value?.field, (newVal) => { if (newVal !== undefined && searchFormRef.value?.form) searchFormRef.value.form.setFieldValue('field', newVal ?? '') })\n"
             "- defineExpose({ searchFormRef })\n"
             "- emit('search') on search button click\n"
-            "- For common codes: const commonCodeStore = useCommonCodeStore(); await commonCodeStore.loadMulti([...]) in onMounted; options via computed\n"
+            "- For common codes on SearchForm Selects: DEFAULT for plain cmn_code / SPEC #10.3 static cls_id (no Query id, no customParam): const commonCodeStore = useCommonCodeStore(); in onMounted use await commonCodeStore.ensureLoaded([...all cls_id strings EXACTLY as spec SearchFormField.name / #10.3 class_cd...], 'Y'); for each field use computed(() => commonCodeStore.options('<same_cls_id>', true, '전체', '') ?? []) — map store {name,value} to Select optionLabel/optionValue if needed.\n"
+            "- Use ensureLoadedMulti or loadMulti ONLY when spec §11 or the screen needs Query-typed combos, whereClause, or customParam per FrontendGuide/11_공통코드_로딩.md §3–4; do NOT use loadMulti for simple static code-only lists.\n"
             "- Correct ref path: searchFormRef.value.form.setFieldValue (NOT .value.value.form)\n"
             "- <style scoped lang=\"scss\" src=\"./{PascalName}SearchForm.scss\"></style>\n\n"
             "TEMPLATE LAYOUT (CRITICAL — fields must be horizontally arranged, NOT stacked vertically):\n"
@@ -3898,13 +4420,16 @@ class FrontendEngineerAgent:
             "SECTION 2: The paired .scss file content\n\n"
             "VUE FILE REQUIREMENTS:\n"
             "- <script setup lang=\"ts\">\n"
+            "- import { computed } from 'vue'\n"
             "- CRITICAL: Import { DataTable } from '@/components/common/dataTable2'  (named export, NOT default import from DataTable2.vue)\n"
             "- DO NOT import Column from 'primevue/column' — DataTable2 wrapper manages columns internally via :columns prop\n"
             "- DO NOT use <Column> child elements inside <DataTable> — they are IGNORED by DataTable2 wrapper\n"
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- Import { getColumns, getRows } from './utils'\n"
+            "- import { useI18n } from 'vue-i18n'\n"
+            "- const { t } = useI18n()\n"
+            "- const columns = computed(() => getColumns(t))  — pass t into utils; NEVER t('PROGRAMID.DataTable.xxx') (double prefix)\n"
             "- Props: fetchedMainData array, loading state, totalRecords?, rows?, first?\n"
-            "- const columns = getColumns()  — returns TableColumn[] from utils\n"
             "- const displayRows = computed(() => getRows(props.fetchedMainData))  — pre-formatted rows\n"
             "- MUST pass :columns=\"columns\" prop — this is how DataTable2 renders column headers\n"
             "- MUST pass title prop — shown in DataTableHeader above the table\n"
@@ -3941,23 +4466,26 @@ class FrontendEngineerAgent:
             "- Import { TableColumn } from '@/components/common/dataTable2/types'  — MUST use this type, do NOT define custom column types\n"
             "- Import ResDto types from '@/api/pages/{module}/{category}/types'\n"
             "- Export DisplayRow type: ResDto & { fieldFormatted?: string } for pre-formatted date/number fields\n"
-            "- Export getColumns(): TableColumn[]  — MUST use TableColumn type\n"
+            "- Export getColumns(t: (key: string) => string): TableColumn[]  — MUST take vue-i18n `t` as parameter; "
+            "do NOT call useI18n() inside this file\n"
+            "- Every column header MUST be t('DataTable.{labelId}') ONLY — NEVER t('{SCREENCODE}.DataTable.{labelId}') "
+            "(cmn_lbl uses full lbl_cd; Vue applies screen scope separately — double prefix breaks i18n)\n"
             "- Export getRows(data): DisplayRow[]  — pre-format dates and numbers here\n\n"
             "TableColumn SHAPE (all fields):\n"
             "  objectId: string    — REQUIRED, use same value as field (e.g. 'userId')\n"
             "  field: string       — data field name\n"
-            "  header: string      — column header label\n"
+            "  header: string      — MUST be result of t('DataTable.xxx'), not raw Korean\n"
             "  width?: string      — '140px' format (NOT minWidth!)\n"
             "  columnClass?: string — header alignment: 'left' | 'center' | 'right'\n"
             "  rowClass?: string   — body cell alignment: 'left' | 'center' | 'right'\n"
             "  visible?: boolean   — REQUIRED true — column is HIDDEN if visible is not true\n"
             "  frozen?: boolean    — left-pinned column\n"
             "  required?: boolean  — marks column as required\n\n"
-            "EXAMPLE getColumns():\n"
-            "export const getColumns = (): TableColumn[] => [\n"
-            "  { objectId: 'userId', field: 'userId', header: '사용자ID', width: '140px', frozen: true, columnClass: 'left', rowClass: 'left', visible: true },\n"
-            "  { objectId: 'userName', field: 'userName', header: '사용자명', width: '140px', columnClass: 'left', rowClass: 'left', visible: true },\n"
-            "  { objectId: 'eduDateFormatted', field: 'eduDateFormatted', header: '교육일자', width: '130px', columnClass: 'center', rowClass: 'center', visible: true },\n"
+            "EXAMPLE getColumns(t):\n"
+            "export const getColumns = (t: (key: string) => string): TableColumn[] => [\n"
+            "  { objectId: 'userId', field: 'userId', header: t('DataTable.userId'), width: '140px', frozen: true, columnClass: 'left', rowClass: 'left', visible: true },\n"
+            "  { objectId: 'userName', field: 'userName', header: t('DataTable.userName'), width: '140px', columnClass: 'left', rowClass: 'left', visible: true },\n"
+            "  { objectId: 'eduDateFormatted', field: 'eduDateFormatted', header: t('DataTable.eduDate'), width: '130px', columnClass: 'center', rowClass: 'center', visible: true },\n"
             "];\n\n"
             "EXAMPLE getRows() with date formatting:\n"
             "const formatDate = (v?: string | null): string => { if (!v) return ''; const p = v.replaceAll('-','').slice(0,8); return p.length===8 ? `${p.slice(0,4)}-${p.slice(4,6)}-${p.slice(6,8)}` : v; };\n"
@@ -4078,7 +4606,7 @@ class FrontendEngineerAgent:
             "- DO NOT access ref as .value.value.form — correct path is .value.form.\n"
             "- DO NOT use alert()/confirm()/prompt() — use Toast and ConfirmDialog.\n"
             "- DO NOT define UPPER_SNAKE_CASE TypeScript fields — match backend camelCase DTO field names exactly.\n"
-            "- DO NOT forget await on commonCodeStore.loadMulti() in onMounted.\n"
+            "- DO NOT forget await on commonCodeStore.ensureLoaded / ensureLoadedMulti / loadMulti in onMounted (use ensureLoaded for static #10.3 codes unless Query/customParam is required).\n"
             "- DO NOT define SelectBox options without computed() wrapper.\n"
             "- DO NOT omit GPU acceleration CSS — add will-change: background-color on tr, contain: layout style on td.\n"
             "- DO NOT apply hover styles to selected rows — use :hover:not(.p-datatable-row-selected).\n"
@@ -4189,6 +4717,14 @@ class BackendQAAgent:
             "- All fields from the spec's domain model are present in DTOs\n"
             "- All API endpoints described in the spec have corresponding @ServiceId methods\n"
             "- Search conditions from the spec are reflected in Mapper XML queries\n\n"
+            "DB INIT SQL COMPLIANCE (when db_init_sql exists):\n"
+            "- Section 7 DB Seed Data rules are fully reflected\n"
+            "- Required tables exist: cmn_lbl, cmn_pgm, cmn_menu, cmn_role_pgm, cmn_role_menu "
+            "(if SPEC # 10.3 lists mockup-derived codes: cmn_class and cmn_code must exist and precede cmn_lbl)\n"
+            "- Insert order is correct: cmn_class (if any) -> cmn_code (if any) -> cmn_lbl -> cmn_pgm -> cmn_menu -> cmn_role_pgm -> cmn_role_menu\n"
+            "- DEV_AUTO is mapped in cmn_role_pgm and cmn_role_menu\n"
+            "- ROOT98 fallback rule exists for missing menu mapping\n"
+            "- PostgreSQL-safe SQL syntax only (no MySQL-only syntax)\n\n"
             "CODING GUIDE COMPLIANCE:\n"
             "- DTO class names MUST include full screen name prefix (e.g., CpmsEduRegLstReqDto, NOT EduRegLstReqDto). The class name MUST exactly match the file name.\n"
             "- @ServiceId format: @ServiceId(\"ScreenCode/methodName\")\n"
@@ -4379,6 +4915,10 @@ class FixAgent:
                 "You are an expert developer applying QA fixes to source code.\n"
                 "Output ONLY the complete fixed file content. No markdown fences, no explanations.\n"
                 "Apply ALL the fixes listed below while preserving the overall structure and logic.\n\n"
+                "If the target file is db_init_sql, preserve PostgreSQL syntax and enforce Section 7 DB Seed rules:\n"
+                "- cmn_lbl/cmn_pgm/cmn_menu/cmn_role_pgm/cmn_role_menu present\n"
+                "- DEV_AUTO role mapping included\n"
+                "- ROOT98 fallback handling included\n\n"
                 "╔══════════════════════════════════════════════════════════╗\n"
                 "║  #1 RULE: CROSS-FILE COMPILE CONSISTENCY                ║\n"
                 "║  You MUST check DTO + DAO + Service together.           ║\n"

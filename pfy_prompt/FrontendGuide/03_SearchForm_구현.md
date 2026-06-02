@@ -4,6 +4,17 @@
 
 검색 조건을 입력받는 **SearchForm 컴포넌트**를 구현합니다.
 
+## 🏷️ 라벨 ID / i18n 규칙 (필수)
+
+- 화면 UI 라벨 ID는 `{대컴포넌트명}.{라벨ID}` 형식을 사용합니다.
+  - 예: `SearchForm.searchDate`
+- 화면 라벨은 반드시 `t('{대컴포넌트명}.{라벨ID}')`로 호출합니다.
+- `<SearchFormLabel>조회일자</SearchFormLabel>`처럼 하드코딩하지 말고 아래처럼 사용합니다.
+
+```vue
+<SearchFormLabel>{{ t('SearchForm.searchDate') }}</SearchFormLabel>
+```
+
 ## 📝 Step 1: 기본 구조 생성
 
 ### 1.1 파일 생성
@@ -738,6 +749,8 @@ defineExpose({
 - [ ] searchFormRef ref 생성
 - [ ] searchParams inject
 - [ ] defineExpose({ searchFormRef })
+- [ ] 라벨 ID 규칙 `{대컴포넌트명}.{라벨ID}` 적용
+- [ ] SearchFormLabel에 `t('{대컴포넌트명}.{라벨ID}')` 적용
 
 ### 공통코드
 - [ ] onMounted에서 commonCodeStore.loadMulti 호출

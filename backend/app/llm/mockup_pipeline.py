@@ -26,10 +26,52 @@ def _extract_json(text: str) -> dict | list:
 
 
 class MockupPipeline:
+    @staticmethod
+    def _has_required_label_rules(spec_markdown: str) -> bool:
+        """spec에 화면 라벨 규칙 핵심 항목이 포함되었는지 점검."""
+        if not spec_markdown:
+            return False
+        text = spec_markdown.lower()
+        checks = [
+            "{화면코드}.{대컴포넌트명}.{라벨ID}" in spec_markdown
+            or "{화면코드}.{대컴포넌트명}.{라벨id}" in spec_markdown,
+            "{대컴포넌트명}.{라벨ID}" in spec_markdown
+            or "{대컴포넌트명}.{라벨id}" in spec_markdown,
+            "t('{대컴포넌트명}.{라벨id}')" in text or "t('{대컴포넌트명}.{라벨ID}')" in spec_markdown or "t('" in spec_markdown,
+            "cmn_lbl" in text and "on conflict" in text,
+        ]
+        return all(checks)
+
+    async def _regenerate_spec_with_label_guard(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        draft_spec: str,
+    ) -> str:
+        """라벨 규칙 누락 시 보정 재생성(1회)."""
+        repair_user = (
+            f"{user_prompt}\n\n"
+            f"--- DRAFT SPEC (보정 대상) ---\n"
+            f"{draft_spec}\n"
+            f"--- END DRAFT ---\n\n"
+            f"위 초안에서 누락된 항목을 반드시 보정하세요:\n"
+            f"1) cmn_lbl 화면 라벨 ID 규칙: {{화면코드}}.{{대컴포넌트명}}.{{라벨ID}}\n"
+            f"2) Vue 라벨 호출: t('{{대컴포넌트명}}.{{라벨ID}}')\n"
+            f"3) cmn_lbl 생성 규칙: 메뉴 라벨 + 화면 UI 라벨 모두 ON CONFLICT upsert\n"
+            f"반드시 spec.md 본문에 명시적으로 포함해 다시 출력하세요."
+        )
+        return await mockup_client.complete(system_prompt, repair_user, stream=False)
+
     # Step 1: AI Generate
-    async def ai_generate(self, title: str, page_type: str, description: str | None = None) -> dict:
+    async def ai_generate(
+        self,
+        title: str,
+        page_type: str,
+        description: str | None = None,
+        menu_context: dict | None = None,
+    ) -> dict:
         """화면 제목 → 필드/컬럼/Mock 설계 JSON."""
-        system, user = ai_generate_prompt(page_type, title, description)
+        system, user = ai_generate_prompt(page_type, title, description, menu_context)
         response = await mockup_client.complete(system, user, stream=False)
         return _extract_json(response)
 
@@ -54,9 +96,16 @@ class MockupPipeline:
         return annotated_code, annotations, markdown
 
     # Step 4: AI Interview
-    async def ai_interview(self, title: str, annotation_markdown: str | None = None, vue_source: str | None = None, spec_json: dict | None = None) -> list[dict]:
+    async def ai_interview(
+        self,
+        title: str,
+        annotation_markdown: str | None = None,
+        vue_source: str | None = None,
+        spec_json: dict | None = None,
+        menu_context: dict | None = None,
+    ) -> list[dict]:
         """주석 + MockUp → 인터뷰 질문 10개."""
-        system, user = interview_prompt(title, annotation_markdown, vue_source, spec_json)
+        system, user = interview_prompt(title, annotation_markdown, vue_source, spec_json, menu_context)
         response = await mockup_client.complete(system, user, stream=False)
         result = _extract_json(response)
         questions = result.get("questions", result) if isinstance(result, dict) else result
@@ -79,20 +128,34 @@ class MockupPipeline:
         return normalized
 
     # Step 5: Interview Result
-    async def interview_result(self, title: str, annotation_markdown: str, vue_source: str | None = None, questions: list[dict] | None = None, answers: list[dict] | None = None, raw_interview_text: str | None = None, screen_name: str = "") -> tuple[str, str]:
+    async def interview_result(
+        self,
+        title: str,
+        annotation_markdown: str,
+        vue_source: str | None = None,
+        questions: list[dict] | None = None,
+        answers: list[dict] | None = None,
+        raw_interview_text: str | None = None,
+        screen_name: str = "",
+        menu_context: dict | None = None,
+    ) -> tuple[str, str]:
         """인터뷰 답변 → (interview_note_md, spec_markdown)."""
         if raw_interview_text and raw_interview_text.strip():
             sys_ext, usr_ext = extract_structured_data_prompt(raw_interview_text)
             ext_response = await mockup_client.complete(sys_ext, usr_ext, stream=False)
             interview_data = _extract_json(ext_response)
-            sys_note, usr_note = interview_notes_prompt(title, [{"raw_text": raw_interview_text}], screen_name=screen_name)
+            sys_note, usr_note = interview_notes_prompt(
+                title, [{"raw_text": raw_interview_text}], screen_name=screen_name, menu_context=menu_context
+            )
             interview_note_md = await mockup_client.complete(sys_note, usr_note, stream=False)
         else:
             qa_pairs = []
             if questions and answers:
                 for q, a in zip(questions, answers):
                     qa_pairs.append({"question": q.get("question", ""), "answer": a.get("answer", ""), "category": q.get("category", "")})
-            sys_note, usr_note = interview_notes_prompt(title, qa_pairs, screen_name=screen_name)
+            sys_note, usr_note = interview_notes_prompt(
+                title, qa_pairs, screen_name=screen_name, menu_context=menu_context
+            )
             interview_note_md = await mockup_client.complete(sys_note, usr_note, stream=False)
             sys_ext, usr_ext = extract_structured_data_prompt(interview_note_md)
             ext_response = await mockup_client.complete(sys_ext, usr_ext, stream=False)
@@ -101,15 +164,38 @@ class MockupPipeline:
         sys_merge, usr_merge = merge_annotations_prompt(annotation_markdown, interview_data)
         merged_annotations = await mockup_client.complete(sys_merge, usr_merge, stream=False)
 
-        sys_spec, usr_spec = master_spec_prompt(title=title, annotation_markdown=merged_annotations, interview_note_md=interview_note_md, vue_source=vue_source)
+        sys_spec, usr_spec = master_spec_prompt(
+            title=title,
+            annotation_markdown=merged_annotations,
+            interview_note_md=interview_note_md,
+            vue_source=vue_source,
+            menu_context=menu_context,
+        )
         spec_markdown = await mockup_client.complete(sys_spec, usr_spec, stream=False)
+        if not self._has_required_label_rules(spec_markdown):
+            spec_markdown = await self._regenerate_spec_with_label_guard(sys_spec, usr_spec, spec_markdown)
         return interview_note_md, spec_markdown
 
     # Step 6: Streaming spec generation
-    async def generate_spec_streaming(self, title: str, annotation_markdown: str, interview_note_md: str | None = None, vue_source: str | None = None) -> AsyncIterator[str]:
+    async def generate_spec_streaming(
+        self,
+        title: str,
+        annotation_markdown: str,
+        interview_note_md: str | None = None,
+        vue_source: str | None = None,
+        menu_context: dict | None = None,
+    ) -> AsyncIterator[str]:
         import asyncio as _asyncio
-        sys_spec, usr_spec = master_spec_prompt(title=title, annotation_markdown=annotation_markdown, interview_note_md=interview_note_md, vue_source=vue_source)
+        sys_spec, usr_spec = master_spec_prompt(
+            title=title,
+            annotation_markdown=annotation_markdown,
+            interview_note_md=interview_note_md,
+            vue_source=vue_source,
+            menu_context=menu_context,
+        )
         content = await mockup_client.complete(sys_spec, usr_spec, stream=False)
+        if not self._has_required_label_rules(content):
+            content = await self._regenerate_spec_with_label_guard(sys_spec, usr_spec, content)
         if not content:
             return
         chunk_size = 200

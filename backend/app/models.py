@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -157,4 +157,5 @@ class MockupState(BaseModel):
     interview_answers: list[dict] | None = None
     raw_interview_text: str | None = None
     interview_note_md: str | None = None
+    menu_context: dict[str, Any] | None = None
     current_step: int = 1

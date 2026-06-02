@@ -12,6 +12,18 @@ from pathlib import Path
 from app.config import settings
 
 
+def _lv2_pascal_hint_from_menu_context(mc: dict) -> str:
+    """menu_context의 lv2_pascal 또는 component_key로 CPMS LV2 토큰 힌트."""
+    lp = mc.get("lv2_pascal")
+    if lp and str(lp).strip():
+        return str(lp).strip()
+    ck = mc.get("component_key")
+    if ck and str(ck).strip():
+        s = str(ck).strip()
+        return (s[:1].upper() + s[1:].lower()) if len(s) > 1 else s.upper()
+    return "menu_tree.componentKey 없음 — 용어집·도메인으로 LV2 추론"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. ai_generate_prompt
 #    Port of: pfy-front/scaffolding/src/routes/ai-generate.ts  buildPrompt()
@@ -21,6 +33,8 @@ def ai_generate_prompt(
     page_type: str,
     title: str,
     description: str | None = None,
+    menu_context: dict | None = None,
+    glossary_context: str | None = None,  
 ) -> tuple[str, str]:
     """
     Build prompts for mockup UI structure generation.
@@ -36,24 +50,47 @@ def ai_generate_prompt(
     system = "당신은 엔터프라이즈 UI 설계 전문가입니다. 요청한 JSON 형식으로만 답변합니다."
 
     desc_line = f"\n화면 설명: {description.strip()}" if description and description.strip() else ""
+    mc = menu_context or {}
+    lv2_token = _lv2_pascal_hint_from_menu_context(mc)
+    parent_ref = mc.get("parent_menu_id") or mc.get("p_menu_id")
+    menu_hint = ""
+    if mc:
+        menu_hint = (
+            f"\nmenu_tree 컨텍스트:\n"
+            f"- menu_id: {mc.get('menu_id')}\n"
+            f"- menu_name: {mc.get('menu_name')}\n"
+            f"- parent_menu_id / p_menu_id (cmn_menu 부모 menu_id, menu_tree parentId): {parent_ref}\n"
+            f"- component_key (폴더·LV2 슬러그; p_menu_id와 다름): {mc.get('component_key')}\n"
+            f"- lv2_pascal (화면코드 Cpms**{{LV2}}**… 토큰): {mc.get('lv2_pascal')}\n"
+            f"- roles: {mc.get('roles')}\n"
+        )
+    # 용어집 힌트 문구 생성
+    glossary_hint = ""
+    if glossary_context:
+        glossary_hint = f"\n[표준 용어집 가이드]\n{glossary_context.strip()}\n"
 
     if page_type in ("list", "list-detail", "tab-detail"):
         user = (
             f"당신은 한국 엔터프라이즈 UI를 설계하는 시니어 개발자 및 DB 아키텍트입니다.\n"
             f"아래 화면 정보를 보고 목록(List) 화면 설계 정보를 응답하세요.\n\n"
-            f"화면 제목: {title}{desc_line}\n\n"
+            f"화면 제목: {title}{desc_line}\n"
+            f"{menu_hint}\n"
+            f"{glossary_hint}\n"
             f"CPMS 화면코드 명명규칙:\n"
             f"  형식: [LV1][LV2][하위(선택)][역할] PascalCase  예) CpmsEduPonlLst\n"
-            f"  LV1=항상 Cpms / LV2: Edu(교육) Act(실적) Mon(점검) Pra(실무) Cnr(센터) Sys(시스템) Cmn(공통)\n"
+            f"  LV1=항상 Cpms / LV2(Pascal, componentKey 기반 권장): {lv2_token}\n"
+            f"  (주의: parent_menu_id·p_menu_id 예: ROOT02 는 **부모 메뉴 ID**이며 LV2 약어가 **아님**. LV2는 위 lv2_pascal·component_key를 따른다.)\n"
             f"  Edu 세부: Ponl(온라인) Prog(프로그램) Eyes(눈높이)\n"
-            f"  역할suffix: Lst(목록/현황/조회) Edit(등록/수정) SPopup(조회팝업) EPopup(CRUD팝업)\n\n"
+            f"  역할suffix: Lst(목록/현황/조회) Edit(등록/수정) SPopup(조회팝업) EPopup(CRUD팝업)\n"
+            f"  길이·약어: LV2 뒤·역할 suffix 앞의 **업무용 PascalCase 토큰은 최대 2개**만 둔다(각 **영문 약어 최대 4글자**, 예: Identification→Idfy). 3개 이상이면 **가장 덜 핵심인 토큰부터 제거**해 2개로 맞춘다. "
+            f"역할 suffix(Lst·Edit·SPopup·EPopup)는 짧은 표준 유지. 예: `CpmsMonRiskIdfyAsmtLst`는 길이 위반 → `CpmsMonRiskIdfyLst`처럼 중간 토큰 2개만.\n\n"
             f"반드시 아래 JSON 형식으로만 응답하세요 (코드블록, 설명 없이):\n"
             f"{{\n"
-            f'  "screen_id": "CPMS명명규칙으로도출한PascalCase화면코드(예:CpmsEduPonlLst)",\n'
+            f'  "screen_id": "Cpms+LV2+업무토큰≤2개(각≤4글자)+역할suffix (예:CpmsMonRiskIdfyLst)",\n'
             f'  "domain": "화면의도메인명(영문)",\n'
             f'  "searchFields": [\n'
             f'    {{\n'
-            f'      "key": "camelCase영문키",\n'
+            f'      "key": "용어집 기반의 camelCase영문키",\n'
             f'      "label": "한글레이블",\n'
             f'      "type": "text|number|date|daterange|select|checkbox",\n'
             f'      "optionsText": "select일 때만 포함",\n'
@@ -62,7 +99,7 @@ def ai_generate_prompt(
             f'  ],\n'
             f'  "tableColumns": [\n'
             f'    {{\n'
-            f'      "key": "camelCase영문키",\n'
+            f'      "key": "용어집 기반의 camelCase영문키",\n'
             f'      "label": "한글헤더명",\n'
             f'      "dataType": "VARCHAR|NUMBER|DATETIME",\n'
             f'      "dataLength": "길이",\n'
@@ -74,6 +111,8 @@ def ai_generate_prompt(
             f'  ]\n'
             f'}}\n\n'
             f"규칙:\n"
+            f"- **[중요] screen_id 및 모든 필드의 key는 반드시 제공된 '표준 용어집 가이드'에 정의된 표준 영문명 및 약어를 기반으로 조합하여 생성하세요.**\n" # 규칙 추가
+            f"- screen_id: Cpms+LV2+**업무 토큰 최대 2개**(각 4글자 이하)+역할 suffix 한 덩어리; 토큰을 더 쓰지 말 것.\n"
             f"- searchFields: 3~5개, 실제 업무에서 자주 쓰이는 조회 조건\n"
             f"- tableColumns: 5~8개 (No 컬럼 제외), 목록에 표시할 주요 정보\n"
             f"- key는 반드시 영문 camelCase (한글·공백·특수문자 금지), 실제 DB 컬럼명으로 활용 가능하도록 의미 있게 작성\n"
@@ -92,17 +131,21 @@ def ai_generate_prompt(
         user = (
             f"당신은 한국 엔터프라이즈 UI를 설계하는 시니어 개발자입니다.\n"
             f"아래 화면 정보를 보고 입력/수정(Form) 화면 설계 정보를 응답하세요.\n\n"
-            f"화면 제목: {title}{desc_line}\n\n"
+            f"화면 제목: {title}{desc_line}\n"
+            f"{menu_hint}\n"
+            f"{glossary_hint}\n"
             f"CPMS 화면코드 명명규칙:\n"
             f"  형식: [LV1][LV2][하위(선택)][역할] PascalCase  예) CpmsEduProgEdit\n"
-            f"  LV1=항상 Cpms / LV2: Edu(교육) Act(실적) Mon(점검) Pra(실무) Cnr(센터) Sys(시스템) Cmn(공통)\n"
-            f"  역할suffix: Lst(목록) Edit(등록/수정) SPopup(조회팝업) EPopup(CRUD팝업)\n\n"
+            f"  LV1=항상 Cpms / LV2(Pascal, componentKey 기반 권장): {lv2_token}\n"
+            f"  (주의: parent_menu_id·p_menu_id 는 **부모 메뉴 ID**이며 LV2 약어가 **아님**.)\n"
+            f"  역할suffix: Lst(목록) Edit(등록/수정) SPopup(조회팝업) EPopup(CRUD팝업)\n"
+            f"  길이·약어: LV2 뒤 업무 토큰은 **최대 2개**, 각 **4글자 이하** 약어. 3개 이상이면 핵심만 남겨 2개로 줄인다. 역할 suffix는 짧은 표준 유지.\n\n"
             f"반드시 아래 JSON 형식으로만 응답하세요 (코드블록, 설명 없이):\n"
             f"{{\n"
-            f'  "screen_id": "CPMS명명규칙으로도출한PascalCase화면코드(예:CpmsEduProgEdit)",\n'
+            f'  "screen_id": "Cpms+LV2+하위토큰(토큰당≤4글자)+역할suffix PascalCase(예:CpmsMonProgEdit)",\n'
             f'  "formFields": [\n'
             f'    {{\n'
-            f'      "key": "camelCase영문키",\n'
+            f'      "key": "용어집 기반의 camelCase영문키",\n'
             f'      "label": "한글레이블",\n'
             f'      "type": "text|number|date|select|textarea|checkbox",\n'
             f'      "required": true,\n'
@@ -117,6 +160,8 @@ def ai_generate_prompt(
             f'  ]\n'
             f'}}\n\n'
             f"규칙:\n"
+            f"- **[중요] screen_id 및 모든 필드의 key는 반드시 제공된 '표준 용어집 가이드'에 정의된 표준 영문명 및 약어를 기반으로 조합하여 생성하세요.**\n" # 규칙 추가
+            f"- screen_id: Cpms+LV2+**업무 토큰 최대 2개**(각 4글자 이하)+Edit 등 역할 suffix; 한 PascalCase 단어로 유지한다.\n"
             f"- formFields: 5~10개, 실제 업무에서 입력하는 항목\n"
             f"- key는 반드시 영문 camelCase (한글·공백·특수문자 금지), API Request Body의 Key로 직접 사용됨\n"
             f"- required: 필수 입력 여부 (true/false)\n"
@@ -195,6 +240,219 @@ _INTERVIEW_ROLE_CONTEXT = """\
 4. 연동 및 출력: 엑셀 다운로드 범위, 타 시스템 연동 데이터 등에 대한 질문.
 5. 어조: 전문적이면서도 현업이 이해하기 쉬운 비즈니스 용어 사용.\
 """
+_DEFAULT_SPEC_JSON = """\
+{
+  "meta": {
+    "version": "1.3.1",
+    "description": "Enterprise Default Spec (PostgreSQL) - Production Ready Clean Version"
+  },
+
+  "types": {
+    "string": {
+      "default": "VARCHAR(255)",
+      "code": "VARCHAR(10)",
+      "email": "VARCHAR(255)",
+      "url": "VARCHAR(500)",
+      "long_text": "TEXT"
+    },
+    "number": {
+      "default": "NUMERIC(10,2)",
+      "integer": "INTEGER",
+      "big_integer": "BIGINT",
+      "amount": "NUMERIC(15,2)"
+    },
+    "datetime": {
+      "default": "TIMESTAMP WITH TIME ZONE"
+    },
+    "boolean": {
+      "type": "BOOLEAN"
+    },
+    "uuid": {
+      "type": "UUID"
+    }
+  },
+
+  "naming": {
+    "table_case": "snake_case",
+    "column_case": "snake_case",
+    "pk": "id",
+    "fk_pattern": "{table}_id"
+  },
+
+  "common_columns": [
+    {
+      "name": "id",
+      "type": "UUID",
+      "pk": true,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "name": "insert_dt",
+      "type": "TIMESTAMP WITH TIME ZONE",
+      "default": "NOW()"
+    },
+    {
+      "name": "insert_uid",
+      "type": "VARCHAR(50)"
+    },
+    {
+      "name": "update_dt",
+      "type": "TIMESTAMP WITH TIME ZONE",
+      "auto_update": "trigger"
+    },
+    {
+      "name": "update_uid",
+      "type": "VARCHAR(50)"
+    }
+  ],
+
+  "policies": {
+    "soft_delete": {
+      "enabled": true,
+      "strategy": "del_yn",
+      "definition": {
+        "column": {
+          "name": "del_yn",
+          "type": "BOOLEAN",
+          "default": false
+        },
+
+        "delete_behavior": {
+          "on_delete": [
+            "set del_yn = true",
+            "set update_dt = CURRENT_TIMESTAMP"
+          ]
+        },
+
+        "restore_behavior": {
+          "on_restore": [
+            "set del_yn = false",
+            "set update_dt = CURRENT_TIMESTAMP"
+          ]
+        },
+
+        "active_condition": "del_yn = false",
+        "deleted_condition": "del_yn = true"
+      }
+    }
+  },
+
+  "api": {
+    "methods": {
+      "create": "POST",
+      "read": "GET",
+      "update": "PUT",
+      "delete": "DELETE"
+    },
+
+    "pagination": {
+      "type": "offset",
+      "supported": ["offset", "cursor"],
+      "params": ["page", "size"],
+      "default_size": 20
+    },
+
+    "sorting": {
+      "default": "insert_dt DESC"
+    },
+
+    "response": {
+      "wrapper": true,
+      "format": {
+        "data": "array",
+        "meta": {
+          "page": "number",
+          "size": "number",
+          "total": "number",
+          "total_pages": "number",
+          "has_next": "boolean"
+        }
+      }
+    }
+  },
+
+  "query": {
+    "string": {
+      "search": ["ILIKE", "LIKE"],
+      "exact": "EQ",
+      "full_text": "FULL_TEXT"
+    },
+    "id": "EQ"
+  },
+
+  "conditional_rules": [
+    {
+      "if": {
+        "field_name_regex": "(_desc|_memo|_content)$"
+      },
+      "then": {
+        "type": "TEXT"
+      }
+    },
+    {
+      "if": {
+        "field_name_regex": ".*(amount|price)$"
+      },
+      "then": {
+        "type": "NUMERIC(15,2)"
+      }
+    },
+    {
+      "if": {
+        "field_name_regex": ".*(count|qty)$"
+      },
+      "then": {
+        "type": "INTEGER"
+      }
+    },
+    {
+      "if": {
+        "field_name_regex": "^(is_|has_).*"
+      },
+      "then": {
+        "type": "BOOLEAN"
+      }
+    }
+  ],
+
+  "rules": {
+    "type_resolution_priority": [
+      "conditional_rules",
+      "explicit_definition",
+      "default_spec"
+    ],
+
+    "enforcement": {
+      "apply_defaults_if_missing": true,
+      "override_only_if_explicit": true
+    }
+  },
+
+  "database": {
+    "uuid_generator": {
+      "primary": "gen_random_uuid",
+      "fallback": "uuid_generate_v4"
+    },
+
+    "foreign_key_default": {
+      "on_delete": "RESTRICT",
+      "on_update": "CASCADE",
+      "index": true
+    }
+  },
+
+  "forbidden": [
+    {
+      "rule": "hard_delete",
+      "message": "Use soft delete with del_yn instead"
+    },
+    {
+      "rule": "char_boolean",
+      "message": "Use BOOLEAN instead of CHAR(1)"
+    }
+  ]
+}
+"""
 
 _QUESTION_OUTPUT_FORMAT = """\
 # Output Format
@@ -218,17 +476,42 @@ _QUESTION_OUTPUT_FORMAT = """\
 - tip은 목업 현황을 근거로 한 설계 가설 문장\
 """
 
+# 기본 Spec이 이미 처리하는 항목 목록 (인터뷰에서 중복 질문 방지용 요약)
+_DEFAULT_SPEC_COVERED_SUMMARY = """\
+[기본 Spec 규칙 — 이미 확정된 항목 (인터뷰 질문 생성 대상 제외)]
+아래 항목들은 프로젝트 공통 표준으로 이미 확정되었습니다.
+이에 해당하는 사항은 인터뷰 질문으로 생성하지 마세요.
+
+확정된 기본 규칙:
+- PK: UUID 타입, gen_random_uuid() 자동 생성
+- 공통 감사 컬럼: insert_dt(TIMESTAMP TZ), insert_uid(VARCHAR 50), update_dt(TIMESTAMP TZ / 트리거), update_uid(VARCHAR 50)
+- 소프트 삭제: del_yn BOOLEAN(false) 컬럼 사용, 물리 삭제 금지
+- 기본 정렬: insert_dt DESC
+- 페이지네이션: offset 방식, 기본 20건, page/size 파라미터
+- DB 타입 기본값: 문자열→VARCHAR(255), 긴텍스트→TEXT, 금액→NUMERIC(15,2), 정수→INTEGER, 날짜시간→TIMESTAMP WITH TIME ZONE, 플래그→BOOLEAN(CHAR(1) 금지)
+- 필드명 패턴 규칙: *_desc/*_memo/*_content → TEXT, *amount/*price → NUMERIC(15,2), *count/*qty → INTEGER, is_*/has_* → BOOLEAN
+- 테이블/컬럼 네이밍: snake_case, FK 패턴 {table}_id
+- FK 기본값: ON DELETE RESTRICT, ON UPDATE CASCADE, 인덱스 자동 생성
+- API 응답 래퍼: data(배열) + meta(page, size, total, total_pages, has_next)
+
+위 항목에 해당하는 사항은 이 화면 전용 예외가 없는 한 질문하지 마세요.
+이 화면만의 추가 비즈니스 로직, 예외 케이스, 모호한 요구사항에 집중하세요.\
+"""
+
 
 def interview_prompt(
     title: str,
     annotation_markdown: str | None = None,
     vue_source: str | None = None,
     spec_json: dict | None = None,
+    menu_context: dict | None = None,
 ) -> tuple[str, str]:
     """
     Build prompts for generating 10 interview questions about a mockup screen.
 
     Priority: uses annotation_markdown if provided; falls back to spec_json.
+    DEFAULT_SPEC_JSON 기본 규칙에 해당하는 항목은 질문에서 제외하고,
+    이 화면 고유의 예외·모호 사항에만 집중하도록 안내합니다.
 
     Args:
         title:               screen title
@@ -250,16 +533,28 @@ def interview_prompt(
             f"\n\n--- MockUp 소스 코드 시작 ---\n```vue\n{vue_source}\n```\n--- MockUp 소스 코드 끝 ---"
         )
 
+    default_spec_notice = f"\n\n{_DEFAULT_SPEC_COVERED_SUMMARY}\n"
+
+    menu_context_section = ""
+    if menu_context:
+        menu_context_section = (
+            f"\n\n--- 메뉴/권한 컨텍스트 시작 ---\n"
+            f"{json.dumps(menu_context, ensure_ascii=False, indent=2)}\n"
+            f"--- 메뉴/권한 컨텍스트 끝 ---"
+        )
+
     if annotation_markdown and annotation_markdown.strip():
         user = (
             f"{_INTERVIEW_ROLE_CONTEXT}\n\n"
             f'아래는 "{title}" 화면에 대해 자동 생성된 컴포넌트 주석 테이블입니다.\n'
             f"이 주석에 명시된 기능·로직·업무 규칙·예외 처리 내용을 검토하여, 아직 정의되지 않았거나 모호해 보이는 지점을 찾아 "
-            f"고객/현업에게 물어볼 인터뷰 질문을 정확히 10개 작성해 주세요.\n\n"
+            f"고객/현업에게 물어볼 인터뷰 질문을 정확히 10개 작성해 주세요.\n"
+            f"{default_spec_notice}\n"
             f"--- 컴포넌트 주석 테이블 시작 ---\n"
             f"{annotation_markdown}\n"
             f"--- 컴포넌트 주석 테이블 끝 ---"
-            f"{source_section}\n\n"
+            f"{source_section}"
+            f"{menu_context_section}\n\n"
             f"{_QUESTION_OUTPUT_FORMAT}"
         )
     else:
@@ -269,11 +564,13 @@ def interview_prompt(
             f"{_INTERVIEW_ROLE_CONTEXT}\n\n"
             f'아래는 MockUp Builder에서 정의된 "{title}" 화면 스펙(JSON)입니다.\n'
             f"이 화면만 보고 아직 정의되지 않았거나 모호해 보이는 지점을 찾아, "
-            f"고객/현업에게 물어볼 인터뷰 질문을 정확히 10개 작성해 주세요.\n\n"
+            f"고객/현업에게 물어볼 인터뷰 질문을 정확히 10개 작성해 주세요.\n"
+            f"{default_spec_notice}\n"
             f"--- 화면 스펙 시작 ---\n"
             f"{spec_text}\n"
             f"--- 화면 스펙 끝 ---"
-            f"{source_section}\n\n"
+            f"{source_section}"
+            f"{menu_context_section}\n\n"
             f"{_QUESTION_OUTPUT_FORMAT}"
         )
 
@@ -293,6 +590,10 @@ _CPMS_NAMING_RULES = """\
 LV1 (항상 Cpms):
   Cpms
 
+menu_tree 연동 시 (SPEC·MockUp `menu_context`):
+  - `parent_menu_id` / `p_menu_id`는 **부모 메뉴의 menu_id**(예: ROOT02)이며 `cmn_menu.p_menu_id`에 대응한다. **LV2 약어로 쓰지 않는다.**
+  - 화면코드의 LV2 Pascal 토큰은 **`componentKey`(소문자 슬러그, 예: mon) → Mon** 과 같이 부모(또는 폴더) 노드의 `componentKey`에서 도출한다. `lv2_pascal` 필드가 있으면 **반드시 일치**시킨다.
+
 LV2 / 도메인 약어:
   Edu(교육)  Act(실적/활동)  Mon(점검/모니터링)  Pra(실무/목표)
   Cnr(센터/자료실)  Sys(시스템)  Cmn(공통)  Top(상단/공지)
@@ -307,6 +608,10 @@ LV2 / 도메인 약어:
   SPopup → 조회 팝업
   EPopup → 등록/수정/삭제 팝업
 
+길이(MockUp·SPEC 화면코드와 정합):
+  - LV2 직후·역할 suffix 직전의 **업무 PascalCase 토큰은 최대 2개**, 각 **4글자 이하** 약어.
+  - 예: CpmsMonRiskIdfyAsmtLst → CpmsMonRiskIdfyLst (Asmt 제거).
+
 API path 변환 규칙:
   화면코드(PascalCase) → 전체 대문자  예) CpmsEduPonlLst → CPMSEDUPRONLLST
   path 형식: /online/mvcJson/{대문자화면코드}-{메서드명}
@@ -314,6 +619,7 @@ API path 변환 규칙:
   메서드명: search(조회) | save(등록+수정 통합) | insert(등록) | update(수정) | delete(삭제)
 
 도출 절차:
+  0. `menu_context.lv2_pascal` 또는 `component_key`가 있으면 LV2는 **그 값과 일치**시킨다(없을 때만 아래 1로 추론).
   1. 화면명(한글)을 보고 LV2 도메인을 결정한다.
   2. 세부 기능 키워드로 하위 약어를 결정한다.
   3. 화면 유형(목록/등록/팝업)으로 suffix를 결정한다.
@@ -329,6 +635,7 @@ def interview_notes_prompt(
     custom_qas: list[dict] | None = None,
     raw_interview_text: str | None = None,
     interview_notes_template: str = "",
+    menu_context: dict | None = None,
 ) -> tuple[str, str]:
     """
     Build prompts to generate InterviewNote.md from Q&A results.
@@ -389,16 +696,26 @@ def interview_notes_prompt(
             lines.append(f"추가{i + 1}: {q_text}\n  답변: {a_text}")
         custom_text = "\n\n[현장 추가 질문]\n" + "\n\n".join(lines)
 
+    menu_context_section = ""
+    if menu_context:
+        menu_context_section = (
+            f"\n[menu_tree 기반 메뉴/권한 컨텍스트]\n"
+            f"{json.dumps(menu_context, ensure_ascii=False, indent=2)}\n"
+            f"- 이 컨텍스트는 Section 7 DB Seed Data에 반드시 반영하세요.\n"
+        )
+
     user = (
         f"당신은 엔터프라이즈 시스템 전문 IT 비즈니스 분석가(BA)입니다.\n\n"
         f"아래 [{qa_label}]를 분석하여, 주어진 [InterviewNote 템플릿]을 정확히 채워주세요.\n\n"
         f"{_CPMS_NAMING_RULES}\n\n"
+        f"[기본 Spec 규칙 — 인터뷰에서 명시적으로 변경되지 않은 항목은 이 기준을 그대로 적용]\n"
+        f"```json\n{_DEFAULT_SPEC_JSON}```\n\n"
         f"규칙 (TEMPLATE LOCK — 절대 준수):\n"
         f"- 템플릿 섹션 구조·순서·마크다운 포맷을 절대 변경하지 마세요.\n"
         f"- 각 답변을 분류 기준(Keep/Change/Add/Out of Scope/TBD)에 따라 정확히 배치하세요.\n"
         f"- 모든 항목에 고유한 @id를 부여하세요 (KEEP-001, CHG-001, ADD-001, OUT-001, TBD-001 형식).\n"
-        f"- DataSpec에는 해당 화면의 필드별 기술 명세를 포함하세요.\n"
-        f"- BusinessRules에는 정렬/페이징/권한/유효성 규칙을 포함하세요.\n"
+        f"- DataSpec에는 해당 화면의 필드별 기술 명세를 포함하세요. 인터뷰에서 언급되지 않은 DB 타입·길이·공통컬럼은 위 [기본 Spec 규칙]을 적용하세요.\n"
+        f"- BusinessRules에는 정렬/페이징/권한/유효성 규칙을 포함하세요. 인터뷰에서 다른 값이 확인되지 않으면 기본 Spec의 기본 정렬(insert_dt DESC)·페이지 크기(20)를 기재하세요.\n"
         f"- API Specification에는 인터뷰 결과로 도출되는 API 엔드포인트 목록을 작성하세요:\n"
         f"  - @id는 API-001 형식, method는 항상 POST (CPMS 표준).\n"
         f"  - 화면코드는 위 [CPMS 화면코드 명명규칙]에 따라 화면명에서 직접 도출한 영문 대문자 코드를 사용하세요.\n"
@@ -416,6 +733,7 @@ def interview_notes_prompt(
         f"- 화면명: {title}\n"
         f"- {screen_code_hint}\n"
         f"- 인터뷰 일자: {today}\n\n"
+        f"{menu_context_section}\n"
         f"[{qa_label}]\n{qa_text}{custom_text}\n\n"
         f"[InterviewNote 템플릿]\n{interview_notes_template}\n\n"
         f"위 템플릿 구조를 100% 유지하면서, 인터뷰 데이터를 바탕으로 모든 섹션을 채워 완성된 InterviewNote.md를 출력하세요."
@@ -558,20 +876,56 @@ def merge_annotations_prompt(
 # ─────────────────────────────────────────────────────────────────────────────
 
 _MASTER_PROMPT_CACHE: str | None = None
+_MASTER_PROMPT_MTIME: float | None = None
+_SPEC_TEMPLATE_CACHE: str | None = None
+_SPEC_TEMPLATE_MTIME: float | None = None
+_SPEC_TEMPLATE_CACHE_SOURCE: str | None = None
 
 
 def _load_master_prompt() -> str:
-    global _MASTER_PROMPT_CACHE
-    if _MASTER_PROMPT_CACHE is not None:
-        return _MASTER_PROMPT_CACHE
+    global _MASTER_PROMPT_CACHE, _MASTER_PROMPT_MTIME
 
     path = Path(settings.PROMPT_REFERENCE_DIR) / "masterPrompt.md"
-    if path.exists():
-        _MASTER_PROMPT_CACHE = path.read_text(encoding="utf-8")
-    else:
+    if not path.exists():
         _MASTER_PROMPT_CACHE = ""
+        _MASTER_PROMPT_MTIME = None
+        return _MASTER_PROMPT_CACHE
 
+    mtime = path.stat().st_mtime
+    if _MASTER_PROMPT_CACHE is not None and _MASTER_PROMPT_MTIME == mtime:
+        return _MASTER_PROMPT_CACHE
+
+    _MASTER_PROMPT_CACHE = path.read_text(encoding="utf-8")
+    _MASTER_PROMPT_MTIME = mtime
     return _MASTER_PROMPT_CACHE
+
+
+def _load_spec_template() -> str:
+    """Load placeholder spec structure for master_spec_prompt (not the runtime cache)."""
+    global _SPEC_TEMPLATE_CACHE, _SPEC_TEMPLATE_MTIME, _SPEC_TEMPLATE_CACHE_SOURCE
+
+    base = Path(settings.PROMPT_REFERENCE_DIR)
+    # Prefer dedicated template; fall back to legacy single spec.md if present.
+    for name in ("spec.template.md", "spec.md"):
+        path = base / name
+        if path.exists():
+            mtime = path.stat().st_mtime
+            src = str(path.resolve())
+            if (
+                _SPEC_TEMPLATE_CACHE is not None
+                and _SPEC_TEMPLATE_CACHE_SOURCE == src
+                and _SPEC_TEMPLATE_MTIME == mtime
+            ):
+                return _SPEC_TEMPLATE_CACHE
+            _SPEC_TEMPLATE_CACHE = path.read_text(encoding="utf-8")
+            _SPEC_TEMPLATE_MTIME = mtime
+            _SPEC_TEMPLATE_CACHE_SOURCE = src
+            return _SPEC_TEMPLATE_CACHE
+
+    _SPEC_TEMPLATE_CACHE = ""
+    _SPEC_TEMPLATE_MTIME = None
+    _SPEC_TEMPLATE_CACHE_SOURCE = None
+    return _SPEC_TEMPLATE_CACHE
 
 
 def master_spec_prompt(
@@ -579,6 +933,7 @@ def master_spec_prompt(
     annotation_markdown: str,
     interview_note_md: str | None = None,
     vue_source: str | None = None,
+    menu_context: dict | None = None,
 ) -> tuple[str, str]:
     """
     Build prompts to generate the final spec.md from mockup + interview data.
@@ -595,6 +950,7 @@ def master_spec_prompt(
         (system_prompt, user_prompt)
     """
     system = _load_master_prompt()
+    spec_template = _load_spec_template()
 
     vue_section = ""
     if vue_source and vue_source.strip():
@@ -610,19 +966,53 @@ def master_spec_prompt(
             f"{annotation_markdown}"
         )
 
+    menu_context_section = ""
+    if menu_context:
+        pm = menu_context.get("parent_menu_id") or menu_context.get("p_menu_id")
+        ck = menu_context.get("component_key")
+        menu_context_section = (
+            f"\n\n## [4] 메뉴/권한 컨텍스트 (menu_tree.json)\n\n"
+            f"**시드·`cmn_menu.p_menu_id`·SPEC `# 10.1` 의 `parent_menu_id` SSOT:** `{pm}` "
+            f"(부모 메뉴 `menu_id`; `menu_tree`의 `parentId`와 동일).\n"
+            f"**절대 `p_menu_id`에 넣지 말 것:** `component_key` / `menu_component_key` 값 `{ck!r}` — 이 값은 **LV2·`module`·Vue 경로용**이며 "
+            f"`ROOT02` 같은 부모 ID와 다르다.\n\n"
+            f"```json\n{json.dumps(menu_context, ensure_ascii=False, indent=2)}\n```"
+        )
+
     interview_section = (
         f"## [1] 인터뷰 회의록 (InterviewNote.md)\n\n{interview_note_md}"
         if interview_note_md and interview_note_md.strip()
         else "## [1] 인터뷰 회의록\n\n(인터뷰 단계를 건너뛰었습니다. Mockup 화면 구조와 주석 분석 데이터만으로 Spec을 생성해 주세요.)"
     )
 
+    default_spec_section = (
+        f"\n\n## [0] 기본 Spec 규칙 (인터뷰 결과에 명시된 변경 사항이 없으면 이 기준을 그대로 적용)\n\n"
+        f"```json\n{_DEFAULT_SPEC_JSON}```"
+    )
+    spec_template_section = (
+        f"\n\n## [SPEC TEMPLATE - Single Source of Truth]\n\n"
+        f"아래 `spec.template.md` 골격을 출력 구조의 단일 기준으로 사용하세요.\n"
+        f"섹션명·`#`/`##` 순서·표 헤더를 유지하고 `[PLACEHOLDER]`·예시 문구를 실제 화면 값으로 치환하세요.\n"
+        f"채워진 참고 예시가 필요하면 저장소의 `spec.example.md`를 참고할 수 있습니다.\n\n"
+        f"```markdown\n{spec_template}\n```"
+        if spec_template
+        else ""
+    )
+
     user = (
         f"# 화면 정보\n\n"
-        f"- 화면명: {title}\n\n"
+        f"- 화면명: {title}\n"
+        f"{default_spec_section}\n\n"
+        f"{spec_template_section}\n\n"
         f"{interview_section}"
         f"{vue_section}"
         f"{annotation_section}\n\n"
-        f"위 데이터를 바탕으로 spec.md를 생성해 주세요."
+        f"{menu_context_section}\n\n"
+        f"위 데이터를 바탕으로 spec.md를 생성해 주세요.\n"
+        f"[0] 기본 Spec 규칙은 기준선으로 적용하고, [1] 인터뷰 회의록에서 명시적으로 변경된 사항은 해당 기준보다 우선 적용하세요.\n"
+        f"[4] 메뉴/권한 컨텍스트가 있으면 템플릿 `# 10. Seed Metadata`(및 `SEED_STANDARD.md` 요약)에 맞춰 반드시 반영하세요.\n"
+        f"`# 10.1`·`## 7.0`(또는 시드 요약)의 **`parent_menu_id` / `p_menu_id` / `cmn_menu` INSERT 의 부모 컬럼**은 [4] 상단에 적힌 **부모 `menu_id`(예: ROOT02)** 와만 일치시키고, **`component_key`(예: mon)를 부모 ID로 쓰지 마세요.**\n"
+        f"중요: 템플릿(spec.template.md)에 정의된 화면 라벨 규칙·시드 요약·체크리스트를 누락 없이 유지하세요."
     )
 
     return system, user

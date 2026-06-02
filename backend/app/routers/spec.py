@@ -13,7 +13,22 @@ from app.session import get_session_id, session_store
 
 router = APIRouter(prefix="/spec", tags=["spec"])
 
-_SPEC_CACHE_PATH = Path(settings.PROMPT_REFERENCE_DIR) / "spec.md"
+_PROMPT_DIR = Path(settings.PROMPT_REFERENCE_DIR)
+# Last-imported / last-generated spec (session convenience). May be absent on fresh clone.
+_SPEC_CACHE_PRIMARY = _PROMPT_DIR / "spec.md"
+# Repository-shipped filled example when primary is missing.
+_SPEC_CACHE_FALLBACK = _PROMPT_DIR / "spec.example.md"
+
+
+def _read_spec_cache_file() -> Path:
+    """Return path to readable spec cache (primary or example fallback)."""
+    if _SPEC_CACHE_PRIMARY.exists():
+        return _SPEC_CACHE_PRIMARY
+    if _SPEC_CACHE_FALLBACK.exists():
+        return _SPEC_CACHE_FALLBACK
+    raise FileNotFoundError(
+        f"Neither {_SPEC_CACHE_PRIMARY} nor {_SPEC_CACHE_FALLBACK} exists."
+    )
 
 
 class ImportSpecRequest(BaseModel):
@@ -35,8 +50,8 @@ async def import_spec(
     session.spec_version += 1
     session_store.save(session_id)
 
-    _SPEC_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SPEC_CACHE_PATH.write_text(content, encoding="utf-8")
+    _SPEC_CACHE_PRIMARY.parent.mkdir(parents=True, exist_ok=True)
+    _SPEC_CACHE_PRIMARY.write_text(content, encoding="utf-8")
 
     return {"spec_version": session.spec_version, "length": len(content)}
 
@@ -45,11 +60,18 @@ async def import_spec(
 async def load_spec_file(
     session_id: str = Depends(get_session_id),
 ):
-    """pfy_prompt/spec.md 를 읽어 LLM 없이 바로 코드 생성 단계로 이동한다."""
-    if not _SPEC_CACHE_PATH.exists():
-        raise HTTPException(404, f"spec.md not found at {_SPEC_CACHE_PATH}. Generate a spec first.")
+    """pfy_prompt/spec.md(또는 없으면 spec.example.md)를 읽어 세션에 올린다."""
+    try:
+        path = _read_spec_cache_file()
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No spec cache found. Import a spec or ensure {_SPEC_CACHE_FALLBACK.name} exists. ({e})"
+            ),
+        ) from e
 
-    content = _SPEC_CACHE_PATH.read_text(encoding="utf-8")
+    content = path.read_text(encoding="utf-8")
     session = session_store.get_or_create(session_id)
     session.spec_markdown = content
     session.spec_version += 1
@@ -88,8 +110,8 @@ async def generate_spec(
             session.spec_version += 1
             session_store.save(session_id)
 
-            _SPEC_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _SPEC_CACHE_PATH.write_text(full_spec, encoding="utf-8")
+            _SPEC_CACHE_PRIMARY.parent.mkdir(parents=True, exist_ok=True)
+            _SPEC_CACHE_PRIMARY.write_text(full_spec, encoding="utf-8")
 
             yield {"event": "message", "data": json.dumps({"type": "complete", "spec_version": session.spec_version})}
 

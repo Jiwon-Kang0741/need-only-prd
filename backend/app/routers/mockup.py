@@ -8,6 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ from app.session import get_session_id, session_store
 _PFY_FRONT_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "pfy-front"
 _PFY_PAGES_GENERATED = _PFY_FRONT_ROOT / "src" / "pages" / "generated"
 _PFY_STATIC_ROUTES = _PFY_FRONT_ROOT / "src" / "router" / "staticRoutes.ts"
+_MENU_TREE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "menu_tree.json"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mockup", tags=["mockup"])
@@ -32,6 +34,12 @@ class AiGenerateRequest(BaseModel):
     title: str
     page_type: str = "list"
     description: str | None = None
+    menu_id: str | None = None
+    menu_name: str | None = None
+    # 메뉴 선택 UI 직계 부모 id(상위 1단). 있으면 menu_tree 해석 후에도 p_menu_id로 덮어씀(LLM/시드 힌트).
+    p_menu_id: str | None = None
+    screen_id: str | None = None
+    roles: list[str] | None = None
 
 
 class ScaffoldRequest(BaseModel):
@@ -55,9 +63,11 @@ class GenerateSpecRequest(BaseModel):
     that wiped the in-memory / on-disk session data.
     """
     screen_name: str | None = None
+    screen_id: str | None = None
     annotation_markdown: str | None = None
     interview_note_md: str | None = None
     vue_code: str | None = None
+    menu_context: dict[str, Any] | None = None
 
 
 # ------------------------------------------------------------------ helpers
@@ -76,6 +86,206 @@ def _get_mockup_state(session_id: str) -> MockupState:
 
 def _sse_msg(type: str, **kwargs) -> dict:
     return {"event": "message", "data": json.dumps({"type": type, **kwargs})}
+
+
+# CPMS mockup screen_id: Lst/Edit/… 접미 — 긴 접미사를 먼저 매칭
+_CPMS_SCREEN_SUFFIXES: tuple[str, ...] = ("SPopup", "EPopup", "Lst", "Edit")
+
+
+def _split_pascal_segments(s: str) -> list[str]:
+    """'MonRiskIdfy' -> Mon, Risk, Idfy (연속 대문자+소문자 덩어 기준)."""
+    s = (s or "").strip()
+    if not s:
+        return []
+    parts: list[str] = []
+    i = 0
+    while i < len(s):
+        if not s[i].isalpha():
+            i += 1
+            continue
+        j = i + 1
+        while j < len(s) and s[j].islower():
+            j += 1
+        parts.append(s[i:j])
+        i = j
+    return parts
+
+
+def _normalize_cpms_mockup_screen_id(
+    screen_id: str,
+    *,
+    max_middle_tokens: int = 2,
+    max_token_len: int = 4,
+) -> str:
+    """LLM이 긴 screen_id를 내도, Cpms+LV2 뒤 업무 토큰을 최대 개수·길이로 맞춘다.
+
+    예: CpmsMonRiskIdfyAsmtLst → CpmsMonRiskIdfyLst (Risk·Idfy·Asmt 중 앞 2개만 유지, 각 ≤4글자).
+    mockup_prompts의 '토큰당 4글자'와 함께 **토큰 개수**를 제한한다.
+    """
+    sid = (screen_id or "").strip()
+    if not sid.startswith("Cpms"):
+        return sid
+    suffix: str | None = None
+    for su in _CPMS_SCREEN_SUFFIXES:
+        if sid.endswith(su):
+            suffix = su
+            break
+    if suffix is None:
+        return sid
+    body = sid[: -len(suffix)]
+    if not body.startswith("Cpms") or len(body) <= 4:
+        return sid
+    rest = body[4:]
+    segs = _split_pascal_segments(rest)
+    if len(segs) < 2:
+        return sid
+    lv2 = segs[0]
+    middle = segs[1:]
+    if not middle:
+        return sid
+    shortened: list[str] = []
+    for t in middle[:max_middle_tokens]:
+        shortened.append(t[:max_token_len] if len(t) > max_token_len else t)
+    unchanged = (
+        len(middle) <= max_middle_tokens
+        and shortened == middle
+    )
+    if unchanged:
+        return sid
+    out = "Cpms" + lv2 + "".join(shortened) + suffix
+    logger.info("[mockup] screen_id shortened: %s -> %s", sid, out)
+    return out
+
+
+def _load_menu_tree() -> list[dict[str, Any]]:
+    if not _MENU_TREE_PATH.exists():
+        return []
+    try:
+        raw = json.loads(_MENU_TREE_PATH.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, list) else []
+    except Exception:
+        logger.warning("menu_tree.json parse failed: %s", _MENU_TREE_PATH)
+        return []
+
+
+def _menu_row_id(row: dict[str, Any]) -> str | None:
+    mid = row.get("menuId") or row.get("menu_id")
+    return str(mid).strip() if mid else None
+
+
+def _component_key_to_lv2_pascal(component_key: str | None) -> str | None:
+    """menu_tree componentKey (e.g. mon) → CPMS screen_id LV2 token (e.g. Mon)."""
+    if not component_key or not str(component_key).strip():
+        return None
+    s = str(component_key).strip()
+    if len(s) == 1:
+        return s.upper()
+    return s[:1].upper() + s[1:].lower()
+
+
+def _resolve_lv2_component_key(rows: list[dict[str, Any]], target: dict[str, Any]) -> str | None:
+    """Walk menu_tree: prefer target.componentKey, else first ancestor folder with componentKey."""
+    ck = target.get("componentKey") or target.get("component_key")
+    if ck:
+        return str(ck).strip()
+    mid = target.get("parentId") or target.get("p_menu_id")
+    visited: set[str] = set()
+    while mid and str(mid).strip() and str(mid) not in visited:
+        smid = str(mid).strip()
+        visited.add(smid)
+        parent = next((r for r in rows if _menu_row_id(r) == smid), None)
+        if not parent:
+            break
+        ck = parent.get("componentKey") or parent.get("component_key")
+        if ck:
+            return str(ck).strip()
+        mid = parent.get("parentId") or parent.get("p_menu_id")
+    return None
+
+
+def _resolve_menu_context(
+    menu_id: str | None,
+    menu_name: str | None,
+    roles: list[str] | None,
+    screen_id: str | None = None,
+) -> dict[str, Any] | None:
+    if not menu_id and not menu_name and not screen_id:
+        return None
+
+    rows = _load_menu_tree()
+    target = None
+    sid = (screen_id or "").strip().lower()
+    if menu_id:
+        target = next((r for r in rows if r.get("menuId") == menu_id or r.get("menu_id") == menu_id), None)
+    # screen_id 기반 우선 매칭 (componentKey/screenId/pgmId 확장 필드 대응)
+    def _row_screen_key(r: dict[str, Any]) -> str:
+        return str(
+            r.get("screenId")
+            or r.get("screen_id")
+            or r.get("componentKey")
+            or r.get("component_key")
+            or r.get("pgmId")
+            or r.get("pgm_id")
+            or ""
+        ).strip().lower()
+    if not target and sid:
+        target = next((r for r in rows if _row_screen_key(r) == sid), None)
+    if not target and menu_name:
+        target = next((r for r in rows if r.get("menuName") == menu_name or r.get("menu_nm") == menu_name), None)
+
+    selected_roles = roles or []
+    if target:
+        resolved_screen_id = (screen_id or "").strip() or str(
+            target.get("screenId")
+            or target.get("screen_id")
+            or target.get("componentKey")
+            or target.get("component_key")
+            or ""
+        ).strip()
+        selected_roles = selected_roles or target.get("roles") or []
+        p_mid = target.get("parentId") or target.get("p_menu_id")
+        lv2_ck = _resolve_lv2_component_key(rows, target)
+        lv2_pascal = _component_key_to_lv2_pascal(lv2_ck)
+        return {
+            "menu_id": target.get("menuId") or target.get("menu_id"),
+            "menu_name": target.get("menuName") or target.get("menu_nm"),
+            "p_menu_id": p_mid,
+            "parent_menu_id": p_mid,
+            "component_key": lv2_ck,
+            "lv2_pascal": lv2_pascal,
+            "sort_num": target.get("sortOrder") or target.get("sort_num"),
+            "screen_id": resolved_screen_id,
+            "roles": selected_roles,
+            "source": "menu_tree",
+        }
+
+    # fallback context: menu_tree에서 찾지 못한 경우
+    return {
+        "menu_id": menu_id,
+        "menu_name": menu_name,
+        "p_menu_id": "ROOT98",
+        "parent_menu_id": "ROOT98",
+        "component_key": None,
+        "lv2_pascal": None,
+        "sort_num": 999,
+        "screen_id": screen_id,
+        "roles": selected_roles,
+        "source": "fallback",
+    }
+
+
+def _ensure_menu_context(mockup_state: MockupState) -> dict[str, Any] | None:
+    """세션에 메뉴 컨텍스트가 없으면 screen_id/화면명 기준으로 한번 더 해석."""
+    if mockup_state.menu_context:
+        return mockup_state.menu_context
+    ctx = _resolve_menu_context(
+        menu_id=None,
+        menu_name=mockup_state.screen_name,
+        roles=None,
+        screen_id=mockup_state.screen_id,
+    )
+    mockup_state.menu_context = ctx
+    return ctx
 
 
 def _infer_ui_type(data_type: str | None) -> str:
@@ -219,10 +429,23 @@ async def ai_generate(
     session = _get_session(session_id)
 
     session_store.increment_llm_calls(session_id)
+    menu_context = _resolve_menu_context(
+        body.menu_id,
+        body.menu_name or body.title,
+        body.roles,
+        body.screen_id,
+    )
+    if menu_context is not None and body.p_menu_id and str(body.p_menu_id).strip():
+        menu_context = dict(menu_context)
+        pid = str(body.p_menu_id).strip()
+        menu_context["p_menu_id"] = pid
+        menu_context["parent_menu_id"] = pid
+
     result = await mockup_pipeline.ai_generate(
         title=body.title,
         page_type=body.page_type,
         description=body.description,
+        menu_context=menu_context,
     )
 
     # Initialise MockupState from AI result — normalize search/table/form into FieldDef list
@@ -234,6 +457,7 @@ async def ai_generate(
     screen_id = raw_screen_id if raw_screen_id and _re.match(r'^[A-Za-z]', raw_screen_id) else (
         body.title.encode("ascii", errors="ignore").decode().replace(" ", "") or "CpmsScreen"
     )
+    screen_id = _normalize_cpms_mockup_screen_id(screen_id)
     screen_name = result.get("screen_name", body.title)
 
     session.mockup_state = MockupState(
@@ -242,6 +466,7 @@ async def ai_generate(
         page_type=body.page_type,
         fields=normalized_fields,
         tabs=tabs,
+        menu_context=menu_context,
         current_step=1,
     )
     session.spec_source = "mockup"
@@ -253,6 +478,7 @@ async def ai_generate(
         "page_type": body.page_type,
         "fields": normalized_fields,
         "tabs": tabs,
+        "menu_context": menu_context,
         **{k: v for k, v in result.items() if k not in ("screen_id", "screen_name", "fields", "tabs")},
     }
 
@@ -360,6 +586,7 @@ async def ai_interview(
         title=mockup_state.screen_name,
         annotation_markdown=mockup_state.annotation_markdown,
         vue_source=mockup_state.vue_code,
+        menu_context=_ensure_menu_context(mockup_state),
     )
 
     mockup_state.interview_questions = questions
@@ -392,6 +619,7 @@ async def interview_result(
         answers=body.answers,
         raw_interview_text=body.raw_interview_text,
         screen_name=mockup_state.screen_id or "",
+        menu_context=_ensure_menu_context(mockup_state),
     )
 
     mockup_state.interview_note_md = interview_note_md
@@ -435,6 +663,7 @@ async def generate_spec(
             interview_note = body.interview_note_md or (mockup_state.interview_note_md if mockup_state else None)
             screen_name = body.screen_name or (mockup_state.screen_name if mockup_state else "화면")
             vue_code = body.vue_code or (mockup_state.vue_code if mockup_state else None)
+            menu_context = body.menu_context or (_ensure_menu_context(mockup_state) if mockup_state else None)
 
             if not annotation_md:
                 yield _sse_msg("error", content="주석 분석(Step 3) 데이터가 없습니다. Step 3를 먼저 진행해 주세요.")
@@ -455,6 +684,7 @@ async def generate_spec(
                 annotation_markdown=annotation_md,
                 interview_note_md=interview_note,
                 vue_source=vue_code,
+                menu_context=menu_context,
             ):
                 full_spec += chunk
                 yield _sse_msg("chunk", content=chunk)

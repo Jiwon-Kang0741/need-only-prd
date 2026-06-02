@@ -68,7 +68,17 @@ interface SessionStore {
   mockupLoading: boolean
   mockupError: string | null
   setSpecMode: (mode: 'text' | 'mockup') => void
-  mockupAiGenerate: (title: string, pageType: string, description?: string) => Promise<void>
+  mockupAiGenerate: (
+    title: string,
+    pageType: string,
+    description?: string,
+    options?: {
+      menuId?: string
+      menuName?: string
+      pMenuId?: string
+      screenId?: string
+    },
+  ) => Promise<void>
   mockupScaffold: (screenId: string, screenName: string, pageType: string, fields: Record<string, unknown>[]) => Promise<void>
   mockupAiAnnotate: () => Promise<void>
   mockupAiInterview: () => Promise<void>
@@ -337,16 +347,29 @@ export const useSessionStore = create<SessionStore>()(persist((set, get) => ({
 
   setSpecMode: (mode) => set({ specMode: mode }),
 
-  mockupAiGenerate: async (title, pageType, description) => {
+  mockupAiGenerate: async (title, pageType, description, options) => {
     set({ mockupLoading: true, mockupError: null })
     try {
-      const result = await apiMockupAiGenerate(title, pageType, description)
+      const result = await apiMockupAiGenerate(title, pageType, description, options)
+      const sanitizeSid = (s: string) => s.trim().replace(SCREEN_ID_INVALID_CHARS, '')
+      const fromApi =
+        typeof result.screen_id === 'string' && result.screen_id.trim()
+          ? sanitizeSid(result.screen_id)
+          : ''
+      const fromOptions = options?.screenId?.trim() ? sanitizeSid(options.screenId) : ''
+      const fallback = sanitizeSid(title).slice(0, 10).toUpperCase() || 'SCR001'
+      const resolvedScreenId = fromApi || fromOptions || fallback
+      const resolvedScreenName =
+        typeof result.screen_name === 'string' && result.screen_name.trim()
+          ? result.screen_name.trim()
+          : title
       set({
         mockupState: {
-          screenId: title.replace(SCREEN_ID_INVALID_CHARS, '').slice(0, 10).toUpperCase() || 'SCR001',
-          screenName: title,
+          screenId: resolvedScreenId,
+          screenName: resolvedScreenName,
           pageType,
           fields: (result.fields as Record<string, unknown>[] | undefined) ?? [...(result.searchFields || []), ...(result.tableColumns || []), ...(result.formFields || [])],
+          menuContext: (result as { menu_context?: Record<string, unknown> }).menu_context ?? null,
           vueCode: null, annotations: null, annotationMarkdown: null,
           interviewQuestions: null, interviewAnswers: null, rawInterviewText: null, interviewNoteMd: null,
           currentStep: 1,

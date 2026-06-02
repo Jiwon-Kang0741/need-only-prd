@@ -9,8 +9,13 @@ import CoverageScore from './components/CoverageScore'
 import ExportButton from './components/ExportButton'
 import CodeGenPanel from './components/CodeGenPanel'
 import StreamingText from './components/StreamingText'
+import MenuTreeManagement from './components/MenuTreeManagement'
 
 function App() {
+  // ?page=menu 진입 시 메뉴 관리 화면만 독립 렌더 (기존 코드 영향 없음)
+  if (new URLSearchParams(window.location.search).get('page') === 'menu') {
+    return <MenuTreeManagement />
+  }
   useSession()
   const specMarkdown = useSessionStore((s) => s.specMarkdown)
   const isGenerating = useSessionStore((s) => s.isGenerating)

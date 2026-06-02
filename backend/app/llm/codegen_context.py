@@ -56,14 +56,22 @@ def _load_guide_dir(dirname: str) -> dict[str, dict[str, str]]:
 
 _TABLE_INFO: str | None = None
 
+# DataGuide 하단 발췌 — DataEngineerAgent DDL·공통 시드 SQL 근거 (토큰 절약을 위해 파일별 시작 마커 이후만 로드)
+_DATA_ENGINEER_DATAGUIDE: str | None = None
+_DATAGUIDE_DATA_ENGINEER_START: dict[str, str] = {
+    "00.data_standard.md": "## 3. Data Type Standard",
+    "01.seed_standard.md": "# 12. Validation 규칙",
+}
+
 
 def invalidate_cache() -> None:
     """Force re-read of guide files on next access."""
-    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO
+    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO, _DATA_ENGINEER_DATAGUIDE
     _BACKEND_SECTIONS = None
     _FRONTEND_SECTIONS = None
     _NAMING_CONTEXT = None
     _TABLE_INFO = None
+    _DATA_ENGINEER_DATAGUIDE = None
 
 
 def _ensure_loaded() -> None:
@@ -205,6 +213,43 @@ def get_table_info() -> str:
     else:
         _TABLE_INFO = ""
     return _TABLE_INFO
+
+
+def get_dataguide_data_engineer_excerpt() -> str:
+    """Return concatenated lower sections of `pfy_prompt/DataGuide/*.md` for Data Engineer.
+
+    Used as the authoritative contract for:
+    - Business table DDL: logical→Postgres types (§3), PK/FK placement (ALTER at file end), audit §5, soft-delete §6–6.1
+    - Seed / init.sql: validation, deterministic rules, output order, `cmn_*` consistency §16
+
+    Each file is sliced from the first line matching ``_DATAGUIDE_DATA_ENGINEER_START``; if the
+    marker is missing, the full file is included so generation never runs blind.
+    """
+    global _DATA_ENGINEER_DATAGUIDE
+    if _DATA_ENGINEER_DATAGUIDE is not None:
+        return _DATA_ENGINEER_DATAGUIDE
+    base = Path(settings.PROMPT_REFERENCE_DIR) / "DataGuide"
+    if not base.is_dir():
+        _DATA_ENGINEER_DATAGUIDE = ""
+        return ""
+    parts: list[str] = []
+    for path in sorted(base.glob("*.md")):
+        marker = _DATAGUIDE_DATA_ENGINEER_START.get(path.name)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if marker:
+            idx = text.find(marker)
+            excerpt = text[idx:].strip() if idx >= 0 else text.strip()
+            label = f"DataGuide/{path.name} (from «{marker}»)"
+        else:
+            excerpt = text.strip()
+            label = f"DataGuide/{path.name} (full file)"
+        if excerpt:
+            parts.append(f"=== {label} ===\n{excerpt}")
+    _DATA_ENGINEER_DATAGUIDE = "\n\n".join(parts)
+    return _DATA_ENGINEER_DATAGUIDE
 
 
 # ---------------------------------------------------------------------------
