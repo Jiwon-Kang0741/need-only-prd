@@ -156,6 +156,34 @@ def _resolve_frontend_import_candidates(source_path: str, import_path: str) -> l
             f"{resolved_str}/index.vue", f"{resolved_str}/index.ts"]
 
 
+_LV2_WHITELIST = {"EDU", "ACT", "MON", "PRA", "CNR", "SYS", "CMN", "TOP"}
+_CPMS_LV2_RE = re.compile(r"^CPMS([A-Z]{3})[A-Z0-9_]*$")
+
+
+def check_lv2_whitelist(screen_code: str) -> list[dict]:
+    """Validate a CPMS screen code's LV2 segment is whitelisted.
+
+    CPMS codes are CPMS{LV2}{...}; LV2 must be one of the known module codes.
+    Non-CPMS codes are not our concern (returns []). Ported (verify-only) from
+    agents.PlannerAgent._enforce_lv2_whitelist."""
+    if not screen_code:
+        return []
+    m = _CPMS_LV2_RE.match(screen_code.strip().upper())
+    if not m:
+        return []  # not a CPMS-shaped code → no opinion
+    lv2 = m.group(1)
+    if lv2 in _LV2_WHITELIST:
+        return []
+    return [{
+        "file_path": "(plan)",
+        "issue": (f"[STATIC] screen code '{screen_code}' has non-whitelisted LV2 '{lv2}'. "
+                  f"Allowed: {', '.join(sorted(_LV2_WHITELIST))}"),
+        "fix_instruction": ("Use a CPMS screen code whose 2nd-level module segment is one of "
+                            f"{', '.join(sorted(_LV2_WHITELIST))} (e.g. CPMSEDU...)."),
+        "severity": "warning",
+    }]
+
+
 def check_frontend_local_imports(files: dict) -> list[dict]:
     """Ensure generated frontend files only import local files that actually exist."""
     issues: list[dict] = []

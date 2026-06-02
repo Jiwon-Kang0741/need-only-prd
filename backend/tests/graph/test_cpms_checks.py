@@ -62,3 +62,26 @@ def test_frontend_local_import_resolves_ok():
     }
     issues = check_frontend_local_imports(files)
     assert issues == []
+
+
+from app.llm.graph.cpms_checks import check_lv2_whitelist
+
+
+def test_lv2_whitelist_valid_screen_code_ok():
+    # CPMSEDURSLTLST → LV2=EDU (whitelisted) → no issue
+    assert check_lv2_whitelist("CPMSEDURSLTLST") == []
+
+
+def test_lv2_whitelist_invalid_lv2_flagged():
+    # CPMSXYZRSLT → LV2=XYZ (not in whitelist) → issue
+    issues = check_lv2_whitelist("CPMSXYZRSLT")
+    assert any("LV2" in i["issue"] for i in issues)
+
+
+def test_lv2_whitelist_non_cpms_skipped():
+    # not a CPMS code → no opinion
+    assert check_lv2_whitelist("FOOBAR") == []
+
+
+def test_lv2_whitelist_empty_skipped():
+    assert check_lv2_whitelist("") == []
