@@ -11,6 +11,7 @@ from app.llm.graph import nodes, react
 from app.llm.graph.mybatis_check import (
     autofix_binding, check_binding, autofix_dto_fields, check_dto_fields,
 )
+from app.llm.graph.cpms_checks import check_db_seed_sql, check_frontend_local_imports
 
 
 def _route_waves(state: dict):
@@ -67,6 +68,9 @@ def mybatis_fix(state: dict) -> dict:
         remaining = check_binding(fixed_files, contract)
         if contract:
             remaining = remaining + check_dto_fields(fixed_files, contract)
+        # Ported CPMS domain checks (whole-file): DB seed rules + frontend imports.
+        remaining = (remaining + check_db_seed_sql(fixed_files)
+                     + check_frontend_local_imports(fixed_files))
     except Exception as e:  # verification is a safety net, never a blocker
         return {"events": [{"type": "log", "line": f"[MYBATIS] error: {e}"}]}
     events = [{"type": "log", "line": f"[MYBATIS-FIX] {log}"} for log in fix_logs]

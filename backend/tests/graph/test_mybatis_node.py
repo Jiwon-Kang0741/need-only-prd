@@ -57,3 +57,13 @@ def test_mybatis_fix_uses_contract_when_present():
     mapper_c = out["files"]["b/FooMapper.xml"]["content"]
     assert '"selectList"' in dao_c
     assert 'id="selectList"' in mapper_c
+
+
+def test_mybatis_fix_includes_cpms_checks():
+    # db_init_sql missing seed tables → cpms db_seed check surfaces in open_issues
+    sql = "CREATE TABLE foo (id int);"  # no cmn_* seed tables
+    state = {"files": {
+        "d/init.sql": _gf("db/init.sql", "db_init_sql", sql),
+    }}
+    out = mybatis_fix(state)
+    assert any("seed tables" in i["issue"] for i in out.get("open_issues", []))
