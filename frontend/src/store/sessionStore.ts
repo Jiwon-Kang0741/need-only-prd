@@ -7,6 +7,7 @@ import {
   sendChat as apiSendChat,
   validate as apiValidate,
   generateCode as apiGenerateCode,
+  getGeneratedFiles as apiGetGeneratedFiles,
   deployAndRun as apiDeployAndRun,
   stopContainers as apiStopContainers,
   deleteSource as apiDeleteSource,
@@ -28,6 +29,11 @@ const initialCodeGen: CodeGenState = {
   buildLogs: [],
   error: null,
   ports: null,
+  currentNode: null,
+  currentWave: null,
+  reactSteps: [],
+  plannedFiles: [],
+  completedPaths: [],
 }
 
 interface SessionStore {
@@ -196,62 +202,89 @@ export const useSessionStore = create<SessionStore>()(persist((set, get) => ({
       if (abort.signal.aborted) return
       if (event.type === 'status') {
         set({ statusMessage: event.content ?? event.message ?? null })
-      } else if (event.type === 'agent_start') {
-        set({ statusMessage: `${event.display_name ?? event.agent} working...` })
-      } else if (event.type === 'agent_complete') {
-        // no-op
-      } else if (event.type === 'plan' && event.plan) {
+      } else if (event.type === 'node_start') {
         set((state) => ({
-          codeGen: { ...state.codeGen, plan: event.plan! },
+          codeGen: { ...state.codeGen, currentNode: event.node ?? null },
+          statusMessage: `${event.node ?? 'graph'} 실행 중...`,
         }))
-      } else if (event.type === 'file_start') {
-        set((state) => ({
-          codeGen: {
-            ...state.codeGen,
-            currentFileIndex: event.index ?? state.codeGen.currentFileIndex,
-            currentFileContent: '',
-          },
-        }))
-      } else if (event.type === 'chunk' && event.content) {
+      } else if (event.type === 'node_end') {
+        set((state) => ({ codeGen: { ...state.codeGen, currentNode: null } }))
+      } else if (event.type === 'contract') {
+        set({ statusMessage: '계약(contract) 추출 완료' })
+      } else if (event.type === 'plan' && event.files) {
         set((state) => ({
           codeGen: {
             ...state.codeGen,
-            currentFileContent: state.codeGen.currentFileContent + event.content,
+            plannedFiles: event.files!.map((f) => ({
+              path: f.file_path ?? f.path ?? '',
+              file_type: f.file_type,
+              wave: f.wave,
+            })),
           },
         }))
+      } else if (event.type === 'wave_start') {
+        set((state) => ({
+          codeGen: { ...state.codeGen, currentWave: event.wave ?? null },
+          statusMessage: `Wave ${event.wave} 생성 중 (${event.file_count ?? '?'}개 파일)...`,
+        }))
+      } else if (event.type === 'wave_complete') {
+        // no-op (currentWave updated on next wave_start)
       } else if (event.type === 'file_complete') {
-        set((state) => {
-          const newFile = {
-            file_path: event.file_path ?? '',
-            file_type: event.file_type ?? '',
-            content: event.content ?? state.codeGen.currentFileContent,
-            layer: (event.layer ?? 'backend') as 'backend' | 'frontend',
-          }
-          const existingIndex = state.codeGen.generatedFiles.findIndex(
-            (f) => f.file_path === newFile.file_path
-          )
-          const updatedFiles =
-            existingIndex >= 0
-              ? state.codeGen.generatedFiles.map((f, i) => (i === existingIndex ? newFile : f))
-              : [...state.codeGen.generatedFiles, newFile]
-          return {
-            codeGen: {
-              ...state.codeGen,
-              generatedFiles: updatedFiles,
-              currentFileContent: event.content ?? '',
-            },
-          }
-        })
+        const p = event.path ?? event.file_path ?? ''
+        set((state) => ({
+          codeGen: {
+            ...state.codeGen,
+            completedPaths: state.codeGen.completedPaths.includes(p)
+              ? state.codeGen.completedPaths
+              : [...state.codeGen.completedPaths, p],
+          },
+        }))
+      } else if (event.type === 'tool_call') {
+        set((state) => ({
+          codeGen: {
+            ...state.codeGen,
+            reactSteps: [...state.codeGen.reactSteps, { tool: event.tool }],
+          },
+        }))
+      } else if (event.type === 'react_step') {
+        set((state) => ({
+          codeGen: {
+            ...state.codeGen,
+            reactSteps: [...state.codeGen.reactSteps,
+              { iteration: event.iteration, thought: event.thought }],
+          },
+        }))
       } else if (event.type === 'log' && event.line) {
         set((state) => ({
           codeGen: { ...state.codeGen, buildLogs: [...state.codeGen.buildLogs, event.line!] },
         }))
       } else if (event.type === 'complete') {
-        set((state) => ({
-          codeGen: { ...state.codeGen, status: 'generated' },
-          statusMessage: null,
-          _codegenAbort: null,
-        }))
+        // file_complete carried only paths; fetch full file contents now
+        apiGetGeneratedFiles()
+          .then((data) => {
+            set((state) => ({
+              codeGen: {
+                ...state.codeGen,
+                status: 'generated',
+                generatedFiles: data.files,
+              },
+              statusMessage: null,
+              _codegenAbort: null,
+            }))
+          })
+          .catch((err) => {
+            // generation finished but fetching file bodies failed — surface it
+            // rather than leaving the panel stuck on the spinner.
+            set((state) => ({
+              codeGen: {
+                ...state.codeGen,
+                status: 'error',
+                error: `생성은 완료됐으나 파일을 불러오지 못했습니다: ${err?.message ?? err}`,
+              },
+              statusMessage: null,
+              _codegenAbort: null,
+            }))
+          })
       } else if (event.type === 'error') {
         set((state) => ({
           codeGen: { ...state.codeGen, status: 'error', error: event.content ?? event.message ?? 'Generation failed' },

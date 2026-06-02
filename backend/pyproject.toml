@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings",
     "sse-starlette",
     "aiofiles",
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +21,12 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "llm: integration test that calls the real gpt-5.5 LLM (skipped if keys absent)",
 ]
 
 [tool.hatch.build.targets.wheel]

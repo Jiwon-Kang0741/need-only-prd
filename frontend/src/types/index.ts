@@ -51,6 +51,13 @@ export interface SSEEvent {
   type: 'status' | 'text' | 'chunk' | 'requirements' | 'complete' | 'error'
       | 'plan' | 'file_start' | 'file_complete' | 'log'
       | 'agent_start' | 'agent_complete'
+      // LangGraph agentic events
+      | 'node_start' | 'node_end'
+      | 'wave_start' | 'wave_complete'
+      | 'contract'
+      | 'tool_call' | 'tool_result'
+      | 'react_step' | 'react_converged'
+      | 'graph_complete'
   content?: string
   spec_version?: number
   message?: string
@@ -68,6 +75,18 @@ export interface SSEEvent {
   agent?: string
   display_name?: string
   files_count?: number
+  // LangGraph agentic fields
+  node?: string
+  wave?: number
+  file_count?: number
+  path?: string
+  tool?: string
+  args?: Record<string, unknown>
+  contract?: Record<string, unknown>
+  files?: Array<{ file_path?: string; path?: string; file_type?: string; wave?: number }>
+  iteration?: number
+  thought?: string
+  reason?: string
 }
 
 // --- Code Generation Types ---
@@ -102,6 +121,12 @@ export interface CodeGenState {
   buildLogs: string[]
   error: string | null
   ports: { db?: number; backend?: number; frontend?: number } | null
+  // LangGraph progress
+  currentNode: string | null
+  currentWave: number | null
+  reactSteps: Array<{ iteration?: number; tool?: string; thought?: string }>
+  plannedFiles: Array<{ path: string; file_type?: string; wave?: number }>
+  completedPaths: string[]
 }
 
 // --- Mockup Pipeline Types ---

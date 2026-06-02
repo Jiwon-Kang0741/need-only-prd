@@ -15,9 +15,10 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
 from app.docker_manager import docker_manager
-from app.llm.codegen_pipeline import codegen_pipeline
-from app.llm.orchestrator import orchestrator
-from app.llm.agents import QAEngineerAgent, _ensure_slf4j_service_impl, organize_imports
+from app.llm.graph.sse_adapter import stream_codegen, graph_files_to_pydantic
+from app.llm.graph.build import build_graph, make_checkpointer
+from app.llm.graph.sse_adapter import langgraph_event_to_sse
+from app.llm.graph.deploy_fix import fix_build_error, postprocess_fixed_file
 from app.models import CodeGenState
 from app.pfy_local import (
     get_pfy_status,
@@ -41,6 +42,10 @@ def _get_session(session_id: str):
     return session
 
 
+def _get_session_or_create(session_id: str):
+    return session_store.get_or_create(session_id)
+
+
 def _ensure_codegen(session) -> CodeGenState:
     if session.codegen is None:
         session.codegen = CodeGenState()
@@ -55,8 +60,8 @@ def _sse(type: str, **kwargs) -> dict:
 # -------------------------------------------------------------- generate
 @router.post("/generate")
 async def generate_code(session_id: str = Depends(get_session_id)):
-    """Multi-agent code generation: Planner → Data → Backend+Frontend (parallel) → QA."""
-    session = _get_session(session_id)
+    """LangGraph agentic code generation: contract -> plan -> 3-wave -> reviewer."""
+    session = _get_session_or_create(session_id)
     if not session.spec_markdown:
         raise HTTPException(400, "No spec generated yet")
 
@@ -65,50 +70,62 @@ async def generate_code(session_id: str = Depends(get_session_id)):
         codegen_state.status = "generating"
         codegen_state.error = None
         codegen_state.generated_files = []
-        codegen_state.agents = []
-
         try:
-            async for event in orchestrator.run(
-                spec_markdown=session.spec_markdown,
-                increment_llm_calls=lambda: session_store.increment_llm_calls(session.session_id),
-            ):
-                # Update plan in session when received
-                if event.get("type") == "plan" and "plan" in event:
-                    from app.models import CodeGenPlan, CodeGenPlanFile
-                    plan_data = event["plan"]
-                    codegen_state.plan = CodeGenPlan(
-                        module_code=plan_data.get("module_code", ""),
-                        screen_code=plan_data.get("screen_code", ""),
-                        files=[CodeGenPlanFile(**f) for f in plan_data.get("files", [])],
-                    )
-
-                # When complete: collect files, write to PFY, then notify client
-                if event.get("type") == "complete":
-                    # Collect final files from orchestrator
-                    if hasattr(orchestrator, '_last_files'):
-                        codegen_state.generated_files = orchestrator._last_files
-                    if hasattr(orchestrator, '_last_agents'):
-                        codegen_state.agents = orchestrator._last_agents
-
-                    # Write to PFY workspace BEFORE sending complete event
-                    if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:
-                        try:
-                            n = len(write_generated_files_to_pfy(codegen_state.generated_files))
-                            logger.info("PFY: synced %d files after codegen", n)
-                            yield _sse(type="log", line=f"[PFY] {n}개 파일을 워크스페이스에 저장했습니다.")
-                        except Exception as exc:
-                            logger.warning("PFY sync after codegen failed: %s", exc)
-                            yield _sse(type="log", line=f"[PFY] 파일 저장 실패: {exc}")
-
-                    codegen_state.status = "generated"
-                    session_store.save(session.session_id)
-
-                yield _sse(**event)
-
+            async with make_checkpointer() as cp:
+                async for event in stream_codegen(session, checkpointer=cp):
+                    if event.get("type") == "graph_complete":
+                        # stream_codegen already converted the final files for us
+                        codegen_state.generated_files = event.get("files", [])
+                        codegen_state.status = "generated"
+                        session_store.save(session.session_id)
+                        if settings.CODEGEN_DEPLOY_MODE == "pfy" and codegen_state.generated_files:
+                            try:
+                                n = len(write_generated_files_to_pfy(codegen_state.generated_files))
+                                logger.info("PFY: synced %d files after codegen", n)
+                                yield _sse(type="log", line=f"[PFY] {n}개 파일을 워크스페이스에 저장했습니다.")
+                            except Exception as exc:
+                                logger.warning("PFY sync after codegen failed: %s", exc)
+                                yield _sse(type="log", line=f"[PFY] 파일 저장 실패: {exc}")
+                        yield _sse(type="complete", total=len(codegen_state.generated_files))
+                    else:
+                        yield _sse(**event)
         except Exception as e:
             codegen_state.status = "error"
             codegen_state.error = str(e)
             session_store.save(session.session_id)
+            yield _sse(type="error", message=str(e))
+
+    return EventSourceResponse(event_stream(), ping=10)
+
+
+# -------------------------------------------------------------- resume
+@router.post("/resume")
+async def resume_code(session_id: str = Depends(get_session_id)):
+    """Resume a previously-started graph run from its last checkpoint."""
+    session = _get_session(session_id)
+    codegen_state = _ensure_codegen(session)
+
+    async def event_stream():
+        try:
+            async with make_checkpointer() as cp:
+                graph = build_graph(checkpointer=cp)
+                cfg = {"configurable": {"thread_id": session.session_id},
+                       "recursion_limit": 60}
+                snap = await graph.aget_state(cfg)
+                if snap is None or not snap.values:
+                    yield _sse(type="error", message="No checkpoint to resume")
+                    return
+                async for ev in graph.astream_events(None, cfg, version="v2"):
+                    sse = langgraph_event_to_sse(ev)
+                    if sse is not None:
+                        yield _sse(**sse)
+                snap2 = await graph.aget_state(cfg)
+                files = snap2.values.get("files", {}) if snap2 else {}
+                codegen_state.generated_files = graph_files_to_pydantic(files)
+                codegen_state.status = "generated"
+                session_store.save(session.session_id)
+                yield _sse(type="complete", total=len(codegen_state.generated_files))
+        except Exception as e:
             yield _sse(type="error", message=str(e))
 
     return EventSourceResponse(event_stream(), ping=10)
@@ -244,18 +261,15 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                         yield _sse("log", line=f"[FIX] Fixing {target.file_path}...")
 
                         session_store.increment_llm_calls(session.session_id)
-                        qa = QAEngineerAgent()
-                        fixed_content = await qa.fix_file(
+                        fixed_content = await fix_build_error(
                             error_log=err_text,
                             file_path=target.file_path,
                             file_content=target.content,
                             all_files=codegen_state.generated_files,
                         )
-
-                        if target.file_type == "service_impl":
-                            fixed_content = _ensure_slf4j_service_impl(fixed_content)
-                        if target.file_path.endswith(".java"):
-                            fixed_content = organize_imports(fixed_content)
+                        fixed_content = postprocess_fixed_file(
+                            target.file_path, target.file_type, fixed_content
+                        )
                         target.content = fixed_content
                         update_pfy_file_from_generated(
                             codegen_state.generated_files,
@@ -380,18 +394,15 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                     yield _sse("log", line=f"[FIX] Fixing {target.file_path}...")
 
                     session_store.increment_llm_calls(session.session_id)
-                    qa = QAEngineerAgent()
-                    fixed_content = await qa.fix_file(
+                    fixed_content = await fix_build_error(
                         error_log=err_text,
                         file_path=target.file_path,
                         file_content=target.content,
                         all_files=codegen_state.generated_files,
                     )
-
-                    if target.file_type == "service_impl":
-                        fixed_content = _ensure_slf4j_service_impl(fixed_content)
-                    if target.file_path.endswith(".java"):
-                        fixed_content = organize_imports(fixed_content)
+                    fixed_content = postprocess_fixed_file(
+                        target.file_path, target.file_type, fixed_content
+                    )
                     target.content = fixed_content
                     docker_manager.update_file_in_workspace(
                         session.session_id, err_file_path, fixed_content

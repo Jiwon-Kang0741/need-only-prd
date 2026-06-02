@@ -71,6 +71,31 @@ export default function CodeGenPanel() {
           {statusMessage ?? 'Working...'}
         </div>
 
+        {/* LangGraph progress */}
+        <div className="px-5 pb-2 space-y-1.5 text-xs">
+          {codeGen.currentNode && (
+            <div className="text-primary font-mono">
+              ▶ {codeGen.currentNode}
+              {codeGen.currentWave ? ` · wave ${codeGen.currentWave}` : ''}
+            </div>
+          )}
+          {codeGen.plannedFiles.length > 0 && (
+            <div className="text-neutral-600">
+              파일 {codeGen.completedPaths.length}/{codeGen.plannedFiles.length} 완료
+            </div>
+          )}
+          {codeGen.reactSteps.length > 0 && (
+            <div className="border-l-2 border-neutral-300 pl-2 space-y-0.5">
+              <div className="text-neutral-500 font-medium">Reviewer</div>
+              {codeGen.reactSteps.slice(-5).map((s, i) => (
+                <div key={i} className="text-neutral-700 font-mono truncate">
+                  {s.tool ? `🔧 ${s.tool}` : s.thought ? `💭 ${s.thought.slice(0, 80)}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Plan preview */}
         {plan && (
           <div className="px-5 py-2 text-xs text-neutral-600">
