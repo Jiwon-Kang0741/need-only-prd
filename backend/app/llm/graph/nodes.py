@@ -172,6 +172,11 @@ async def generate_file(state: dict) -> dict:
                 seed_block += f"\n=== DATA SEED GUIDE ===\n{dg}\n"
         except Exception:
             pass
+    # vue files get the inferred frontend archetype + reference context.
+    elif spec["file_type"] in ("vue_page", "vue_types"):
+        from app.llm.graph.frontend_ctx import archetype_prompt_block
+        seed_block = archetype_prompt_block(state.get("spec_markdown", ""),
+                                            state.get("plan", {}))
     base_user = (
         f"=== CONTRACT ===\n{json.dumps(state['contract'], ensure_ascii=False)}\n\n"
         + (f"=== REQUIRED IDENTIFIERS (use EXACTLY, do not rename) ===\n{req_ids}\n\n"
