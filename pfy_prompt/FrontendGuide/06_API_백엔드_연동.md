@@ -17,27 +17,27 @@ Vue 프론트엔드와 PFY Spring Boot 백엔드를 연동하여 데이터를 �
 
 ### Types 파일 위치 (CRITICAL!)
 
-**⚠️ CRITICAL: 타입 파일은 화면별로 `{screenId}Types.ts`로 생성합니다!**
+**⚠️ CRITICAL: 타입 파일은 카테고리 공용 `types.ts`에 모아 관리합니다!**
 
 #### ✅ 올바른 패턴
 ```
-api/pages/{module}/{category}/{screenId}Types.ts
+api/pages/{module}/{category}/types.ts
 ```
 
 **예시**:
-- `api/pages/sy/ar/syar030Types.ts` - SYAR030 화면의 타입
-- `api/pages/edu/pondg/cpmsEduPondgEditTypes.ts` - 교육과정 수정 화면의 타입
+- `api/pages/sy/ar/types.ts` - SYAR010, SYAR030 등 같은 카테고리 타입
+- `api/pages/edu/pondg/types.ts` - 교육 pondg 카테고리 공용 타입
 
 #### ❌ 잘못된 패턴
 ```
 pages/{module}/{category}/{screenId}/types.ts  ← 화면 폴더 안 (잘못됨!)
-api/pages/{module}/{category}/types.ts         ← 공유 types.ts (PFY 표준 아님!)
+api/pages/{module}/{category}/{screenId}Types.ts  ← 화면별 타입 파일 남발 (지양)
 ```
 
 **이유**:
-- 화면별로 타입을 분리하여 충돌 방지
-- API 파일과 같은 위치에 있어 import 경로가 간단함
-- PFY 프로젝트 전체에서 일관된 패턴 유지 (SYAR030, SYBJ010 등 참고)
+- 같은 모듈/카테고리 화면들이 타입 정의를 공유할 수 있음
+- API 파일에서는 `./types`, 화면 컴포넌트에서는 `@/api/pages/.../types`로 단순하게 import 가능
+- PMDP020, SPOV010 계열처럼 카테고리 기준으로 타입을 모으는 패턴과 잘 맞음
 
 ### 기본 구조
 
@@ -55,17 +55,17 @@ import api from '@/plugins/axios';
 import { ApiResponse } from '@/types/api';
 import { formatErrorMessage } from '@/utils/formatErrorMessage';
 
-// ⭐ CRITICAL: 같은 디렉토리의 타입 파일에서 import
+// ⭐ CRITICAL: 같은 카테고리의 공용 types.ts에서 import
 import {
   SelectWindowListParams,
   SelectWindowListResponse,
   SaveWindowListParams,
-} from '@/api/pages/sy/ar/syar030Types';
+} from './types';
 
 // ⭐ CRITICAL: API 엔드포인트 URL 형식
 const Api = {
-  selectWindowList: '/api/v1/SYAR030-selectWindowList',
-  saveWindowList: '/api/v1/SYAR030-saveWindowList',
+  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
+  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -121,14 +121,14 @@ export async function saveWindowList(
 
 **중요 규칙**:
 - ✅ `import api from '@/plugins/axios'` 직접 import
-- ✅ Types: `api/pages/{module}/{category}/{screenId}Types.ts`
-- ✅ API import: `from '@/api/pages/{module}/{category}/{screenId}Types'`
-- ✅ API URL: `/api/v1/SYAR030-selectWindowList`
+- ✅ Types: `api/pages/{module}/{category}/types.ts`
+- ✅ API import: API 파일에서는 `from './types'`, 화면 컴포넌트에서는 `from '@/api/pages/{module}/{category}/types'`
+- ✅ API URL: `/online/mvcJson/SYAR030-selectWindowList`
 - ❌ API URL: `/SYAR030-selectWindowList` (prefix 누락)
 - ❌ API URL: `/json/SYAR030-selectWindowList` (잘못된 prefix)
 - ✅ `return response.data` (ApiResponse 전체 반환)
 - ✅ **조회 포함 모든 API 호출은 `api.post()` 사용** — `api.get()` 절대 사용 금지
-- ❌ `api.get(url, { params })` — CPMS `/api/v1/` 디스패처는 GET을 처리하지 않음 (404/405)
+- ❌ `api.get(url, { params })` — CPMS `/online/mvcJson/` 디스패처는 GET을 처리하지 않음 (404/405)
 
 ---
 
@@ -204,21 +204,21 @@ PFY 백엔드는 **MyBatis**를 사용하며, 파라미터는 **camelCase**입�
 
 ### 2.1 타입 파일 생성 위치 (CRITICAL!)
 
-**⚠️ CRITICAL: 타입 파일은 API 폴더에 화면별로 생성합니다!**
+**⚠️ CRITICAL: 타입 파일은 API 폴더의 카테고리 공용 `types.ts`에 둡니다!**
 
 ```bash
 # ✅ 올바른 위치
-src/api/pages/sy/ar/syar030Types.ts
+src/api/pages/sy/ar/types.ts
 
 # ❌ 잘못된 위치
 # src/pages/sy/ar/syar030/types.ts       ← 화면 폴더 안
-# src/api/pages/sy/ar/types.ts           ← 공유 types.ts
+# src/api/pages/sy/ar/syar030Types.ts    ← 화면별 타입 파일 남발 (지양)
 ```
 
 ### 2.2 SearchParams 인터페이스
 
 ```typescript
-// syar030Types.ts
+// types.ts
 
 // 검색 파라미터 — camelCase (백엔드 ReqDto 필드명과 동일)
 export interface SelectWindowListParams {
@@ -290,7 +290,6 @@ interface ApiResponse<T> {
 ```java
 // 백엔드 ServiceImpl
 @ServiceId("SYAR030/selectWindowList")
-@Transactional(readOnly = true)
 public List<WindowResDto> selectWindowList(WindowReqDto request) {
     return syar030DaoImpl.selectWinList(request);
 }
@@ -322,7 +321,6 @@ fetchedWindowList.value = result.payload;  // ← payload에서 실제 데이터
 ```java
 // 백엔드 ServiceImpl
 @ServiceId("SYAR030/saveWindowList")
-@Transactional
 public void saveWindowList(List<WindowResDto> list) {
     List<WindowResDto> insertList = CommonUtils.filterByStatus(list, GridStatus.INSERTED);
     List<WindowResDto> updateList = CommonUtils.filterByStatus(list, GridStatus.UPDATED);
@@ -460,11 +458,11 @@ import type {
   SelectWindowListParams,
   SelectWindowListResponse,
   SaveWindowListParams,
-} from '@/api/pages/sy/ar/syar030Types';
+} from './types';
 
 const Api = {
-  selectWindowList: '/api/v1/SYAR030-selectWindowList',
-  saveWindowList: '/api/v1/SYAR030-saveWindowList',
+  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
+  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -523,7 +521,7 @@ import type {
   SelectWindowListParams,
   SelectWindowListResponse,
   SaveWindowListParams,
-} from '@/api/pages/sy/ar/syar030Types';
+} from './types';
 
 // 검색 조건
 const searchParams = ref<SelectWindowListParams>({
@@ -679,7 +677,6 @@ public class SYAR030ServiceImpl {
 
     @ServiceId("SYAR030/selectWindowList")
     @ServiceName("화면 목록 조회")
-    @Transactional(readOnly = true)
     public List<WindowResDto> selectWindowList(WindowReqDto request) {
         log.debug("Service Method : selectWindowList, Input Param={}", request.toString());
         try {
@@ -691,7 +688,6 @@ public class SYAR030ServiceImpl {
 
     @ServiceId("SYAR030/saveWindowList")
     @ServiceName("화면 저장")
-    @Transactional
     public void saveWindowList(List<WindowResDto> list) {
         log.debug("Service Method : saveWindowList, Input Param={}", list.toString());
         List<WindowResDto> insertList = CommonUtils.filterByStatus(list, GridStatus.INSERTED);
@@ -713,8 +709,7 @@ public class SYAR030ServiceImpl {
 **체크리스트**:
 - [ ] `@Service` 어노테이션 (파라미터 없이 사용)
 - [ ] `@Slf4j` 어노테이션 (Lombok)
-- [ ] `@Transactional(readOnly = true)` (조회 메서드)
-- [ ] `@Transactional` (저장/수정/삭제 메서드)
+- [ ] public 메서드 위에는 `@ServiceId`, `@ServiceName`만 사용
 - [ ] `@ServiceId("SCREEN_ID/serviceName")` 형식
 - [ ] `@ServiceName("서비스명")` 추가
 - [ ] DAO 인터페이스 없음 — DaoImpl만 사용
@@ -724,17 +719,17 @@ public class SYAR030ServiceImpl {
 ## ✅ 구현 완료 체크리스트
 
 ### TypeScript 타입
-- [ ] `api/pages/{module}/{category}/{screenId}Types.ts` 위치 확인
+- [ ] `api/pages/{module}/{category}/types.ts` 위치 확인
 - [ ] SearchParams 인터페이스 정의 (camelCase — 백엔드 ReqDto와 동일)
 - [ ] 응답 인터페이스 정의 (camelCase — 백엔드 ResDto와 동일)
 - [ ] 저장 인터페이스에 `status: string` 필드 포함
-- [ ] API 파일에서 `from '@/api/pages/.../xxxTypes'` import 확인
-- [ ] 화면 컴포넌트에서 `from '@/api/pages/.../xxxTypes'` import 확인
+- [ ] API 파일에서 `from './types'` import 확인
+- [ ] 화면 컴포넌트에서 `from '@/api/pages/.../types'` import 확인
 
 ### API 함수
 - [ ] `import api from '@/plugins/axios'` 직접 import
 - [ ] **모든 API 호출 `api.post()` 사용 확인 — `api.get()` 사용 금지**
-- [ ] API URL: `/api/v1/{화면ID}-{메서드명}` 형식
+- [ ] API URL: `/online/mvcJson/{화면ID}-{메서드명}` 형식
 - [ ] camelCase 파라미터 직접 전달 (변환 불필요)
 - [ ] 세션 파라미터(sLangCd 등) 미포함 (서버측 처리)
 - [ ] 감사 필드 미포함 (서버측 AuditBaseDto 처리)
@@ -750,14 +745,14 @@ public class SYAR030ServiceImpl {
 - [ ] fetchedData ref 생성
 - [ ] loading ref 생성
 - [ ] fetch 함수 작성 (try/finally + loading)
-- [ ] API 결과에서 `.payload` 접근
+- [ ] API 결과에서 필요한 경우 `.payload` 접근
 - [ ] handleSearch 함수 작성
 - [ ] onMounted 초기 조회
 - [ ] 에러 처리 (try-catch)
 
 ### 백엔드 확인
 - [ ] `@ServiceId` 형식 확인 (프론트 API URL과 매칭)
-- [ ] `@Transactional` 어노테이션 확인
+- [ ] public 메서드 위에 `@ServiceId`, `@ServiceName`만 존재하는지 확인
 - [ ] save 메서드가 `List<ResDto>` 파라미터 수신
 - [ ] `CommonUtils.filterByStatus()` + `GridStatus` 패턴 사용
 
@@ -786,17 +781,16 @@ public class SYAR030ServiceImpl { ... }
 public class SYAR030ServiceImpl { ... }
 ```
 
-**원인 2: @Transactional 어노테이션 누락**
+**원인 2: @ServiceId 값 불일치**
 ```java
-// ❌ WRONG — @Transactional 없음
-@ServiceId("SYAR030/selectWindowList")
+// ❌ WRONG — API URL과 다른 serviceName 사용
+@ServiceId("SYAR030/selectWinList")
 public List<WindowResDto> selectWindowList(WindowReqDto request) { ... }
 ```
 
 **해결**:
 ```java
 // ✅ CORRECT
-@Transactional(readOnly = true)
 @ServiceId("SYAR030/selectWindowList")
 public List<WindowResDto> selectWindowList(WindowReqDto request) { ... }
 ```
@@ -850,13 +844,13 @@ const saveData = [
 // ❌ WRONG — prefix 누락 또는 잘못된 형식
 '/SYAR030-selectWindowList'
 '/json/SYAR030-selectWindowList'
-'/api/v1/SYAR030/selectWindowList'  // ← 하이픈 아닌 슬래시
+'/online/mvcJson/SYAR030/selectWindowList'  // ← 하이픈 아닌 슬래시
 ```
 
 **해결**: 정확한 URL 형식 사용
 ```typescript
-// ✅ CORRECT — /api/v1/{화면ID}-{메서드명}
-'/api/v1/SYAR030-selectWindowList'
+// ✅ CORRECT — /online/mvcJson/{화면ID}-{메서드명}
+'/online/mvcJson/SYAR030-selectWindowList'
 ```
 
 ### 4. PK 중복 에러 (CM0001)
@@ -896,11 +890,11 @@ import type {
   SelectWindowListParams,
   SelectWindowListResponse,
   SaveWindowListParams,
-} from '@/api/pages/sy/ar/syar030Types';
+} from './types';
 
 const Api = {
-  selectWindowList: '/api/v1/SYAR030-selectWindowList',
-  saveWindowList: '/api/v1/SYAR030-saveWindowList',
+  selectWindowList: '/online/mvcJson/SYAR030-selectWindowList',
+  saveWindowList: '/online/mvcJson/SYAR030-saveWindowList',
 } as const;
 
 /**
@@ -950,7 +944,7 @@ export async function saveWindowList(
 }
 ```
 
-### src/api/pages/sy/ar/syar030Types.ts
+### src/api/pages/sy/ar/types.ts
 
 ```typescript
 /**
@@ -993,7 +987,7 @@ export interface SaveWindowListParams {
    - ✅ `import api from '@/plugins/axios'`
 
 2. **API URL 형식**
-   - ✅ `/api/v1/SYAR030-selectWindowList`
+   - ✅ `/online/mvcJson/SYAR030-selectWindowList`
    - ❌ `/SYAR030-selectWindowList`
    - ❌ `/json/SYAR030-selectWindowList`
 

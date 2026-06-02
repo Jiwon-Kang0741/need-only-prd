@@ -170,7 +170,6 @@ button:hover {
   padding: 20px;
   background-color: var(--bg-1);
   border-radius: var(--border-radius-lg);
-  margin-bottom: var(--spacing-md);
   box-shadow: var(--shadow-sm);
   
   // SearchForm 내부 스타일 커스터마이징
@@ -222,6 +221,8 @@ button:hover {
   }
 }
 ```
+
+> `SearchForm`, `SumGrid`, `DataTable` 사이 간격은 가능하면 부모 페이지 루트의 `gap`으로 맞추고, 각 자식 컨테이너에서 `margin-bottom`을 중복으로 주지 않는 편이 일관성이 좋습니다.
 
 ### 3.2 SumGrid 스타일 (기존 화면 패턴)
 
