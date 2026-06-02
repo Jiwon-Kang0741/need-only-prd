@@ -20,6 +20,7 @@ from app.config import settings
 _BACKEND_SECTIONS: dict[str, dict[str, str]] | None = None  # filename -> {heading: content}
 _FRONTEND_SECTIONS: dict[str, dict[str, str]] | None = None
 _NAMING_CONTEXT: str | None = None
+_GUIDE_CACHE_KEY: tuple | None = None
 
 
 def _split_by_headings(text: str) -> dict[str, str]:
@@ -54,6 +55,19 @@ def _load_guide_dir(dirname: str) -> dict[str, dict[str, str]]:
     return result
 
 
+def _guide_dir_cache_key(dirname: str) -> tuple:
+    """Build a deterministic cache key from markdown file mtimes/sizes."""
+    base = Path(settings.PROMPT_REFERENCE_DIR) / dirname
+    if not base.exists():
+        return (dirname, "missing")
+
+    entries: list[tuple[str, int, int]] = []
+    for f in sorted(base.glob("*.md")):
+        st = f.stat()
+        entries.append((f.name, int(st.st_mtime_ns), st.st_size))
+    return (dirname, tuple(entries))
+
+
 _TABLE_INFO: str | None = None
 
 # DataGuide 하단 발췌 — DataEngineerAgent DDL·공통 시드 SQL 근거 (토큰 절약을 위해 파일별 시작 마커 이후만 로드)
@@ -66,18 +80,21 @@ _DATAGUIDE_DATA_ENGINEER_START: dict[str, str] = {
 
 def invalidate_cache() -> None:
     """Force re-read of guide files on next access."""
-    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO, _DATA_ENGINEER_DATAGUIDE
+    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _TABLE_INFO, _DATA_ENGINEER_DATAGUIDE, _GUIDE_CACHE_KEY
     _BACKEND_SECTIONS = None
     _FRONTEND_SECTIONS = None
     _NAMING_CONTEXT = None
     _TABLE_INFO = None
     _DATA_ENGINEER_DATAGUIDE = None
+    _GUIDE_CACHE_KEY = None
 
 
 def _ensure_loaded() -> None:
-    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT
-    if _BACKEND_SECTIONS is not None:
+    global _BACKEND_SECTIONS, _FRONTEND_SECTIONS, _NAMING_CONTEXT, _GUIDE_CACHE_KEY
+    current_key = (_guide_dir_cache_key("BackendGuide"), _guide_dir_cache_key("FrontendGuide"))
+    if _BACKEND_SECTIONS is not None and _GUIDE_CACHE_KEY == current_key:
         return
+    _GUIDE_CACHE_KEY = current_key
     _BACKEND_SECTIONS = _load_guide_dir("BackendGuide")
     _FRONTEND_SECTIONS = _load_guide_dir("FrontendGuide")
 
@@ -98,14 +115,16 @@ def _ensure_loaded() -> None:
 # Keys match BackendGuide filenames (prefix matching).
 # 표준.md is the single consolidated guide; match its prefix "표준" for all types.
 _BACKEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
-    "dto_request": [("표준", ["DTO 표준", "DTO", "명명 규칙", "패키지 구조"]), ("04-", None), ("05-", None)],
-    "dto_response": [("표준", ["DTO 표준", "DTO", "명명 규칙", "패키지 구조"]), ("04-", None), ("05-", None)],
-    "service": [("표준", ["Service 표준", "Service", "명명 규칙", "패키지 구조", "예외 처리", "GridStatus"]), ("04-", None), ("05-", None)],
-    "service_impl": [("표준", ["Service 표준", "Service", "명명 규칙", "패키지 구조", "예외 처리", "GridStatus"]), ("04-", None), ("05-", None)],
-    "dao": [("표준", ["DAO 표준", "DAO", "명명 규칙", "패키지 구조"]), ("04-", None), ("05-", None)],
-    "dao_impl": [("표준", ["DAO 표준", "DAO", "명명 규칙", "패키지 구조"]), ("04-", None), ("05-", None)],
-    "mapper_xml": [("표준", ["MyBatis", "Mapper", "DAO 표준", "DAO", "명명 규칙", "DB 컬럼"]), ("04-", None), ("05-", None)],
-    "db_init_sql": [("표준", ["프로젝트 구조", "DB"]), ("02-", None)],
+    # Include the full consolidated 표준.md for backend file types so
+    # newly added sections are always applied without requiring keyword updates.
+    "dto_request": [("표준", None), ("04-", None), ("05-", None)],
+    "dto_response": [("표준", None), ("04-", None), ("05-", None)],
+    "service": [("표준", None), ("04-", None), ("05-", None)],
+    "service_impl": [("표준", None), ("04-", None), ("05-", None)],
+    "dao": [("표준", None), ("04-", None), ("05-", None)],
+    "dao_impl": [("표준", None), ("04-", None), ("05-", None)],
+    "mapper_xml": [("표준", None), ("04-", None), ("05-", None)],
+    "db_init_sql": [("표준", None), ("02-", None)],
 }
 
 _FRONTEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
@@ -533,7 +552,11 @@ def get_allowed_import_prefixes() -> set[str]:
                     prefixes.add(pkg)
         else:
             parts = gid.split(".")
-            if len(parts) >= 2:
+            # org.apache.*: never use a 2-segment "org.apache" prefix — that would falsely
+            # allow org.apache.poi when only org.apache.maven.surefire (etc.) is declared.
+            if gid.startswith("org.apache.") and len(parts) >= 3:
+                prefixes.add(gid)
+            elif len(parts) >= 2:
                 prefixes.add(f"{parts[0]}.{parts[1]}")
             else:
                 prefixes.add(parts[0])

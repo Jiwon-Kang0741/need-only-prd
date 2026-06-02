@@ -195,6 +195,18 @@ export const staticRoutes: RouteRecordRaw[] = [
       component: () => import('@/pages/generated/fdgdfg/index.vue'),
     },
     {
+      path: '/TESTSCREEN',
+      name: 'TESTSCREEN',
+      meta: { menuId: 'TESTSCREEN', generated: true },
+      component: () => import('@/pages/generated/testscreen/index.vue'),
+    },
+    {
+      path: '/CPMSCMPLRISKIDFYLST',
+      name: 'CPMSCMPLRISKIDFYLST',
+      meta: { menuId: 'CPMSCMPLRISKIDFYLST', generated: true },
+      component: () => import('@/pages/generated/cpmscmplriskidfylst/index.vue'),
+    },
+    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/pages/_system/notFound/index.vue'),

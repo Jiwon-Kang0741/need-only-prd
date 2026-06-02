@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/mockup", tags=["mockup"])
 
 class AiGenerateRequest(BaseModel):
     title: str
-    page_type: str = "list"
+    page_type: Literal["list-detail", "list", "edit", "tab-detail"] = "list"
     description: str | None = None
     menu_id: str | None = None
     menu_name: str | None = None
@@ -45,7 +45,7 @@ class AiGenerateRequest(BaseModel):
 class ScaffoldRequest(BaseModel):
     screen_id: str
     screen_name: str
-    page_type: str = "list-detail"
+    page_type: Literal["list-detail", "list", "edit", "tab-detail"] = "list-detail"
     fields: list[dict]
     tabs: list[dict] | None = None
 
