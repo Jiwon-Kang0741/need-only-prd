@@ -275,8 +275,8 @@ async def derive_contract(state: dict) -> dict:
                    else res_dto)
             operations.append({
                 "op": op,
-                "statement_id": naming.statement_id(op),
-                "dao_method": naming.dao_method(op),
+                "statement_id": naming.statement_id(op, screen_code),
+                "dao_method": naming.dao_method(op, screen_code),
                 "param_type": req_dto,
                 "return_type": ret,
                 "mybatis_tag": naming.mybatis_tag(op),

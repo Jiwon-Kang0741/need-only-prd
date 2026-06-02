@@ -25,9 +25,12 @@ async def test_derive_contract_builds_operations():
     out = await nodes.derive_contract({"contract": _CONTRACT, "plan": _PLAN})
     ops = out["contract"]["operations"]
     ids = {o["statement_id"] for o in ops}
-    assert {"selectList", "selectCount", "select", "insert", "update", "delete"} <= ids
+    # screen_code derived from plan = "CpmsEduRsltLst" → suffixed ids
+    assert {"selectCpmsEduRsltLstList", "selectCpmsEduRsltLstCount",
+            "selectCpmsEduRsltLst", "insertCpmsEduRsltLst",
+            "updateCpmsEduRsltLst", "deleteCpmsEduRsltLst"} <= ids
     one = next(o for o in ops if o["op"] == "selectList")
-    assert one["dao_method"] == "selectList"
+    assert one["dao_method"] == "selectCpmsEduRsltLstList"
     assert one["mybatis_tag"] == "select"
     assert one["param_type"] == "CpmsEduRsltLstReqDto"
 
