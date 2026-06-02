@@ -12,6 +12,7 @@ from app.llm.graph.tools import static_check_impl, validate_sql_impl
 from app.llm.graph.config import GATE_MAX_REGEN
 from app.llm.graph._text import strip_fences as _strip_fences
 from app.llm.graph import naming
+from app.llm.graph.cpms_checks import extract_markdown_section
 
 
 def _parse_json(text: str) -> dict:
@@ -95,6 +96,31 @@ def _dep_context(state: dict, spec: dict) -> str:
     return "\n\n=== DEPENDENCY FILES ===\n" + "\n\n".join(parts)
 
 
+def _db_seed_prompt_block(spec_markdown: str) -> str:
+    """Build focused DB-seed guidance from SPEC Section 7 + CPMS seed rules.
+
+    Ported from agents._build_section7_extract_block. Injected into db_init_sql
+    prompts so the generator follows the seed standard up front (paired with the
+    db_seed validator in cpms_checks)."""
+    if not spec_markdown:
+        return ""
+    sec7 = extract_markdown_section(spec_markdown, "## 7.")
+    return (
+        "\n=== DB SEED RULES (SPEC Section 7 priority) ===\n"
+        f"{sec7 or '(Section 7 not found; follow global DB seed rules strictly)'}\n\n"
+        "MUST APPLY to db_init_sql:\n"
+        "- Required seed tables: cmn_lbl, cmn_pgm, cmn_menu, cmn_role_pgm, cmn_role_menu\n"
+        "- Optional (only if SPEC §10.3 has rows): cmn_class, cmn_code — if seeded, BOTH must appear\n"
+        "- Insert order: cmn_class -> cmn_code -> cmn_lbl -> cmn_pgm -> cmn_menu -> "
+        "cmn_role_pgm -> cmn_role_menu\n"
+        "- PostgreSQL upsert only: INSERT ... ON CONFLICT ... DO UPDATE (never MERGE)\n"
+        "- cmn_lbl.lang_cd default 'ko-KR'\n"
+        "- Include DEV_AUTO role in cmn_role_pgm and cmn_role_menu; ROOT98 fallback parent\n"
+        "- cmn_lbl label IDs: {화면코드}.{대컴포넌트명}.{라벨ID} (e.g. SearchForm.*, DataTable.*)\n"
+        "=== END DB SEED RULES ===\n"
+    )
+
+
 def _contract_section_for(file_type: str, contract: dict) -> str:
     """Build a 'REQUIRED IDENTIFIERS' prompt section for a file type. '' if N/A."""
     ops = (contract or {}).get("operations") or []
@@ -135,10 +161,22 @@ async def generate_file(state: dict) -> dict:
     spec = state["_file_spec"]
     guide = guides.load_guide_for_file_type(spec["file_type"])
     req_ids = _contract_section_for(spec["file_type"], state["contract"])
+    # db_init_sql gets SPEC Section-7 seed rules + DataGuide seed excerpt up front.
+    seed_block = ""
+    if spec["file_type"] == "db_init_sql":
+        seed_block = _db_seed_prompt_block(state.get("spec_markdown", ""))
+        try:
+            from app.llm.codegen_context import get_dataguide_data_engineer_excerpt
+            dg = get_dataguide_data_engineer_excerpt()
+            if dg:
+                seed_block += f"\n=== DATA SEED GUIDE ===\n{dg}\n"
+        except Exception:
+            pass
     base_user = (
         f"=== CONTRACT ===\n{json.dumps(state['contract'], ensure_ascii=False)}\n\n"
         + (f"=== REQUIRED IDENTIFIERS (use EXACTLY, do not rename) ===\n{req_ids}\n\n"
            if req_ids else "")
+        + (f"{seed_block}\n" if seed_block else "")
         + f"=== GUIDE ===\n{guide}\n"
         + f"{_dep_context(state, spec)}\n\n"
         + f"Generate file: {spec['file_path']} (type={spec['file_type']}, "

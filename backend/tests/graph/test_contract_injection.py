@@ -40,3 +40,17 @@ def test_section_for_unrelated_filetype_empty():
 
 def test_section_for_no_operations_empty():
     assert _contract_section_for("dao_impl", {}) == ""
+
+
+def test_db_seed_prompt_block_includes_section7_and_rules():
+    from app.llm.graph.nodes import _db_seed_prompt_block
+    spec = "## 6. x\nsix\n## 7. DB Seed\nseed body here\n## 8. y\neight"
+    block = _db_seed_prompt_block(spec)
+    assert "seed body here" in block          # section 7 extracted
+    assert "cmn_lbl" in block                  # required tables rule
+    assert "ON CONFLICT" in block or "on conflict" in block.lower()
+
+
+def test_db_seed_prompt_block_empty_when_no_spec():
+    from app.llm.graph.nodes import _db_seed_prompt_block
+    assert _db_seed_prompt_block("") == ""
