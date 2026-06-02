@@ -27,11 +27,10 @@ _BACKEND_RULES: list[tuple[re.Pattern, str]] = [
                 re.MULTILINE),
      "log.error()/warn() right before throw HscException — remove the log call; "
      "the framework logs thrown exceptions"),
-    # bare DAO base-class method call from ServiceImpl — must use full wrapper names
-    (re.compile(r'\w+(?:Dao|DaoImpl)\s*\.\s*'
-                r'(?:insert|update|delete|selectOne|selectList|select)\s*\('),
-     "Bare DAO base-class method call — use the full wrapper method names defined "
-     "in DaoImpl (insertXxx/selectXxxList/...)"),
+    # NOTE: the legacy "bare DAO call" rule was removed — under Phase 2's bare-naming
+    # contract (selectList/select/insert/...), `dao.selectList(...)` IS the legitimate
+    # wrapper call, so a regex can't distinguish it from a base-class misuse. DAO
+    # method existence is now enforced by contract binding (mybatis_check), not regex.
     # DTO field declared as a Java array — banned (breaks MyBatis/StringUtils)
     (re.compile(r'\bprivate\s+(?:String|Integer|Long|Double|Float|Boolean|int|long|'
                 r'double|float|boolean)\s*\[\]\s*\w+\s*;'),
@@ -55,56 +54,80 @@ _FRONTEND_RULES: list[tuple[re.Pattern, str]] = [
 _JAVA_IMPORT_RE = re.compile(r'^\s*import\s+(?:static\s+)?([a-zA-Z0-9_.]+)\s*;', re.MULTILINE)
 
 
-def _check_forbidden_imports(file_path: str, content: str) -> list[dict]:
-    """Flag .java imports from libraries NOT declared in pom.xml (compile will fail).
+def _generated_packages(files: dict) -> set[str]:
+    """Java package names declared by the generated files themselves."""
+    pkgs: set[str] = set()
+    for gf in files.values():
+        if gf["file_path"].endswith(".java"):
+            m = re.search(r'^\s*package\s+([a-zA-Z0-9_.]+)\s*;', gf["content"], re.MULTILINE)
+            if m:
+                pkgs.add(m.group(1))
+    return pkgs
 
-    Allowed prefixes derived from pom.xml at runtime — no hardcoded list.
-    """
+
+def check_forbidden_imports(files: dict) -> list[dict]:
+    """Whole-file forbidden-import check: flag .java imports from packages neither
+    in pom.xml NOR defined by the generated files (a generated DAO importing its
+    own generated DTO package is legitimate)."""
     from app.llm.codegen_context import get_allowed_import_prefixes
     try:
-        allowed = get_allowed_import_prefixes()
+        allowed = set(get_allowed_import_prefixes())
     except Exception:
-        return []  # pom not resolvable in this context → skip (don't false-positive)
+        return []
     if not allowed:
         return []
+    own = _generated_packages(files)
     issues: list[dict] = []
-    seen: set[str] = set()
-    for m in _JAVA_IMPORT_RE.finditer(content):
-        fqcn = m.group(1)
-        if any(fqcn == p or fqcn.startswith(p + ".") for p in allowed):
+    for gf in files.values():
+        if gf["layer"] != "backend" or not gf["file_path"].endswith(".java"):
             continue
-        pkg = fqcn.rsplit(".", 1)[0] if "." in fqcn else fqcn
-        if pkg in seen:
-            continue
-        seen.add(pkg)
-        issues.append({"file_path": file_path,
-                       "issue": f"import {pkg}.* — NOT declared in pom.xml; "
-                                f"compilation will fail. Remove it and the code using it."})
+        seen: set[str] = set()
+        for m in _JAVA_IMPORT_RE.finditer(gf["content"]):
+            fqcn = m.group(1)
+            if any(fqcn == p or fqcn.startswith(p + ".") for p in allowed):
+                continue
+            pkg = fqcn.rsplit(".", 1)[0] if "." in fqcn else fqcn
+            # legitimate if it's a package one of the generated files defines
+            if any(pkg == op or pkg.startswith(op + ".") or op.startswith(pkg + ".")
+                   for op in own):
+                continue
+            if pkg in seen:
+                continue
+            seen.add(pkg)
+            issues.append({"file_path": gf["file_path"],
+                           "issue": f"import {pkg}.* — NOT declared in pom.xml; compilation will fail.",
+                           "severity": "error"})
     return issues
 
 
 def static_check_impl(file_path: str, content: str, file_type: str, layer: str) -> list[dict]:
-    """Single-file regex validation, scoped to the file's layer."""
+    """Single-file regex validation, scoped to the file's layer.
+
+    NOTE: forbidden-import (pom.xml) checking is NOT done here — it needs the full
+    file set to know which packages are generated (self-imports are legitimate).
+    It runs as a whole-file check (check_forbidden_imports) in mybatis_fix instead.
+    """
     rules = _BACKEND_RULES if layer == "backend" else _FRONTEND_RULES
     issues: list[dict] = []
     for pattern, msg in rules:
         if pattern.search(content):
             issues.append({"file_path": file_path, "issue": msg})
-    if layer == "backend" and file_path.endswith(".java"):
-        issues.extend(_check_forbidden_imports(file_path, content))
     return issues
 
 
 def validate_sql_impl(sql: str) -> list[dict]:
-    """Validate db_init_sql: each non-empty statement line group must end with ';'."""
+    """Validate db_init_sql is statement-terminated.
+
+    Counting keyword occurrences vs ';' over-flags (UPDATE/DELETE can appear inside
+    one statement, comments, triggers). We only flag the clear truncation case:
+    statement keywords exist but the SQL has NO terminating ';' at all.
+    """
     issues: list[dict] = []
-    # crude: count CREATE/INSERT/ALTER statements vs semicolons
-    statements = re.findall(r"\b(CREATE|INSERT|ALTER|UPDATE|DELETE)\b", sql, re.IGNORECASE)
-    semicolons = sql.count(";")
-    if statements and semicolons < len(statements):
+    has_stmt = re.search(r"\b(CREATE|INSERT|ALTER|UPDATE|DELETE)\b", sql, re.IGNORECASE)
+    if has_stmt and ";" not in sql:
         issues.append({
             "file_path": "db_init.sql",
-            "issue": f"SQL missing semicolon: {len(statements)} statement(s) but {semicolons} ';'",
+            "issue": "SQL has statements but no semicolon (';') terminator — likely truncated.",
         })
     return issues
 

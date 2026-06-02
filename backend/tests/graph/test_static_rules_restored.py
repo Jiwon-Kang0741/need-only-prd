@@ -22,9 +22,12 @@ def test_log_before_throw_flagged():
     assert any("log" in i["issue"].lower() for i in issues)
 
 
-def test_bare_dao_call_flagged():
+def test_dao_wrapper_call_not_flagged_under_bare_naming():
+    # Under Phase 2 bare naming, dao.selectList(...) is the legitimate wrapper call.
+    # The legacy bare-DAO regex rule was removed; DAO method existence is enforced
+    # by contract binding (mybatis_check), not regex static_check.
     issues = _be("eduDao.selectList(req);")
-    assert any("DAO" in i["issue"] or "wrapper" in i["issue"].lower() for i in issues)
+    assert not any("Bare DAO" in i["issue"] for i in issues)
 
 
 def test_dto_array_field_flagged():

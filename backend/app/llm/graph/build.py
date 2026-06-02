@@ -14,6 +14,7 @@ from app.llm.graph.mybatis_check import (
 from app.llm.graph.cpms_checks import (
     check_db_seed_sql, check_frontend_local_imports, check_lv2_whitelist,
 )
+from app.llm.graph.tools import check_forbidden_imports
 
 
 def _route_waves(state: dict):
@@ -72,7 +73,8 @@ def mybatis_fix(state: dict) -> dict:
             remaining = remaining + check_dto_fields(fixed_files, contract)
         # Ported CPMS domain checks (whole-file): DB seed + frontend imports + LV2.
         remaining = (remaining + check_db_seed_sql(fixed_files)
-                     + check_frontend_local_imports(fixed_files))
+                     + check_frontend_local_imports(fixed_files)
+                     + check_forbidden_imports(fixed_files))
         screen_code = ((contract or {}).get("screen") or {}).get("id", "")
         remaining = remaining + check_lv2_whitelist(screen_code)
     except Exception as e:  # verification is a safety net, never a blocker
