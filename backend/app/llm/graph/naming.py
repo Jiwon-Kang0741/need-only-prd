@@ -7,15 +7,22 @@ references the same contract uses identical names — mismatches become impossib
 
 from __future__ import annotations
 
-# op → (statement_id / dao_method, mybatis tag). Bare per namebook (one mapper/screen).
-_OP_TABLE: dict[str, tuple[str, str]] = {
-    "selectList": ("selectList", "select"),
-    "selectOne": ("select", "select"),
-    "count": ("selectCount", "select"),
-    "insert": ("insert", "insert"),
-    "update": ("update", "update"),
-    "delete": ("delete", "delete"),
+# op → (prefix, suffix, mybatis tag). Suffixed naming: {prefix}{ScreenCode}{suffix}.
+# Domain-suffixed ids make statement ids unique per screen (better traceability +
+# lets static_check distinguish a legit wrapper call from a bare base-class misuse).
+_OP_TABLE: dict[str, tuple[str, str, str]] = {
+    "selectList": ("select", "List", "select"),
+    "selectOne": ("select", "", "select"),
+    "count": ("select", "Count", "select"),
+    "insert": ("insert", "", "insert"),
+    "update": ("update", "", "update"),
+    "delete": ("delete", "", "delete"),
 }
+
+# Bare base-class method names that must NOT be called directly on a DAO variable
+# (they are AbstractSqlSessionDaoSupport internals). Used by static_check.
+BASE_DAO_METHODS = ("selectList", "selectOne", "select", "insert", "update", "delete",
+                    "batchUpdateReturnSumAffectedRows")
 
 _SCREEN_OPS: dict[str, list[str]] = {
     "list": ["selectList", "count"],
@@ -37,18 +44,22 @@ _TYPE_MAP: dict[str, str] = {
 }
 
 
-def statement_id(op: str) -> str:
+def statement_id(op: str, screen_code: str) -> str:
+    """Suffixed id: {prefix}{ScreenCode}{suffix} (e.g. selectCpmsEduRsltLstList)."""
     entry = _OP_TABLE.get(op)
-    return entry[0] if entry else op
+    if not entry:
+        return op
+    prefix, suffix, _ = entry
+    return f"{prefix}{screen_code}{suffix}"
 
 
-def dao_method(op: str) -> str:
-    return statement_id(op)
+def dao_method(op: str, screen_code: str) -> str:
+    return statement_id(op, screen_code)
 
 
 def mybatis_tag(op: str) -> str:
     entry = _OP_TABLE.get(op)
-    return entry[1] if entry else "select"
+    return entry[2] if entry else "select"
 
 
 def dto_class(screen_code: str, kind: str) -> str:

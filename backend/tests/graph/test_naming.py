@@ -3,18 +3,21 @@ from app.llm.graph.naming import (
 )
 
 
-def test_statement_id_bare():
-    assert statement_id("selectList") == "selectList"
-    assert statement_id("selectOne") == "select"
-    assert statement_id("count") == "selectCount"
-    assert statement_id("insert") == "insert"
-    assert statement_id("update") == "update"
-    assert statement_id("delete") == "delete"
+_SC = "CpmsEduRsltLst"
+
+
+def test_statement_id_suffixed():
+    assert statement_id("selectList", _SC) == "selectCpmsEduRsltLstList"
+    assert statement_id("selectOne", _SC) == "selectCpmsEduRsltLst"
+    assert statement_id("count", _SC) == "selectCpmsEduRsltLstCount"
+    assert statement_id("insert", _SC) == "insertCpmsEduRsltLst"
+    assert statement_id("update", _SC) == "updateCpmsEduRsltLst"
+    assert statement_id("delete", _SC) == "deleteCpmsEduRsltLst"
 
 
 def test_dao_method_equals_statement_id():
     for op in ("selectList", "selectOne", "count", "insert", "update", "delete"):
-        assert dao_method(op) == statement_id(op)
+        assert dao_method(op, _SC) == statement_id(op, _SC)
 
 
 def test_mybatis_tag():
