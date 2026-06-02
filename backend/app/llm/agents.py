@@ -7,6 +7,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,11 @@ from app.config import settings
 from app.llm.client import codex_client, llm_client
 from app.llm.codegen_context import (
     get_all_backend_guide,
-    get_all_frontend_guide,
     get_allowed_import_prefixes,
     get_context_for_file_type,
+    get_frontend_planning_context,
+    get_frontend_qa_context,
+    get_frontend_reference_context,
     get_naming_context,
     get_parent_class_fields,
     get_parent_class_source_block,
@@ -850,6 +853,10 @@ _BAD_LOMBOK_RE = re.compile(r'@(Getter|Setter|ToString)\b')
 _EQ_HASH_OK_RE = re.compile(r'@EqualsAndHashCode\s*\(\s*callSuper\s*=\s*false\s*\)')
 _INNER_CLASS_RE = re.compile(r'\bstatic\s+class\s+\w+')
 _FIELD_DECL_RE = re.compile(r'\bprivate\s+[^;]+?\b(\w+)\s*(?:=\s*[^;]+)?;')
+_RELATIVE_IMPORT_RE = re.compile(
+    r'^\s*import\s+[\s\S]*?\s+from\s+[\'"](\.[^\'"]+)[\'"]',
+    re.MULTILINE,
+)
 
 
 def _check_dto_layer_conventions(files: list[GeneratedFile]) -> list[dict]:
@@ -970,6 +977,51 @@ def _check_dto_layer_conventions(files: list[GeneratedFile]) -> list[dict]:
     return issues
 
 
+def _resolve_frontend_import_candidates(source_path: str, import_path: str) -> list[str]:
+    base = PurePosixPath(source_path).parent
+    resolved = PurePosixPath(base.joinpath(import_path))
+    resolved_str = resolved.as_posix()
+    if resolved.suffix:
+        return [resolved_str]
+    return [
+        f"{resolved_str}.vue",
+        f"{resolved_str}.ts",
+        f"{resolved_str}/index.vue",
+        f"{resolved_str}/index.ts",
+    ]
+
+
+def _check_frontend_local_imports(files: list[GeneratedFile]) -> list[dict]:
+    """Ensure generated frontend files only import local files that actually exist."""
+    issues: list[dict] = []
+    frontend_files = [gf for gf in files if gf.layer == "frontend"]
+    if not frontend_files:
+        return issues
+
+    known_paths = {gf.file_path.replace("\\", "/") for gf in frontend_files}
+    for gf in frontend_files:
+        if not (gf.file_path.endswith(".vue") or gf.file_path.endswith(".ts")):
+            continue
+        for import_path in _RELATIVE_IMPORT_RE.findall(gf.content):
+            if import_path.endswith((".scss", ".css")):
+                continue
+            candidates = _resolve_frontend_import_candidates(gf.file_path.replace("\\", "/"), import_path)
+            if any(candidate in known_paths for candidate in candidates):
+                continue
+            issues.append({
+                "file_path": gf.file_path,
+                "issue": (
+                    f"[STATIC] Local import '{import_path}' does not resolve to any generated frontend file. "
+                    "Do not import unplanned child components or missing helper modules."
+                ),
+                "fix_instruction": (
+                    f"Remove the import '{import_path}' from {gf.file_path} or generate the missing file. "
+                    "index.vue may only import child components that exist in the generation plan."
+                ),
+            })
+    return issues
+
+
 def static_check(files: list[GeneratedFile]) -> list[dict]:
     """Run regex-based static checks + pom.xml import validation on generated files."""
     issues: list[dict] = []
@@ -994,6 +1046,7 @@ def static_check(files: list[GeneratedFile]) -> list[dict]:
 
     issues.extend(_check_dto_layer_conventions(files))
     issues.extend(_check_cross_file_consistency(files))
+    issues.extend(_check_frontend_local_imports(files))
     return issues
 
 
@@ -1862,6 +1915,83 @@ class SharedContext:
     generated_files: dict[str, GeneratedFile] = field(default_factory=dict)
     data_contracts: str = ""   # types.ts content from Data Engineer
     db_schema: str = ""        # SQL from Data Engineer
+    frontend_archetype: str = ""
+    frontend_reference_context: str = ""
+
+
+_FRONTEND_PAGE_PATH_RE = re.compile(r"src/pages/([^/]+)/([^/]+)/([^/]+)/index\.vue$")
+
+
+def _get_frontend_route_parts(plan: CodeGenPlan | None) -> tuple[str, str, str] | None:
+    if plan is None:
+        return None
+    for file_entry in plan.files:
+        if file_entry.layer != "frontend":
+            continue
+        match = _FRONTEND_PAGE_PATH_RE.search(file_entry.file_path)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+    return None
+
+
+def _infer_frontend_archetype(ctx: SharedContext) -> str:
+    if ctx.frontend_archetype:
+        return ctx.frontend_archetype
+
+    spec_text = ctx.spec_markdown.lower()
+    plan_text = ""
+    if ctx.plan is not None:
+        plan_text = " ".join(
+            f"{file.file_type} {file.description}".lower()
+            for file in ctx.plan.files
+            if file.layer == "frontend"
+        )
+    combined = f"{spec_text}\n{plan_text}"
+    has_sum_grid = ctx.plan is not None and any(
+        file.file_type == "vue_sum_grid" for file in ctx.plan.files
+    )
+
+    popup_keywords = ("popup", "팝업", "dialog", "lookup", "searchinput", "사용자 검색")
+    editable_keywords = (
+        "저장",
+        "수정",
+        "삭제",
+        "등록",
+        "save",
+        "update",
+        "delete",
+        "editable",
+        "add row",
+        "copyinsertrow",
+        "excel upload",
+        "업로드",
+    )
+    summary_keywords = ("집계", "summary", "progress", "status count", "상태별", "카운트")
+
+    if has_sum_grid or any(keyword in combined for keyword in summary_keywords):
+        ctx.frontend_archetype = "summary-filter"
+    elif any(keyword in combined for keyword in editable_keywords):
+        ctx.frontend_archetype = "editable-grid"
+    elif any(keyword in combined for keyword in popup_keywords):
+        ctx.frontend_archetype = "popup-linked"
+    else:
+        ctx.frontend_archetype = "list-query"
+    return ctx.frontend_archetype
+
+
+def _hydrate_frontend_reference_context(ctx: SharedContext) -> str:
+    if ctx.frontend_reference_context:
+        return ctx.frontend_reference_context
+    route_parts = _get_frontend_route_parts(ctx.plan)
+    if route_parts is None:
+        return ""
+    module, category, screen_id = route_parts
+    ctx.frontend_reference_context = get_frontend_reference_context(
+        module,
+        category,
+        screen_id,
+    )
+    return ctx.frontend_reference_context
 
 
 # ---------------------------------------------------------------------------
@@ -2377,7 +2507,7 @@ class PlannerAgent:
     async def execute(self, ctx: SharedContext) -> CodeGenPlan:
         naming = get_naming_context()
         backend_guide = get_all_backend_guide()[:50000]
-        frontend_guide = get_all_frontend_guide()[:50000]
+        frontend_guide = get_frontend_planning_context()[:50000]
 
         system = (
             "You are a code architect that plans file generation for a CPMS Spring Boot + Vue3 project.\n"
@@ -2396,10 +2526,16 @@ class PlannerAgent:
             "- vue_data_table:  DataTable component (.vue) — grid display + virtual scroll + date preformat\n"
             "- vue_data_table_utils: utils/index.ts — getColumns, getRows helper functions for DataTable\n"
             "- vue_sum_grid:    SumGrid component (.vue) — CONDITIONAL, see rules below\n"
-            "- vue_api:         API module (.ts) — axios calls, parameter conversion\n"
+            "- vue_api:         API module (.ts) — axios calls, DTO-aligned request/response handling\n"
             "- vue_scss:        Page-level SCSS (.scss) — page layout styles\n"
             "- vue_types:       types.ts — TypeScript interfaces matching backend DTOs (generated by Data Engineer)\n"
             "Each vue_search_form, vue_data_table, vue_sum_grid component has its own paired .scss file (generated alongside the .vue).\n\n"
+            "FRONTEND SCREEN ARCHETYPES (pick ONE dominant pattern from the spec and plan around it):\n"
+            "- list-query: query-only list screen. SearchForm emits search; DataTable focuses on browse/list/paging.\n"
+            "- editable-grid: grid supports add/edit/delete/save flows. Keep save buttons and row editing inside DataTable, not in index.vue.\n"
+            "- popup-linked: popup/search-input flow exists (e.g. user lookup popup). Prefer SearchInput/popup integration over inventing custom detail panels.\n"
+            "- summary-filter: status-summary / clickable counters exist. ONLY this archetype should include vue_sum_grid.\n"
+            "- NEVER invent DetailPanel/EditPanel/Drawer/Tabs or any extra local component not represented by the allowed file types above.\n\n"
             "⚠️ vue_sum_grid GENERATION RULES (CRITICAL — DO NOT auto-generate):\n"
             "- Do NOT include vue_sum_grid unless the spec EXPLICITLY requires progress-status summary filters "
             "(e.g., clickable status counts like 미수료/진행중/수료 that filter the data table).\n"
@@ -2450,6 +2586,10 @@ class PlannerAgent:
             "  vue_api:              src/api/pages/{module}/{category}/{screenId}.ts\n"
             "  vue_types:            src/api/pages/{module}/{category}/types.ts\n"
             "  (ScreenId = PascalCase of screenId, e.g., screenId=cpmsEduPondgEdit → ScreenId=CpmsEduPondgEdit)\n\n"
+            "PFY PARENT-CHILD PAGE PATTERN (follow unless the spec clearly forbids it):\n"
+            "- index.vue owns windowId/useWindowLocale/useObjPermission/searchParams and shared fetch/common-code bootstrap.\n"
+            "- SearchForm and DataTable consume parent-provided context via inject when they share t/locale/isBlocked/common-code options/searchParams.\n"
+            "- Prefer real PFY screen patterns over generic standalone Vue patterns.\n\n"
             "DTO GENERATION STYLE (downstream agents follow this):\n"
             "- dto_request MUST be generated like biz.sample.dto.request.UserReqDto: "
             "@Data + @EqualsAndHashCode(callSuper=false) + extends SearchBaseDto — NOT @Getter/@Setter/@ToString.\n"
@@ -3816,18 +3956,28 @@ class FrontendEngineerAgent:
             "This file MUST ONLY orchestrate child components. DO NOT put SearchForm/DataTable logic here.\n"
             "REQUIREMENTS:\n"
             "- Import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue'\n"
+            "- Import { useWindowLocale } from '@/composables/useWindowLocale' and { useObjPermission } from '@/composables/useObjPermission' for standard PFY page context\n"
+            "- Define const windowId = '{SCREEN_CODE}' and use it for locale/permission bootstrap when the screen behaves like a normal PFY page\n"
             "- Import child components: SearchForm, DataTable (from ./components/ subfolders)\n"
             "- Import SumGrid ONLY if a vue_sum_grid file exists in the generation plan — do NOT import SumGrid if it was not planned\n"
             "- CRITICAL: DO NOT import DetailPanel, EditPanel, or any sub-component that is NOT explicitly listed in the generation plan — importing a non-existent file causes a fatal SyntaxError at runtime\n"
             "- Import API functions from the API module (e.g., '@/api/pages/{module}/{category}/{screenId}')\n"
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
+            "- const { t, locale } = useWindowLocale(windowId) and const { isBlocked } = useObjPermission(windowId) when the screen follows PFY conventions\n"
             "- const searchParams = ref({...initial search params...})\n"
             "- provide('searchParams', searchParams)\n"
+            "- Provide shared PFY context to children when relevant: provide('t', t), provide('locale', locale), provide('isBlocked', isBlocked)\n"
+            "- If common-code options are shared across children, load them in index.vue via useCommonCodeStore and provide the computed options downward. Do NOT duplicate common-code loading in multiple children.\n"
             "- Data fetching functions (fetchList, fetchSum) called from onMounted and child events\n"
             "- Use try/finally with loading ref for fetch calls\n"
             "- Pass fetched data as props to DataTable children (and SumGrid if it exists in plan)\n"
             "- <style scoped lang=\"scss\" src=\"./{screenId}.scss\"></style>\n"
             "- DO NOT provide('searchFormRef') — this is an obsolete pattern\n\n"
+            "PAGE RESPONSIBILITY BY ARCHETYPE:\n"
+            "- list-query: index.vue owns search params + fetch function; DataTable is read-only browse/list/paging.\n"
+            "- editable-grid: keep row editing/save controls inside DataTable; index.vue should not invent a DetailPanel or side editor.\n"
+            "- popup-linked: parent may provide popup bootstrap data, but still keep the page to SearchForm/DataTable/SumGrid orchestration only.\n"
+            "- summary-filter: SumGrid is optional and only exists when planned.\n\n"
             "PAGE WRAPPER LAYOUT (CRITICAL — NO background-color and NO padding on page root!):\n"
             "- The page root <div> class (e.g., .xxx-page) MUST NOT have background-color.\n"
             "- CPMS framework provides default white background — do NOT override it.\n"
@@ -3863,10 +4013,11 @@ class FrontendEngineerAgent:
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
             "- const searchFormRef = ref()\n"
             "- const searchParams = inject<Ref<SearchParamsType>>('searchParams')\n"
+            "- Inject PFY context from parent when available: t, locale, isBlocked, and provided common-code option refs\n"
             "- watch(() => searchParams.value?.field, (newVal) => { if (newVal !== undefined && searchFormRef.value?.form) searchFormRef.value.form.setFieldValue('field', newVal ?? '') })\n"
             "- defineExpose({ searchFormRef })\n"
             "- emit('search') on search button click\n"
-            "- For common codes: const commonCodeStore = useCommonCodeStore(); await commonCodeStore.loadMulti([...]) in onMounted; options via computed\n"
+            "- Prefer parent-provided common-code options via inject for PFY pages. Use useCommonCodeStore directly ONLY when the search form is truly standalone and the parent does not already bootstrap the shared codes.\n"
             "- Correct ref path: searchFormRef.value.form.setFieldValue (NOT .value.value.form)\n"
             "- <style scoped lang=\"scss\" src=\"./{PascalName}SearchForm.scss\"></style>\n\n"
             "TEMPLATE LAYOUT (CRITICAL — fields must be horizontally arranged, NOT stacked vertically):\n"
@@ -3898,7 +4049,7 @@ class FrontendEngineerAgent:
             "SECTION 2: The paired .scss file content\n\n"
             "VUE FILE REQUIREMENTS:\n"
             "- <script setup lang=\"ts\">\n"
-            "- CRITICAL: Import { DataTable } from '@/components/common/dataTable2'  (named export, NOT default import from DataTable2.vue)\n"
+            "- CRITICAL: Prefer import DataTable from '@/components/common/dataTable2/DataTable.vue' to match existing PFY screen style\n"
             "- DO NOT import Column from 'primevue/column' — DataTable2 wrapper manages columns internally via :columns prop\n"
             "- DO NOT use <Column> child elements inside <DataTable> — they are IGNORED by DataTable2 wrapper\n"
             "- Import types from '@/api/pages/{module}/{category}/types'\n"
@@ -3909,8 +4060,8 @@ class FrontendEngineerAgent:
             "- MUST pass :columns=\"columns\" prop — this is how DataTable2 renders column headers\n"
             "- MUST pass title prop — shown in DataTableHeader above the table\n"
             "- MUST pass :totalCount=\"totalRecords\" — shown in DataTableHeader count area\n"
-            "- MUST pass :enableRowCheck=\"true\" for checkbox selection (NOT selectionMode='multiple' Column)\n"
-            "- MUST pass :utilOptions with appropriate buttons e.g. ['filter', 'settings', 'reset', 'downloadExcel']\n"
+            "- Choose utilOptions by screen archetype instead of hardcoding one generic set. query-only screens usually use ['filter', 'settings', 'reset', 'downloadExcel']; editable-grid screens usually include addRow/deleteRow/copyInsertRow/save-related flow.\n"
+            "- Use :enableRowCheck=\"true\" only when the screen actually supports row batch actions. Do NOT force checkbox UX for simple read-only list screens.\n"
             "- MUST pass :scrollHeight=\"'540px'\" and :virtualScrollerOptions=\"{ itemSize: 46 }\" for virtual scroll\n"
             "- For paginated tables: pass paginator, :rows, :first, :totalRecords, lazy, @page directly (passed through via attrs)\n"
             "- Date pre-formatting is handled in utils/index.ts getRows() — NO watch+nextTick needed\n"
@@ -3923,8 +4074,8 @@ class FrontendEngineerAgent:
             "  :loading=\"loading\"\n"
             "  title=\"{Korean screen title}\"\n"
             "  :totalCount=\"totalRecords\"\n"
-            "  :enableRowCheck=\"true\"\n"
-            "  :utilOptions=\"['filter', 'settings', 'reset', 'downloadExcel']\"\n"
+            "  :enableRowCheck=\"{true only when row batch action is needed}\"\n"
+            "  :utilOptions=\"{archetype-appropriate util options}\"\n"
             "  :scrollHeight=\"'540px'\"\n"
             "  :virtualScrollerOptions=\"{ itemSize: 46 }\"\n"
             "/>\n\n"
@@ -3985,16 +4136,17 @@ class FrontendEngineerAgent:
             "Generate the API module (.ts file).\n"
             "REQUIREMENTS:\n"
             "- import api from '@/plugins/axios'\n"
+            "- Import { ApiResponse } from '@/types/api' for the standard PFY response wrapper when the API follows the normal project pattern\n"
             "- import { formatErrorMessage } from '@/utils/formatErrorMessage'\n"
             "- import type { ... } from './types'\n"
             "- API URL pattern: /online/mvcJson/{SCREEN_CODE}-{method}\n"
             "- Export async functions for each API call (fetchList, fetchSum, saveData, deleteData, etc.)\n"
-            "- Convert frontend camelCase/snake_case params to UPPERCASE keys for HQML backend\n"
-            "- Omit null/undefined/empty string from payload\n"
-            "- Date params → YYYYMMDD string format\n"
-            "- Include gPBL_CD, gLANG global params when required\n"
-            "- Check responseCode === 'S0000' for success\n"
-            "- Return response.data.payload (or appropriate shape)\n"
+            "- Keep request parameter names in camelCase exactly matching backend DTO/MyBatis field names — DO NOT convert to UPPERCASE\n"
+            "- Prefer the existing PFY API style: api.post<ApiResponse<T>>(url, params) and return response.data for standard screens\n"
+            "- Omit null/undefined/empty string only when it helps preserve MyBatis optional-filter behavior; do not invent extra parameter names\n"
+            "- Normalize date params only when the component already uses string dates or date pickers that need conversion; keep the payload shape simple\n"
+            "- Check response.data.header.responseCode === 'S0000' for success when using ApiResponse<T>\n"
+            "- Avoid defensive multi-shape wrapper code unless the spec explicitly requires a non-standard backend response\n"
             "- Output ONLY TypeScript code. No markdown fences.\n"
         ),
         "vue_scss": (
@@ -4015,7 +4167,6 @@ class FrontendEngineerAgent:
             "    gap: var(--spacing-md, 16px);\n"
             "    width: 100%;\n"
             "    min-height: 100%;\n"
-            "    padding: var(--spacing-md, 16px);\n"
             "    box-sizing: border-box;\n"
             "  }\n\n"
             "BACKGROUND-COLOR ALLOWED LOCATIONS:\n"
@@ -4036,6 +4187,8 @@ class FrontendEngineerAgent:
         assert ctx.plan is not None
         my_files = self._get_my_files(ctx.plan)
         naming = get_naming_context()
+        frontend_archetype = _infer_frontend_archetype(ctx)
+        reference_context = _hydrate_frontend_reference_context(ctx)
 
         base_system = (
             "You are a senior Frontend Engineer specializing in CPMS Vue3 + PrimeVue projects.\n"
@@ -4043,6 +4196,8 @@ class FrontendEngineerAgent:
             "Each screen is composed of: index.vue (orchestrator), SearchForm, DataTable (components), API module, SCSS files.\n"
             "SumGrid is OPTIONAL — include only if a vue_sum_grid file exists in the generation plan.\n\n"
             f"--- NAMING CONVENTIONS ---\n{naming}\n--- END ---\n\n"
+            f"DOMINANT SCREEN ARCHETYPE: {frontend_archetype}\n"
+            "Respect that archetype while still following the concrete generation plan.\n\n"
             "STRICT RULES:\n"
             "- Output ONLY the file content. No markdown fences.\n"
             "- MUST use <script setup lang=\"ts\"> syntax for all .vue files.\n"
@@ -4051,7 +4206,7 @@ class FrontendEngineerAgent:
             "CRITICAL IMPORT PATHS:\n"
             "- ContentHeader: import ContentHeader from '@/components/common/contentHeader/ContentHeader.vue'\n"
             "- SearchForm: import { SearchForm, SearchFormField, SearchFormLabel, SearchFormContent } from '@/components/common/searchForm'\n"
-            "- DataTable: import { DataTable } from '@/components/common/dataTable2'  — named export, NOT default import\n"
+            "- DataTable: prefer import DataTable from '@/components/common/dataTable2/DataTable.vue' to match existing PFY screens\n"
             "- DataTable column type: import type { TableColumn } from '@/components/common/dataTable2/types'\n"
             "- Button: import { Button } from '@/components/common/button'\n"
             "- InputText: import InputText from '@/components/common/inputText/InputText.vue'\n"
@@ -4060,7 +4215,10 @@ class FrontendEngineerAgent:
             "- RangeDatePicker: import { RangeDatePicker } from '@/components/common/datePicker'  — named export, NOT default import\n"
             "- SingleDatePicker: import { SingleDatePicker } from '@/components/common/datePicker'  — named export, NOT default import\n"
             "- axios: import api from '@/plugins/axios'\n"
+            "- ApiResponse: import { ApiResponse } from '@/types/api' when the screen uses the standard PFY API response wrapper\n"
             "- formatErrorMessage: import { formatErrorMessage } from '@/utils/formatErrorMessage'\n"
+            "- useWindowLocale: import { useWindowLocale } from '@/composables/useWindowLocale'\n"
+            "- useObjPermission: import { useObjPermission } from '@/composables/useObjPermission'\n"
             "- CommonCodeStore: import { useCommonCodeStore } from '@/stores/commonCodeStore'\n"
             "- Toast: const toast = useToast() — NO alert()/confirm()/prompt()\n\n"
             "KNOWN ERROR PREVENTION (DO NOT):\n"
@@ -4077,8 +4235,8 @@ class FrontendEngineerAgent:
             "- DO NOT use if(newVal) in watch — use if(newVal !== undefined) to handle null/empty/0.\n"
             "- DO NOT access ref as .value.value.form — correct path is .value.form.\n"
             "- DO NOT use alert()/confirm()/prompt() — use Toast and ConfirmDialog.\n"
-            "- DO NOT define UPPER_SNAKE_CASE TypeScript fields — match backend camelCase DTO field names exactly.\n"
-            "- DO NOT forget await on commonCodeStore.loadMulti() in onMounted.\n"
+            "- DO NOT define UPPER_SNAKE_CASE TypeScript fields or convert payload keys to UPPERCASE — match backend camelCase DTO field names exactly.\n"
+            "- DO NOT duplicate common-code loading across multiple child components when index.vue can bootstrap and provide the same options once.\n"
             "- DO NOT define SelectBox options without computed() wrapper.\n"
             "- DO NOT omit GPU acceleration CSS — add will-change: background-color on tr, contain: layout style on td.\n"
             "- DO NOT apply hover styles to selected rows — use :hover:not(.p-datatable-row-selected).\n"
@@ -4086,8 +4244,16 @@ class FrontendEngineerAgent:
             "- DO NOT use default import for datePicker components — MUST use named imports: import { DatePicker } from '@/components/common/datePicker' (NOT import DatePicker from ...).\n"
             "- DO NOT import DetailPanel or any sub-components that do NOT exist in the generation plan — only import files that are explicitly listed in the plan.\n"
             "- DO NOT add background-color to the page root wrapper class (.xxx-page) — CPMS framework provides default white background.\n"
+            "- DO NOT add padding to the page root wrapper class (.xxx-page) — rely on the outer MainLayout tab-content padding and root gap only.\n"
             "- DO NOT use --bg-2 on the page root — only use it on inner containers (SumGrid, DataTable header).\n"
         )
+        if reference_context:
+            base_system += (
+                "\n--- REAL PFY REFERENCE SCREEN SNIPPETS ---\n"
+                f"{reference_context}\n"
+                "--- END ---\n\n"
+                "Match these real PFY code patterns more closely than generic Vue examples when there is no conflict with the spec.\n"
+            )
 
         results: list[GeneratedFile] = []
         for file_entry in my_files:
@@ -4252,7 +4418,9 @@ class FrontendQAAgent:
         if not frontend_files:
             return []
 
-        frontend_guide = get_all_frontend_guide()
+        frontend_guide = get_frontend_qa_context()
+        frontend_archetype = _infer_frontend_archetype(ctx)
+        reference_context = _hydrate_frontend_reference_context(ctx)
         files_text = "\n\n".join(
             f"=== {gf.file_path} ===\n{gf.content}" for gf in frontend_files
         )
@@ -4261,6 +4429,7 @@ class FrontendQAAgent:
             "You are a Frontend QA Engineer reviewing generated Vue3/TypeScript source files.\n"
             "You MUST validate against BOTH the technical specification AND the coding guide below.\n\n"
             f"--- TECHNICAL SPECIFICATION ---\n{ctx.spec_markdown}\n--- END ---\n\n"
+            f"DOMINANT SCREEN ARCHETYPE: {frontend_archetype}\n\n"
             f"--- FRONTEND CODING GUIDE ---\n{frontend_guide}\n--- END ---\n\n"
             "CHECK ALL of the following:\n"
             "SPEC COMPLIANCE:\n"
@@ -4279,6 +4448,10 @@ class FrontendQAAgent:
             "- Import paths between components must use correct relative paths\n"
             "- types.ts MUST be in src/api/pages/{module}/{category}/types.ts (NOT under page folder)\n"
             "- API file MUST be in src/api/pages/{module}/{category}/{screenId}.ts\n\n"
+            "PFY PAGE CONTEXT COMPLIANCE:\n"
+            "- Prefer the standard PFY parent context pattern: windowId + useWindowLocale + useObjPermission in index.vue for normal PFY screens\n"
+            "- Shared common-code loading should happen in index.vue and be provided downward when both SearchForm/DataTable need it\n"
+            "- SearchForm/DataTable should inject parent-provided t/locale/isBlocked/common-code option refs when the page follows the PFY pattern\n\n"
             "NAMING COMPLIANCE (CRITICAL):\n"
             "- screenId MUST be camelCase (NOT all lowercase) — e.g., cpmsEduPondgEdit NOT cpmsedupondgedit\n"
             "- Component folder names MUST be camelCase — e.g., cpmsEduPondgEditSearchForm/\n"
@@ -4287,9 +4460,9 @@ class FrontendQAAgent:
             "CODING GUIDE COMPLIANCE:\n"
             "- MUST use <script setup lang=\"ts\"> syntax (Options API is forbidden)\n"
             "- DataTable MUST have scrollHeight=\"540px\" + virtualScrollerOptions (performance critical)\n"
-            "- Date formatting MUST be in watch+nextTick, NOT in template slots (causes 5000+ calls per render)\n"
+            "- Date formatting MUST be handled in DataTable utils/getRows() or equivalent pre-processing step, NOT in template slots and NOT via watch+nextTick render-time patches\n"
             "- Import paths must be exact: ContentHeader from '@/components/common/contentHeader/ContentHeader.vue', etc.\n"
-            "- API parameters: frontend camelCase/snake_case MUST be converted to UPPERCASE for HQML backend\n"
+            "- API parameters must stay in backend DTO camelCase; do NOT convert payload keys to UPPERCASE\n"
             "- searchParams: must use provide/inject pattern correctly\n"
             "- Ref access: must be .value.form (NOT .value.value.form or .form.value)\n"
             "- Watch conditions: use !== undefined (NOT if(value) which fails for null/empty)\n"
@@ -4303,12 +4476,18 @@ class FrontendQAAgent:
             "- Page root wrapper class (.xxx-page) MUST NOT have background-color — CPMS framework provides default white.\n"
             "- --bg-2 on page root wrapper is FORBIDDEN — causes entire page to turn grayish.\n"
             "- background-color allowed ONLY on inner containers: SearchForm(--bg-1), SumGrid(--bg-2), DataTable header(--bg-2), table wrapper(--bg-1).\n"
-            "- Page root wrapper should ONLY have layout styles: display:flex, flex-direction:column, gap, width, min-height, padding, box-sizing.\n"
+            "- Page root wrapper should ONLY have layout styles: display:flex, flex-direction:column, gap, width, min-height, box-sizing. Padding on the page root is forbidden.\n"
             "- If page-level SCSS file (.scss) has background-color on the root wrapper class, flag as CRITICAL issue.\n\n"
             'Output JSON: {"issues": [{"file_path": "...", "issue": "description of problem", "fix_instruction": "how to fix"}]}\n'
             'If no issues: {"issues": []}\n'
             "Output ONLY JSON.\n"
         )
+        if reference_context:
+            system += (
+                "\n--- REAL PFY REFERENCE SCREEN SNIPPETS ---\n"
+                f"{reference_context}\n"
+                "--- END ---\n"
+            )
 
         user = f"Review these frontend files:\n\n{files_text}\n\nValidate against the coding guide and report issues."
         response = await llm_client.complete(system, user, stream=False, max_tokens=settings.CODEGEN_MAX_TOKENS)

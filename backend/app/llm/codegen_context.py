@@ -101,16 +101,62 @@ _BACKEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
 }
 
 _FRONTEND_FILE_MAP: dict[str, list[tuple[str, list[str] | None]]] = {
-    "vue_page": [("00_", None), ("02_", None), ("07_", None)],
-    "vue_search_form": [("02_", None), ("03_", None), ("07_", None), ("12_", ["SearchForm", "SearchFormRow", "SearchFormField", "SearchFormLabel", "SearchFormContent", "SearchFormFieldGroup", "Import 패턴", "검색 화면"])],
-    "vue_data_table": [("02_", None), ("04_", None), ("07_", None)],
+    "vue_page": [
+        ("00_", None),
+        ("01_", None),
+        ("02_", None),
+        ("07_", None),
+        ("08_", ["searchParams 패턴", "provide/inject 패턴"]),
+        ("11_", ["provide/inject 패턴", "computed로 옵션 정의", "Select 컴포넌트 연결"]),
+    ],
+    "vue_search_form": [
+        ("01_", None),
+        ("02_", None),
+        ("03_", None),
+        ("07_", None),
+        ("08_", ["searchParams 패턴", "provide/inject 패턴", "watch 패턴"]),
+        ("11_", ["provide/inject 패턴", "computed로 옵션 정의", "options() 메서드 파라미터", "Select 컴포넌트 연결"]),
+        ("12_", ["SearchForm", "SearchFormRow", "SearchFormField", "SearchFormLabel", "SearchFormContent", "SearchFormFieldGroup", "Import 패턴", "검색 화면"]),
+    ],
+    "vue_data_table": [("01_", None), ("02_", None), ("04_", None), ("07_", None)],
     "vue_data_table_utils": [("02_", None), ("04_", None)],
     "vue_sum_grid": [("02_", None), ("05_", None), ("07_", None)],
-    "vue_api": [("06_", None)],
-    "vue_types": [("06_", None)],
+    "vue_api": [("02_", ["Types.ts 위치"]), ("06_", None)],
+    "vue_types": [("02_", ["Types.ts 위치"]), ("06_", None)],
     "vue_scss": [("07_", None)],
-    "pinia_store": [("08_", None)],
 }
+
+_FRONTEND_PLANNING_PREFIXES: tuple[str, ...] = (
+    "00_",
+    "01_",
+    "02_",
+    "03_",
+    "04_",
+    "05_",
+    "06_",
+    "07_",
+    "09_",
+    "11_",
+    "12_",
+    "13_",
+    "14_",
+)
+
+_FRONTEND_QA_PREFIXES: tuple[str, ...] = (
+    "00_",
+    "01_",
+    "02_",
+    "03_",
+    "04_",
+    "05_",
+    "06_",
+    "07_",
+    "09_",
+    "11_",
+    "12_",
+    "13_",
+    "14_",
+)
 
 
 def _collect_sections(
@@ -184,6 +230,129 @@ def get_all_frontend_guide() -> str:
     for fname in sorted(_FRONTEND_SECTIONS):
         full = "\n".join(_FRONTEND_SECTIONS[fname].values())
         parts.append(f"=== {fname} ===\n{full}")
+    return "\n\n".join(parts)
+
+
+def _collect_full_files_by_prefixes(
+    sections_db: dict[str, dict[str, str]],
+    prefixes: tuple[str, ...],
+) -> str:
+    parts: list[str] = []
+    for fname in sorted(sections_db):
+        if not any(fname.startswith(prefix) for prefix in prefixes):
+            continue
+        full = "\n".join(sections_db[fname].values())
+        parts.append(f"=== {fname} ===\n{full}")
+    return "\n\n".join(parts)
+
+
+def get_frontend_planning_context() -> str:
+    """Return a curated FrontendGuide subset for the planning step.
+
+    This intentionally excludes legacy duplicate markdown files that do not
+    follow the numbered guide convention, so the planner sees a single,
+    consistent frontend contract.
+    """
+    _ensure_loaded()
+    assert _FRONTEND_SECTIONS is not None
+    return _collect_full_files_by_prefixes(_FRONTEND_SECTIONS, _FRONTEND_PLANNING_PREFIXES)
+
+
+def get_frontend_qa_context() -> str:
+    """Return a curated FrontendGuide subset for frontend QA.
+
+    QA should validate against the same numbered guide set used by generation,
+    not against stale duplicate docs that may contain conflicting API/style
+    conventions.
+    """
+    _ensure_loaded()
+    assert _FRONTEND_SECTIONS is not None
+    return _collect_full_files_by_prefixes(_FRONTEND_SECTIONS, _FRONTEND_QA_PREFIXES)
+
+
+def _safe_read_lines(path: Path, max_lines: int = 120) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    lines = text.splitlines()
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines.append("... (truncated)")
+    return "\n".join(lines).strip()
+
+
+def _resolve_reference_types_path(api_dir: Path, screen_id: str) -> Path | None:
+    shared_types = api_dir / "types.ts"
+    screen_types = api_dir / f"{screen_id}Types.ts"
+    if shared_types.exists():
+        return shared_types
+    if screen_types.exists():
+        return screen_types
+    return None
+
+
+def get_frontend_reference_context(
+    module: str,
+    category: str,
+    screen_id: str,
+    *,
+    max_screens: int = 2,
+) -> str:
+    """Load concise PFY reference screen snippets from the active frontend workspace.
+
+    The goal is not to dump entire source files, but to show the generator
+    a few real PFY patterns from sibling screens in the same module/category.
+    Missing workspaces are treated as a no-op.
+    """
+    base_front = Path(settings.PFY_FRONT_DIR)
+    pages_dir = base_front / "src" / "pages" / module / category
+    api_dir = base_front / "src" / "api" / "pages" / module / category
+    if not pages_dir.exists():
+        return ""
+
+    parts: list[str] = []
+    candidates = sorted(
+        path for path in pages_dir.iterdir()
+        if path.is_dir() and path.name != screen_id and (path / "index.vue").exists()
+    )
+
+    for candidate in candidates[:max_screens]:
+        sections: list[str] = []
+
+        index_snippet = _safe_read_lines(candidate / "index.vue", max_lines=140)
+        if index_snippet:
+            sections.append(f"--- index.vue ---\n{index_snippet}")
+
+        search_form = next(candidate.rglob("*SearchForm.vue"), None)
+        if search_form is not None:
+            snippet = _safe_read_lines(search_form, max_lines=140)
+            if snippet:
+                sections.append(f"--- {search_form.relative_to(candidate).as_posix()} ---\n{snippet}")
+
+        data_table = next(candidate.rglob("*DataTable.vue"), None)
+        if data_table is not None:
+            snippet = _safe_read_lines(data_table, max_lines=160)
+            if snippet:
+                sections.append(f"--- {data_table.relative_to(candidate).as_posix()} ---\n{snippet}")
+
+        api_file = api_dir / f"{candidate.name}.ts"
+        if api_file.exists():
+            snippet = _safe_read_lines(api_file, max_lines=120)
+            if snippet:
+                sections.append(f"--- api/{api_file.name} ---\n{snippet}")
+
+        types_file = _resolve_reference_types_path(api_dir, candidate.name)
+        if types_file is not None:
+            snippet = _safe_read_lines(types_file, max_lines=120)
+            if snippet:
+                sections.append(f"--- api/{types_file.name} ---\n{snippet}")
+
+        if sections:
+            parts.append(
+                f"=== PFY REFERENCE SCREEN: {candidate.name} ===\n" + "\n\n".join(sections)
+            )
+
     return "\n\n".join(parts)
 
 
