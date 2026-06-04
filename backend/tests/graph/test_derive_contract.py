@@ -70,6 +70,42 @@ async def test_derive_contract_reconciles_plan_dto_files_to_contract():
     assert any(f["file_type"] == "service_impl" for f in files)
 
 
+async def test_derive_contract_rewrites_paths_per_guide_biz_module():
+    out = await nodes.derive_contract({"contract": _CONTRACT, "plan": _PLAN})
+    by_type = {f["file_type"]: f["file_path"] for f in out["plan"]["files"]}
+    base = "src/main/java/biz/cpms"
+    assert by_type["dto_request"] == f"{base}/dto/request/CpmsEduRsltLstReqDto.java"
+    assert by_type["dto_response"] == f"{base}/dto/response/CpmsEduRsltLstResDto.java"
+    assert by_type["dao_impl"] == f"{base}/dao/CpmsEduRsltLstDaoImpl.java"
+    assert by_type["service_impl"] == f"{base}/service/CpmsEduRsltLstServiceImpl.java"
+    assert by_type["mapper_xml"] == (
+        "src/main/resources/biz/cpms/mybatis/mappers/CpmsEduRsltLstMapper.xml")
+
+
+async def test_derive_contract_enforces_layer_by_file_type():
+    # planner mislabels layers; derive_contract must correct them (a mapper landing
+    # in frontend/ would never be found by MyBatis at runtime).
+    plan = {"files": [
+        {"file_path": "x/CpmsEduRsltLstDaoImpl.java", "file_type": "dao_impl",
+         "layer": "frontend"},
+        {"file_path": "x/CpmsEduRsltLstMapper.xml", "file_type": "mapper_xml",
+         "layer": "frontend"},
+        {"file_path": "x/CpmsEduRsltLst.vue", "file_type": "vue_page",
+         "layer": "backend"},
+    ]}
+    out = await nodes.derive_contract({"contract": _CONTRACT, "plan": plan})
+    by_type = {f["file_type"]: f for f in out["plan"]["files"]}
+    assert by_type["dao_impl"]["layer"] == "backend"
+    assert by_type["mapper_xml"]["layer"] == "backend"
+    assert by_type["vue_page"]["layer"] == "frontend"
+
+
+async def test_derive_contract_drops_legacy_com_example_default():
+    # the old hardcoded 'src/main/java/com/example/cpms/dto' default must be gone
+    out = await nodes.derive_contract({"contract": _CONTRACT, "plan": _PLAN})
+    assert all("com/example" not in f["file_path"] for f in out["plan"]["files"])
+
+
 async def test_derive_contract_skips_op_without_dao_file():
     plan = {"files": [{"file_path": "x/CpmsEduRsltLstResDto.java", "file_type": "dto_response"}]}
     out = await nodes.derive_contract({"contract": _CONTRACT, "plan": plan})

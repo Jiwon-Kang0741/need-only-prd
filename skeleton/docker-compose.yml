@@ -1,19 +1,18 @@
 services:
   db:
-    image: mariadb:10.11
+    image: postgres:16
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: tomms
-      MARIADB_USER: tomms_user
-      MARIADB_PASSWORD: tomms_pass
-      MARIADB_ROOT_PASSWORD: root_pass
+      POSTGRES_DB: tomms
+      POSTGRES_USER: tomms_user
+      POSTGRES_PASSWORD: tomms_pass
     ports:
-      - "${DB_PORT:-18000}:3306"
+      - "${DB_PORT:-18000}:5432"
     volumes:
-      - dbdata:/var/lib/mysql
+      - dbdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U tomms_user -d tomms"]
       interval: 5s
       retries: 5
 
@@ -25,7 +24,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mariadb://db:3306/tomms
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/tomms
       SPRING_DATASOURCE_USERNAME: tomms_user
       SPRING_DATASOURCE_PASSWORD: tomms_pass
     ports:

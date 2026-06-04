@@ -56,22 +56,34 @@ def _split_by_headings(text: str) -> dict[str, str]:
     return sections
 
 
-# file_type -> [(guide filename prefix, layer)]; 개선3: 넉넉히 주입(매핑 누락 위험↓)
+# file_type -> [(guide filename prefix, layer)].
+# Per user directive: each layer's generation MUST follow its WHOLE guide dir —
+# backend→BackendGuide/, frontend→FrontendGuide/, data(db_init_sql)→DataGuide/.
+# Empty prefix "" matches every .md in the layer dir (see _guide_files).
 _FILE_TYPE_GUIDES: dict[str, list[tuple[str, str]]] = {
-    "dto_request":   [("표준", "backend")],
-    "dto_response":  [("표준", "backend")],
-    "dao":           [("표준", "backend")],
-    "dao_impl":      [("표준", "backend")],
-    "service":       [("표준", "backend")],
-    "service_impl":  [("표준", "backend")],
-    "mapper_xml":    [("표준", "backend")],
-    "db_init_sql":   [("표준", "backend"), ("02-", "backend")],
-    "vue_page":      [("00_", "frontend"), ("02_", "frontend"), ("03_", "frontend"),
-                      ("04_", "frontend"), ("07_", "frontend")],
-    "vue_types":     [("06_", "frontend")],
+    "dto_request":   [("", "backend")],
+    "dto_response":  [("", "backend")],
+    "dao":           [("", "backend")],
+    "dao_impl":      [("", "backend")],
+    "service":       [("", "backend")],
+    "service_impl":  [("", "backend")],
+    "mapper_xml":    [("", "backend")],
+    "db_init_sql":   [("", "data")],
+    "vue_page":      [("", "frontend")],
+    "vue_types":     [("", "frontend")],
 }
 
-_LAYER_DIR = {"backend": "BackendGuide", "frontend": "FrontendGuide"}
+_LAYER_DIR = {"backend": "BackendGuide", "frontend": "FrontendGuide", "data": "DataGuide"}
+
+
+# Files present in a guide dir but NOT injected (navigation/duplicate/auto-generated
+# inventory — not actual coding rules). The reviewer can still reach them on demand
+# via lookup_guide; only the bulk per-file_type injection skips them.
+_INJECT_EXCLUDE: frozenset[str] = frozenset({
+    "README.md",
+    "자주_발생하는_에러.md",          # 14_자주_발생하는_에러.md 와 중복
+    "13_공통컴포넌트_카탈로그.md",     # 자동 생성 인벤토리
+})
 
 
 def _guide_files(layer: str, prefix: str) -> list[Path]:
@@ -84,7 +96,8 @@ def _guide_files(layer: str, prefix: str) -> list[Path]:
     cached = _GLOB_CACHE.get(key)
     if cached is not None and cached[0] == dir_mtime:
         return cached[1]
-    files = [f for f in sorted(base.glob("*.md")) if f.name.startswith(prefix)]
+    files = [f for f in sorted(base.glob("*.md"))
+             if f.name.startswith(prefix) and f.name not in _INJECT_EXCLUDE]
     _GLOB_CACHE[key] = (dir_mtime, files)
     return files
 
@@ -120,3 +133,32 @@ def load_table_info() -> str:
         if candidate.exists():
             return _read_fresh(candidate)
     return ""
+
+
+def load_codegen_rules() -> str:
+    """Load CODEGEN_RULES.md — the distilled must-follow rule 'spine' injected into
+    every generate_file prompt (on top of the file_type-specific guide). Fresh
+    (mtime-cached); '' when the file is absent so injection becomes a no-op."""
+    return _read_fresh(Path(settings.PROMPT_REFERENCE_DIR) / "CODEGEN_RULES.md")
+
+
+_PATHS_BLOCK_RE = re.compile(
+    r"<!--\s*BEGIN codegen-paths.*?-->(.*?)<!--\s*END codegen-paths\s*-->", re.DOTALL)
+_PATH_LINE_RE = re.compile(r"^\s*([a-z_]+)\s*=\s*(\S+)\s*$", re.MULTILINE)
+
+
+def load_named_frontend_guide(prefix: str) -> str:
+    """Load the FrontendGuide file(s) whose name starts with `prefix` (e.g. '03_'
+    for SearchForm). Used to give a generated child component its focused guide
+    instead of the whole FrontendGuide dir. Fresh (mtime-cached)."""
+    return "\n\n".join(_read_fresh(f) for f in _guide_files("frontend", prefix))
+
+
+def load_path_templates() -> dict[str, str]:
+    """Parse the file_type→path-template map from CODEGEN_RULES.md's codegen-paths
+    block, so paths come from the GUIDE (editable) — not hardcoded in Python.
+    Empty dict if the file/block is absent (caller then keeps the planner's path)."""
+    m = _PATHS_BLOCK_RE.search(load_codegen_rules())
+    if not m:
+        return {}
+    return dict(_PATH_LINE_RE.findall(m.group(1)))

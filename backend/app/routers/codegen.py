@@ -348,6 +348,31 @@ async def deploy_and_run(session_id: str = Depends(get_session_id)):
                 files=codegen_state.generated_files,
             )
 
+            # Frontend compile-gate: vite build is the correctness oracle — on error,
+            # gpt-5.5 fixes the offending .vue/.ts from the real compiler message and we
+            # retry (mirrors the backend maven auto-fix). Non-fatal: the dev server still
+            # runs, but this catches SFC/type defects the lenient dev server would hide.
+            from app.llm.graph.frontend_build_fix import run_frontend_build_fix
+            fe_dir = docker_manager._workspace(session.session_id) / "frontend"
+            yield _sse("status", message="Type-checking frontend (vite build)...")
+            fe_result = "ok"
+            async for kind, text in run_frontend_build_fix(str(fe_dir)):
+                if kind == "result":
+                    fe_result = text
+                else:
+                    yield _sse("log", line=text)
+            if fe_result == "ok":
+                yield _sse("log", line="[FE] frontend build clean")
+                # sync auto-fixed frontend files back into session state (for /download)
+                for gf in codegen_state.generated_files:
+                    if gf.layer == "frontend":
+                        wf = fe_dir / gf.file_path
+                        if wf.exists():
+                            gf.content = wf.read_text(encoding="utf-8")
+            else:
+                yield _sse("log", line="[FE] frontend still failing after auto-fix — "
+                                       "continuing (dev server is lenient)")
+
             max_retries = settings.DOCKER_MAX_FIX_RETRIES
             for attempt in range(1, max_retries + 2):
                 label = f" (attempt {attempt})" if attempt > 1 else ""

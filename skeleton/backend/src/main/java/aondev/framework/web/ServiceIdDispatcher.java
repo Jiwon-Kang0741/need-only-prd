@@ -1,7 +1,7 @@
-package hone.bom.web;
+package aondev.framework.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import hone.bom.annotation.ServiceId;
+import aondev.framework.annotation.ServiceId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
@@ -15,9 +15,10 @@ import java.lang.reflect.Method;
 import java.util.*;
 
 /**
- * Hone Framework @ServiceId dispatcher.
- * Scans all Spring beans for @ServiceId annotations and routes
- * POST /api/v1/{serviceId} to the annotated method.
+ * @ServiceId dispatcher. Scans all Spring beans for @ServiceId-annotated methods
+ * and routes POST /online/mvcJson/{screenCode}-{methodName} to them. The registry
+ * key is the @ServiceId value ("{ScreenCode}/{methodName}"); the URL uses a dash
+ * between screen code and method (per the CPMS API convention).
  */
 @Slf4j
 @RestController
@@ -49,60 +50,54 @@ public class ServiceIdDispatcher {
             } catch (Exception e) {
                 continue;
             }
-
             for (Method method : bean.getClass().getMethods()) {
                 ServiceId ann = method.getAnnotation(ServiceId.class);
                 if (ann == null) continue;
-
-                String id = ann.value();
                 Class<?> paramType = method.getParameterCount() > 0
                         ? method.getParameterTypes()[0]
                         : null;
-
-                registry.put(id, new MethodTarget(bean, method, paramType));
-                log.info("Registered @ServiceId: POST /api/v1/{}", id);
+                registry.put(ann.value(), new MethodTarget(bean, method, paramType));
+                log.info("Registered @ServiceId: {}", ann.value());
             }
         }
         log.info("ServiceIdDispatcher: {} endpoints registered", registry.size());
     }
 
-    @PostMapping("/api/v1/{screenCode}/{methodName}")
+    @PostMapping("/online/mvcJson/{serviceId}")
     public ResponseEntity<Map<String, Object>> dispatch(
-            @PathVariable String screenCode,
-            @PathVariable String methodName,
+            @PathVariable String serviceId,
             HttpServletRequest request
     ) {
-        String serviceId = screenCode + "/" + methodName;
-        MethodTarget target = registry.get(serviceId);
-
+        // URL "CpmsEduPgmLst-search" -> registry key "CpmsEduPgmLst/search"
+        int dash = serviceId.lastIndexOf('-');
+        String key = dash > 0
+                ? serviceId.substring(0, dash) + "/" + serviceId.substring(dash + 1)
+                : serviceId;
+        MethodTarget target = registry.get(key);
         if (target == null) {
             return ResponseEntity.notFound().build();
         }
-
         try {
             Object result;
             if (target.paramType != null) {
-                String body = readBody(request);
-                Object param = objectMapper.readValue(body, target.paramType);
+                Object param = objectMapper.readValue(readBody(request), target.paramType);
                 result = target.method.invoke(target.bean, param);
             } else {
                 result = target.method.invoke(target.bean);
             }
-
-            Map<String, Object> response = new LinkedHashMap<>();
             Map<String, Object> header = new LinkedHashMap<>();
             header.put("responseCode", "S0000");
             header.put("responseMessage", "SUCCESS");
+            Map<String, Object> response = new LinkedHashMap<>();
             response.put("header", header);
             response.put("payload", result);
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error dispatching {}: {}", serviceId, e.getMessage(), e);
-            Map<String, Object> response = new LinkedHashMap<>();
+            log.error("Error dispatching {}: {}", key, e.getMessage(), e);
             Map<String, Object> header = new LinkedHashMap<>();
             header.put("responseCode", "E9999");
             header.put("responseMessage", e.getMessage());
+            Map<String, Object> response = new LinkedHashMap<>();
             response.put("header", header);
             response.put("payload", null);
             return ResponseEntity.ok(response);

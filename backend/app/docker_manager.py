@@ -12,6 +12,11 @@ from app.config import settings
 from app.models import GeneratedFile
 
 
+# SCSS references a Vue file may pull in: `@import '...scss'`, ES `... from '...scss'`,
+# or SFC `<style scoped src="...scss">`. All three are auto-stubbed if missing.
+_SCSS_REF_RE = re.compile(r"""(?:@import\s+|from\s+|src\s*=\s*)['"]([^'"]+?\.scss)['"]""")
+
+
 # Port allocation
 _next_port_offset = 0
 
@@ -142,7 +147,7 @@ class DockerManager:
         fe_dir = ws / "frontend"
         for gf in files:
             if gf.layer == "frontend" and gf.file_path.endswith(".vue"):
-                for m in re.finditer(r"""(?:@import|from)\s+['"](.+?\.scss)['"]""", gf.content):
+                for m in _SCSS_REF_RE.finditer(gf.content):
                     scss_ref = m.group(1)
                     if scss_ref.startswith("./") or scss_ref.startswith("../"):
                         vue_dir = (fe_dir / gf.file_path).parent

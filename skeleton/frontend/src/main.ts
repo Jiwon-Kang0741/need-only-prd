@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import ConfirmationService from 'primevue/confirmationservice'
@@ -29,9 +30,22 @@ import ProgressBar from 'primevue/progressbar'
 import Tag from 'primevue/tag'
 import Toolbar from 'primevue/toolbar'
 
+// i18n — generated components use useI18n()/t('{Component}.{labelId}'). Labels are
+// looked up at runtime (cmn_lbl); empty messages fall back to the key.
+const i18n = createI18n({
+  legacy: false,
+  globalInjection: true,
+  locale: 'ko-KR',
+  fallbackLocale: 'ko-KR',
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: {},
+})
+
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+app.use(i18n)
 app.use(PrimeVue)
 app.use(ToastService)
 app.use(ConfirmationService)

@@ -1,13 +1,13 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3306/tomms}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/tomms}
     username: ${SPRING_DATASOURCE_USERNAME:tomms_user}
     password: ${SPRING_DATASOURCE_PASSWORD:tomms_pass}
-    driver-class-name: org.mariadb.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
 
 mybatis:
-  mapper-locations: classpath*:hsc/tomms/web/**/mybatis/mappers/*.xml
-  type-aliases-package: hsc.tomms.web
+  mapper-locations: classpath*:biz/**/mybatis/mappers/*.xml
+  type-aliases-package: biz
   configuration:
     map-underscore-to-camel-case: true
 
@@ -16,5 +16,6 @@ server:
 
 logging:
   level:
+    biz: DEBUG
     hsc.tomms: DEBUG
-    hone.bom: DEBUG
+    aondev.framework: DEBUG
