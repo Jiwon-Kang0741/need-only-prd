@@ -9,9 +9,9 @@
     "roles": []
   },
   {
-    "menuId": "ROOT0201",
+    "menuId": "ROOT970101",
     "menuName": "리스크식별관리",
-    "parentId": "ROOT02",
+    "parentId": "ROOT9701",
     "sortOrder": 1,
     "menuType": "PROGRAM",
     "useYn": "Y",
@@ -26,13 +26,25 @@
     "menuId": "ROOT01",
     "menuName": "시스템 관리",
     "parentId": "ROOT",
-    "sortOrder": 2,
+    "sortOrder": 1,
     "menuType": "FOLDER",
     "useYn": "Y",
     "roles": [],
     "level": 0,
     "hasChildren": true,
     "componentKey": "sy"
+  },
+  {
+    "menuId": "ROOT9701",
+    "menuName": "모니터링",
+    "parentId": "ROOT97",
+    "sortOrder": 1,
+    "menuType": "FOLDER",
+    "useYn": "Y",
+    "roles": [],
+    "level": 0,
+    "hasChildren": true,
+    "componentKey": "mon"
   },
   {
     "menuId": "ROOT0102",
@@ -44,15 +56,29 @@
     "roles": []
   },
   {
-    "menuId": "ROOT02",
-    "menuName": "모니터링",
-    "parentId": "ROOT",
+    "menuId": "ROOT970102",
+    "menuName": "점검문제관리",
+    "parentId": "ROOT9701",
     "sortOrder": 2,
+    "menuType": "PROGRAM",
+    "useYn": "Y",
+    "roles": [
+      "ITO_ADM",
+      "BUS_ADM"
+    ],
+    "level": 1,
+    "hasChildren": false
+  },
+  {
+    "menuId": "ROOT97",
+    "menuName": "준법지원",
+    "parentId": "ROOT",
+    "sortOrder": 97,
     "menuType": "FOLDER",
     "useYn": "Y",
     "roles": [],
     "level": 0,
-    "hasChildren": true,
-    "componentKey": "mon"
+    "hasChildren": false,
+    "componentKey": "cpms"
   }
 ]
