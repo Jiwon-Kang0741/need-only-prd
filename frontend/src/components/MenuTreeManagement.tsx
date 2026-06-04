@@ -95,7 +95,7 @@ interface MenuRowVM extends MenuRow {
 const ROOT_ID = 'ROOT';
 
 // ─────────────────────────────────────────────
-// 초기 목 데이터  (ID 규칙: ROOT01, ROOT0101, ROOT010101…)
+// 초기 목 데이터  (ID 규칙: 각 행 sortOrder가 구간에 반영 — ROOT01·ROOT02·ROOT0101 … / 순서 97이면 ROOT97·ROOT9701 …)
 // ─────────────────────────────────────────────
 const INITIAL_MENU: MenuRow[] = [
   { menuId: 'ROOT01',   menuName: '교육 관리',         parentId: ROOT_ID,  sortOrder: 1, menuType: 'FOLDER',  useYn: 'Y', roles: ['ITO_ADM', 'GEN_USER', 'BUS_ADM'] },
@@ -158,21 +158,40 @@ function reorderSiblings(rows: MenuRow[], parentId: string): MenuRow[] {
 }
 
 /**
+ * sortOrder → 메뉴 ID에 붙는 구간 문자열 (최소 2자: 5→05, 97→97, 100→100)
+ */
+function sortOrderToIdSegment(sortOrder: number): string {
+  const n = Math.floor(Number(sortOrder));
+  const v = Number.isFinite(n) && n >= 1 ? n : 1;
+  return v < 100 ? String(v).padStart(2, '0') : String(v);
+}
+
+/**
  * 트리 전체를 순회해 새 ID 매핑을 생성한다.
- * ROOT 레벨: ROOT01, ROOT02 …
- * 하위 레벨: 부모ID + 2자리 순번 (ROOT0101, ROOT010101 …)
+ * 각 노드의 **순서(sortOrder)** 값이 ID 구간에 반영된다 (예: 최상위 순서 97 → ROOT97, 하위는 ROOT9701 …).
+ * 동일 부모 아래 sortOrder가 겹쳐 ID가 충돌하면 뒤 행은 구간 번호를 올려 유일하게 맞춘다.
  */
 function buildIdMap(rows: MenuRow[]): Map<string, string> {
   const idMap = new Map<string, string>();
   function visit(parentId: string, prefix: string) {
-    rows
+    const children = rows
       .filter((r) => r.parentId === parentId)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .forEach((child, idx) => {
-        const newId = `${prefix}${String(idx + 1).padStart(2, '0')}`;
-        idMap.set(child.menuId, newId);
-        visit(child.menuId, newId);
-      });
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.menuId.localeCompare(b.menuId));
+
+    const usedAtLevel = new Set<string>();
+    for (const child of children) {
+      let base = Math.max(1, Math.floor(Number(child.sortOrder)) || 1);
+      let seg = sortOrderToIdSegment(base);
+      let newId = `${prefix}${seg}`;
+      while (usedAtLevel.has(newId)) {
+        base += 1;
+        seg = sortOrderToIdSegment(base);
+        newId = `${prefix}${seg}`;
+      }
+      usedAtLevel.add(newId);
+      idMap.set(child.menuId, newId);
+      visit(child.menuId, newId);
+    }
   }
   visit(ROOT_ID, 'ROOT');
   return idMap;
@@ -219,6 +238,7 @@ interface MenuNameContext {
   expandedIds: Set<string>;
   toggleExpand: (id: string) => void;
   updateRoles?: (menuId: string, roles: RoleValue[]) => void;
+  updateSortOrder?: (menuId: string, sortOrder: number) => void;
 }
 
 function MenuNameRenderer(params: ICellRendererParams) {
@@ -257,6 +277,59 @@ function UseYnRenderer(p: ICellRendererParams) {
   return p.value === 'Y'
     ? <span style={{ color: '#4ade80', fontWeight: 600 }}>사용</span>
     : <span style={{ color: '#f87171' }}>미사용</span>;
+}
+
+/** 순서: 드래그·추가 시 자동 채번 + 인라인 숫자 입력으로 수동 수정 */
+function SortOrderRenderer(params: ICellRendererParams) {
+  const row = params.data as MenuRowVM;
+  const ctx = params.context as MenuNameContext;
+  const safeOrder = Number(row.sortOrder) >= 1 ? Number(row.sortOrder) : 1;
+  const [draft, setDraft] = useState(String(safeOrder));
+
+  useEffect(() => {
+    setDraft(String(Number(row.sortOrder) >= 1 ? Number(row.sortOrder) : 1));
+  }, [row.menuId, row.sortOrder]);
+
+  const flush = () => {
+    const cur = params.data as MenuRowVM;
+    const baseline = Number(cur.sortOrder) >= 1 ? Number(cur.sortOrder) : 1;
+    const n = parseInt(draft.trim(), 10);
+    const next = Number.isFinite(n) && n >= 1 ? n : baseline;
+    setDraft(String(next));
+    if (next !== cur.sortOrder) {
+      ctx.updateSortOrder?.(cur.menuId, next);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 4px' }}>
+      <input
+        type="number"
+        min={1}
+        step={1}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={flush}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 52,
+          height: 26,
+          fontSize: 12,
+          padding: '2px 4px',
+          borderRadius: 4,
+          border: '1px solid #333',
+          background: '#111',
+          color: '#e5e7eb',
+          textAlign: 'center',
+          MozAppearance: 'textfield' as const,
+        }}
+      />
+    </div>
+  );
 }
 
 // ── 역할 텍스트 렌더러 (레이블 콤마 연결) ────────
@@ -414,6 +487,19 @@ const MenuTreeManagement: React.FC = () => {
     setMenuRows((prev) => prev.map((r) => (r.menuId === menuId ? { ...r, roles } : r)));
   }, []);
 
+  const updateSortOrder = useCallback((menuId: string, sortOrder: number) => {
+    const nextOrder = Number.isFinite(sortOrder) && sortOrder >= 1 ? Math.floor(sortOrder) : 1;
+    setMenuRows((prev) => {
+      const updated = prev.map((r) => (r.menuId === menuId ? { ...r, sortOrder: nextOrder } : r));
+      const idMap = buildIdMap(updated);
+      const rebuilt = applyIdMap(updated, idMap);
+      queueMicrotask(() => {
+        setExpandedIds((ex) => new Set([...ex].map((id) => idMap.get(id) ?? id)));
+      });
+      return rebuilt;
+    });
+  }, []);
+
   // 가시 행 계산 (expand 상태 반영)
   const rowData = useMemo(
     () => buildVisibleRows(menuRows, expandedIds),
@@ -422,8 +508,8 @@ const MenuTreeManagement: React.FC = () => {
 
   // context: 셀 렌더러에 콜백 전달
   const context = useMemo<MenuNameContext>(
-    () => ({ expandedIds, toggleExpand, updateRoles }),
-    [expandedIds, toggleExpand, updateRoles],
+    () => ({ expandedIds, toggleExpand, updateRoles, updateSortOrder }),
+    [expandedIds, toggleExpand, updateRoles, updateSortOrder],
   );
 
   const onGridReady = useCallback((e: GridReadyEvent) => {
@@ -677,8 +763,11 @@ const MenuTreeManagement: React.FC = () => {
     {
       field: 'sortOrder',
       headerName: '순서',
-      width: 65,
+      width: 76,
       editable: false,
+      sortable: false,
+      suppressSizeToFit: true,
+      cellRenderer: SortOrderRenderer,
     },
   ], []);
 
