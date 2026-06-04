@@ -187,8 +187,8 @@ STEP 6의 매핑 결과를 기반으로 전체 API를 명세한다.
 - `cmn_pgm.pgm_desc` ← `menu_tree.menu_nm`
 - `cmn_pgm.pgm_url` ← 실제 생성되는 vue_page 경로에서 산출
   - 파일 경로: `src/pages/{module}/{category}/{screenId}/index.vue`
-  - 변환 규칙: `pgm_url = /pages/{module}/{category}/{screenId}/index.vue`
-  - 예: `src/pages/mon/risk/cpmsMonRiskLst/index.vue` → `/pages/mon/risk/cpmsMonRiskLst/index.vue`
+  - 변환 규칙: `pgm_url = pages/{module}/{category}/{screenId}/index.vue` (**선행 `/` 없음**; `01.seed_standard` §16.1)
+  - 예: `src/pages/mon/risk/cpmsMonRiskLst/index.vue` → `pages/mon/risk/cpmsMonRiskLst/index.vue`
 - `cmn_lbl.lbl_cd` ← `menu_tree.menu_id`
 - `cmn_lbl.lbl_nm` ← `menu_tree.menu_nm`
 - `cmn_lbl.lang_cd` ← 기본값 `'ko-KR'`

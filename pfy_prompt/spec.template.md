@@ -154,7 +154,7 @@
 
 * 시드 메타·메뉴·역할의 SSOT: **`# 10. Seed Metadata`**
 * `cmn_lbl` / `cmn_pgm` / `cmn_menu` / `cmn_role_pgm` / `cmn_role_menu` 순서·`ON CONFLICT`·`DEV_AUTO`·`ROOT98` fallback: **SEED_STANDARD.md**
-* `pgm_url`: `vue_page_path` → `/pages/.../index.vue` 변환 (§16.1)
+* `pgm_url`: `vue_page_path` → `pages/.../index.vue` 변환 (**선행 `/` 없음**, §16.1)
 * 화면 UI 라벨 `lbl_cd`: `{화면코드}.{대컴포넌트명}.{라벨ID}` — Vue: `t('{대컴포넌트명}.{라벨ID}')`
 * 본 SPEC에는 **실행 SQL 전문을 쓰지 않는다** (`db_init_sql`에서 생성)
 
