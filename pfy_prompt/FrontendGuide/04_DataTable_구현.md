@@ -17,7 +17,7 @@
   - 예: `t('DataTable.userName')`
 - **DB 시드 `cmn_lbl.lbl_cd`**(및 스펙상 화면 라벨 ID)는 `{화면코드}.{대컴포넌트명}.{라벨ID}` 형태일 수 있습니다.  
   이 **전체 문자열을 Vue의 `t('…')` 인자로 쓰지 마세요.** 화면 루트(`index.vue` 등)가 이미 화면 스코프를 붙이므로 **`t('CPMSMONXXX.DataTable.xxx')`처럼 화면코드를 `t` 안에 넣으면 이중 접두어**가 됩니다.
-- `utils/index.ts`는 컴포넌트가 아니므로 `useI18n()`을 쓰지 않고, **`getColumns(t)`처럼 `t` 함수를 인자로 받아** 헤더 문자열을 만듭니다. 호출부(DataTable `.vue`)에서 `const { t } = useI18n();` 후 `computed(() => getColumns(t))`로 넘깁니다.
+- `utils/index.ts`는 컴포넌트가 아니므로 `useI18n()`을 쓰지 않고, **`getColumns(t)`처럼 `t` 함수를 인자로 받아** 헤더 문자열을 만듭니다. 호출부(DataTable `.vue`)에서는 **부모 `index.vue`가 `provide('t', t)`로 내려준 번역 함수를 `inject('t')`로 받아** `computed(() => getColumns(t))`로 넘깁니다.
 - 예시:
 
 ```typescript
@@ -215,8 +215,8 @@ export const getRows = (data?: CpmsEduProgLstResDto[] | null): CpmsEduProgLstDis
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { computed, inject } from 'vue';
+import type { Ref } from 'vue';
 import { DataTable } from '@/components/common/dataTable2';
 import type { CpmsEduProgLstResDto } from '@/api/pages/edu/prog/types';
 import { getColumns, getRows, type CpmsEduProgLstDisplayRow } from './utils';
@@ -237,7 +237,8 @@ const props = withDefaults(defineProps<Props>(), {
   first: 0,
 });
 
-const { t } = useI18n();
+const t = inject('t') as (key: string) => string;
+const locale = inject('locale') as Ref<string>;
 
 // ⭐ 컬럼 정의 — utils의 getColumns(t)에 화면 스코프가 적용된 t 전달
 const columns = computed(() => getColumns(t));
@@ -508,7 +509,8 @@ DataTable2에서 `:scrollHeight` / `:virtualScrollerOptions`는 내부 PrimeVue 
 - [ ] `import { DataTable } from '@/components/common/dataTable2'`
 - [ ] `Column from 'primevue/column'` import 없음
 - [ ] `<Column>` 자식 요소 없음
-- [ ] `const { t } = useI18n()` 후 `const columns = computed(() => getColumns(t))`
+- [ ] `inject('t')` 후 `const columns = computed(() => getColumns(t))`
+- [ ] `inject('locale')` 사용 (`useI18n()` 직접 호출 금지)
 - [ ] `:columns="columns"` prop 전달 (`computed(() => getColumns(t))` 결과)
 - [ ] `:value="displayRows"` (computed from getRows())
 - [ ] `title` prop 설정
@@ -651,7 +653,7 @@ header: t('DataTable.colRiskStatus'),
 // ❌ WRONG — utils에서 useI18n() 호출 시도 또는 header에 한글 하드코딩만 두고 i18n 미연결
 
 // ✅ CORRECT — .vue에서
-const { t } = useI18n();
+const t = inject('t') as (key: string) => string;
 const columns = computed(() => getColumns(t));
 ```
 

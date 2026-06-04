@@ -27,6 +27,8 @@ You are a senior engineer generating ONE CPMS file. Follow the provided guide \
 sections exactly. Use the contract as the source of truth for field names and \
 types. When REQUIRED IDENTIFIERS are given, use those exact statement ids, \
 method names and DTO field names — never invent or rename them. \
+For DTO files, generate flat DTOs only: do NOT create inner/nested classes, and \
+do NOT use dotted/array path-like field names (e.g. searchParams.endYn, list[].id). \
 Output ONLY the file content, no markdown fences, no explanation."""
 
 REVIEWER_SYSTEM = """\

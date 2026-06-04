@@ -15,6 +15,15 @@
 <SearchFormLabel>{{ t('SearchForm.searchDate') }}</SearchFormLabel>
 ```
 
+## 🌐 부모 페이지 컨텍스트 사용 규칙 (필수)
+
+- SearchForm은 **직접 `useI18n()`을 호출하지 않습니다.**
+- 부모 `index.vue`가 `useWindowLocale(windowIdOrPgmId)`를 호출하고 `provide('t', t)`, `provide('locale', locale)`를 내린다고 가정합니다.
+- SearchForm은 **반드시** `inject('t')`와 `inject('searchParams')`를 사용합니다.
+- `inject('locale')`는 로케일 변화에 반응하는 화면이면 함께 사용합니다.
+- `inject('isBlocked')`는 버튼/입력 권한 제어가 필요할 때만 사용합니다.
+- `provide('windowId', ...)`를 기대하지 마세요. 실제 PFY 화면에서 기본 패턴이 아닙니다.
+
 ## 📝 Step 1: 기본 구조 생성
 
 ### 1.1 파일 생성
@@ -160,6 +169,8 @@ interface Emits {
 }
 const emit = defineEmits<Emits>();
 
+const t = inject('t') as (key: string) => string;
+const locale = inject('locale') as Ref<string>;
 const searchParams = inject<Ref<CpmsEduPondgEditSearchParams>>('searchParams')!;
 const searchFormRef = ref();
 
@@ -747,6 +758,8 @@ defineExpose({
 ### 기본 구조
 - [ ] SearchForm 컴포넌트 import
 - [ ] searchFormRef ref 생성
+- [ ] `inject('t')` 사용 (`useI18n()` 직접 호출 금지)
+- [ ] 필요 시 `inject('locale')` 사용
 - [ ] searchParams inject
 - [ ] defineExpose({ searchFormRef })
 - [ ] 라벨 ID 규칙 `{대컴포넌트명}.{라벨ID}` 적용

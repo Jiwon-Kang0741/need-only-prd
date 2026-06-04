@@ -118,6 +118,24 @@ async def test_derive_contract_empty_fields_no_crash():
     assert "dtos" in out["contract"]
 
 
+async def test_derive_contract_sanitizes_path_like_vue_field_names_for_dto():
+    contract = {
+        "screen": {"id": "X", "type": "list"},
+        "fields": [
+            {"vue_field": "searchParams.endYn", "db_column": "END_YN", "type": "string"},
+            {"vue_field": "RowItem.owner_nm", "db_column": "OWNER_NM", "type": "string"},
+            {"vue_field": "riskGrdCdOptions[].value", "db_column": "RISK_GRD_CD", "type": "string"},
+            {"vue_field": "riskGrdCdOptions[].value", "db_column": "RISK_GRD_CD", "type": "string"},
+        ],
+        "api_signatures": [],
+    }
+    out = await nodes.derive_contract({"contract": contract, "plan": _PLAN})
+    dtos = out["contract"]["dtos"]
+    req = next(d for d in dtos if d["kind"] == "request")
+    names = [f["name"] for f in req["fields"]]
+    assert names == ["endYn", "ownerNm", "value"]
+
+
 import json as _json
 
 

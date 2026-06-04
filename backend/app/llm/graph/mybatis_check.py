@@ -25,6 +25,21 @@ _MAPPER_STMT_RE = re.compile(
     r'<(?:select|insert|update|delete)\b[^>]*\bid\s*=\s*"([^"]+)"'
 )
 
+# public <returnType> <method>(<params>) { ... }
+_PUBLIC_METHOD_RE = re.compile(
+    r'\bpublic\s+([A-Za-z0-9_<>\[\].,\s?]+?)\s+(\w+)\s*\(([^)]*)\)\s*\{',
+    re.MULTILINE,
+)
+_DAO_FIELD_RE = re.compile(
+    r'\b(?:private|protected|public)\s+(?:final\s+)?(\w+DaoImpl)\s+(\w+)\s*;',
+    re.MULTILINE,
+)
+_LOCAL_VAR_RE = re.compile(
+    r'\b(?:final\s+)?([A-Za-z_][\w<>\[\].,? ]+)\s+(\w+)\s*(?:=|;)',
+    re.MULTILINE,
+)
+_DAO_CALL_RE = re.compile(r'\b(\w+)\.(\w+)\s*\(([^)]*)\)')
+
 
 def parse_dao(content: str) -> dict:
     """Return {statement_ids: set[str], expected_namespace: str|None}."""
@@ -86,6 +101,217 @@ def match_pairs(files: dict) -> tuple[list[tuple[dict, dict]], list[dict]]:
 def _contract_ids(contract) -> set[str]:
     ops = (contract or {}).get("operations") or []
     return {o["statement_id"] for o in ops}
+
+
+def _normalize_type(type_name: str) -> str:
+    t = (type_name or "").strip()
+    # remove parameter annotations, e.g. @Valid, @Nullable("x")
+    t = re.sub(r'@\w+(?:\([^)]*\))?\s*', '', t)
+    t = re.sub(r'\bfinal\s+', '', t)
+    t = re.sub(r'\s+', '', t)
+    # normalize common java.util wrappers to short names
+    t = t.replace("java.util.List", "List")
+    t = t.replace("java.lang.String", "String")
+    t = t.replace("java.lang.Integer", "Integer")
+    t = t.replace("java.lang.Long", "Long")
+    t = t.replace("java.lang.Boolean", "Boolean")
+    t = t.replace("java.lang.Double", "Double")
+    t = t.replace("java.lang.Float", "Float")
+    return t
+
+
+def _simple_type(type_name: str) -> str:
+    # turn fully-qualified names into simple names, including generics
+    return re.sub(r'\b(?:[a-z_]\w*\.)+([A-Za-z_]\w*)', r'\1', _normalize_type(type_name))
+
+
+def _types_compatible(actual: str, expected: str) -> bool:
+    a = _normalize_type(actual)
+    e = _normalize_type(expected)
+    return a == e or _simple_type(a) == _simple_type(e)
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    parts: list[str] = []
+    cur: list[str] = []
+    angle = 0
+    paren = 0
+    for ch in text:
+        if ch == '<':
+            angle += 1
+        elif ch == '>' and angle > 0:
+            angle -= 1
+        elif ch == '(':
+            paren += 1
+        elif ch == ')' and paren > 0:
+            paren -= 1
+        if ch == ',' and angle == 0 and paren == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+            continue
+        cur.append(ch)
+    tail = "".join(cur).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _parse_param_pairs(params: str) -> list[tuple[str, str]]:
+    params = (params or "").strip()
+    if not params:
+        return []
+    out: list[tuple[str, str]] = []
+    for raw in _split_top_level_commas(params):
+        token = re.sub(r'@\w+(?:\([^)]*\))?\s*', '', raw).strip()
+        token = re.sub(r'\bfinal\s+', '', token).strip()
+        if not token:
+            continue
+        # last token is variable name; the prefix is type
+        bits = token.split()
+        if len(bits) >= 2:
+            out.append((" ".join(bits[:-1]), bits[-1]))
+        else:
+            out.append((token, ""))
+    return out
+
+
+def _iter_public_methods(content: str):
+    for m in _PUBLIC_METHOD_RE.finditer(content):
+        ret_type = m.group(1).strip()
+        method = m.group(2).strip()
+        params = m.group(3).strip()
+        body_start = m.end() - 1  # points at '{'
+        depth = 0
+        end = body_start
+        for i in range(body_start, len(content)):
+            ch = content[i]
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        body = content[body_start + 1:end] if end > body_start else ""
+        yield {
+            "name": method,
+            "return_type": ret_type,
+            "param_types": [t for t, _ in _parse_param_pairs(params)],
+            "param_pairs": _parse_param_pairs(params),
+            "body": body,
+        }
+
+
+def _dao_method_signatures(content: str) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = {}
+    for m in _iter_public_methods(content):
+        out.setdefault(m["name"], []).append({
+            "return_type": m["return_type"],
+            "param_types": m["param_types"],
+        })
+    return out
+
+
+def _service_dao_fields(content: str) -> dict[str, str]:
+    return {var: typ for typ, var in _DAO_FIELD_RE.findall(content)}
+
+
+def _method_var_types(method: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for p_type, p_name in method.get("param_pairs", []):
+        if p_name:
+            out[p_name] = p_type
+    for typ, var in _LOCAL_VAR_RE.findall(method["body"]):
+        out[var] = typ.strip()
+    return out
+
+
+def check_service_dao_signatures(files: dict) -> list[dict]:
+    """ServiceImpl -> DaoImpl call signature consistency check.
+
+    Detects:
+    - Service call to a DAO method that does not exist
+    - Simple parameter-type mismatch when arg type can be inferred
+      (notably DTO vs List<DTO> mismatch)
+    """
+    issues: list[dict] = []
+    daos = [gf for gf in files.values() if gf["file_path"].endswith("DaoImpl.java")]
+    services = [gf for gf in files.values() if gf["file_path"].endswith("ServiceImpl.java")]
+    if not daos or not services:
+        return issues
+
+    # class name -> signatures
+    dao_sigs: dict[str, dict[str, list[dict]]] = {}
+    for dao_gf in daos:
+        cls = class_name_from_path(dao_gf["file_path"])
+        dao_sigs[cls] = _dao_method_signatures(dao_gf["content"])
+
+    for svc_gf in services:
+        dao_vars = _service_dao_fields(svc_gf["content"])
+        if not dao_vars:
+            continue
+        for method in _iter_public_methods(svc_gf["content"]):
+            vars_in_scope = _method_var_types(method)
+            for var, call_name, args_text in _DAO_CALL_RE.findall(method["body"]):
+                dao_cls = dao_vars.get(var)
+                if not dao_cls:
+                    continue
+                sigs_by_name = dao_sigs.get(dao_cls, {})
+                targets = sigs_by_name.get(call_name, [])
+                if not targets:
+                    issues.append({
+                        "file_path": svc_gf["file_path"],
+                        "issue": (f"Service calls {var}.{call_name}(...) but {dao_cls} has no "
+                                  "such public method"),
+                        "severity": "error",
+                    })
+                    continue
+
+                args = _split_top_level_commas(args_text)
+                # First check arity-compatible signatures (best-effort; keeps overload support)
+                arity_matches = [s for s in targets if len(s["param_types"]) == len(args)]
+                if not arity_matches:
+                    issues.append({
+                        "file_path": svc_gf["file_path"],
+                        "issue": (f"Service calls {var}.{call_name} with {len(args)} arg(s), but "
+                                  f"{dao_cls}.{call_name} expects "
+                                  f"{'/'.join(str(len(s['param_types'])) for s in targets)}"),
+                        "severity": "error",
+                    })
+                    continue
+
+                # Type check only when every arg is a simple variable with known type.
+                arg_types: list[str] = []
+                resolvable = True
+                for arg in args:
+                    a = arg.strip()
+                    if re.match(r'^[A-Za-z_]\w*$', a) and a in vars_in_scope:
+                        arg_types.append(vars_in_scope[a])
+                    else:
+                        resolvable = False
+                        break
+                if not resolvable:
+                    continue
+
+                compatible = False
+                for sig in arity_matches:
+                    if all(_types_compatible(actual, expected)
+                           for actual, expected in zip(arg_types, sig["param_types"])):
+                        compatible = True
+                        break
+                if not compatible:
+                    expected_join = " | ".join(
+                        "(" + ", ".join(_simple_type(t) for t in sig["param_types"]) + ")"
+                        for sig in arity_matches
+                    )
+                    got = "(" + ", ".join(_simple_type(t) for t in arg_types) + ")"
+                    issues.append({
+                        "file_path": svc_gf["file_path"],
+                        "issue": (f"DAO call type mismatch: {var}.{call_name}{got} -> expected "
+                                  f"{expected_join} in {dao_cls}"),
+                        "severity": "error",
+                    })
+    return issues
 
 
 def check_binding(files: dict, contract: dict | None = None) -> list[dict]:
@@ -275,6 +501,7 @@ def autofix_binding(files: dict, contract: dict | None = None) -> tuple[dict, li
 
 
 _FIELD_DECL_RE = re.compile(r'\bprivate\s+\S[\w<>,.\[\]]*\s+(\w+)\s*(?:=[^;]*)?;')
+_JAVA_FIELD_NAME_RE = re.compile(r'^[A-Za-z_$][A-Za-z0-9_$]*$')
 
 # Per-line `private <Type> <name>[ = init];` — for the duplicate-field cleaner.
 _DTO_ANY_FIELD_RE = re.compile(
@@ -355,6 +582,8 @@ def check_dto_fields(files: dict, contract: dict | None = None) -> list[dict]:
             continue
         present = set(_FIELD_DECL_RE.findall(gf["content"]))
         for f in d["fields"]:
+            if not _JAVA_FIELD_NAME_RE.match(f["name"]):
+                continue
             if f["name"] not in present:
                 issues.append({"file_path": gf["file_path"],
                                "issue": f"DTO {d['name']} missing contract field '{f['name']}'",
@@ -378,6 +607,9 @@ def autofix_dto_fields(files: dict, contract: dict | None = None) -> tuple[dict,
         additions = []
         for f in d["fields"]:
             if f["name"] in present:
+                continue
+            if not _JAVA_FIELD_NAME_RE.match(f["name"]):
+                logs.append(f"{gf['file_path']}: skip field '{f['name']}' (invalid java identifier)")
                 continue
             jt = f.get("java_type")
             if not jt:

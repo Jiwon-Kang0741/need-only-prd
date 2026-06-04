@@ -31,6 +31,7 @@ async def reviewer(state: dict) -> dict:
     """Run the reviewer ReAct loop over all generated files."""
     files = dict(state.get("files", {}))
     contract = state.get("contract", {})
+    incoming_issues = list(state.get("open_issues", []))
     iterations = state.get("review_iterations", 0)
     events: list[dict] = []
 
@@ -97,6 +98,16 @@ async def reviewer(state: dict) -> dict:
                 + "\n\nFix any offending files via apply_fix, or respond DONE if clean.")
 
     # recompute open issues via cross_check as the convergence signal
-    open_issues = cross_check_impl(files, contract)
+    cross_issues = cross_check_impl(files, contract)
+    # Keep deterministic pre-review findings (mybatis_fix, signature checks, etc.)
+    # and merge with reviewer convergence signal.
+    seen = set()
+    open_issues: list[dict] = []
+    for issue in incoming_issues + cross_issues:
+        key = (issue.get("file_path"), issue.get("issue"), issue.get("severity"))
+        if key in seen:
+            continue
+        seen.add(key)
+        open_issues.append(issue)
     return {"files": files, "review_iterations": iterations,
             "open_issues": open_issues, "events": events}

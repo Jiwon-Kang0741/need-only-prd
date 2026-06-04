@@ -360,6 +360,44 @@ def _api_signature_ops(api_signatures: list) -> list[str]:
     return ops
 
 
+_NON_ID_CHARS_RE = re.compile(r"[^A-Za-z0-9$]+")
+_SEPARATOR_RE = re.compile(r"[_\s-]+")
+
+
+def _safe_dto_field_name(raw_name: str) -> str:
+    """Convert potentially nested/path-like names to a flat Java field name.
+
+    Examples:
+    - searchParams.endYn -> endYn
+    - rowItems[].owner_nm -> ownerNm
+    """
+    text = (raw_name or "").strip()
+    if not text:
+        return ""
+    # DTOs must be flat; keep only the terminal segment of a path-like key.
+    leaf = text.replace("[]", "").split(".")[-1].strip()
+    if not leaf:
+        return ""
+    # If separators exist, convert to lowerCamelCase. Otherwise preserve camelCase.
+    normalized = _NON_ID_CHARS_RE.sub(" ", leaf).strip()
+    if not normalized:
+        return ""
+    if _SEPARATOR_RE.search(normalized):
+        parts = [p for p in _SEPARATOR_RE.split(normalized) if p]
+        if not parts:
+            return ""
+        base = parts[0].lower() + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+    else:
+        base = normalized[:1].lower() + normalized[1:]
+    # Java identifier guard.
+    base = re.sub(r"[^A-Za-z0-9_$]", "", base)
+    if not base:
+        return ""
+    if not re.match(r"[A-Za-z_$]", base[0]):
+        base = f"field{base[:1].upper()}{base[1:]}"
+    return base
+
+
 async def derive_contract(state: dict) -> dict:
     """Augment contract with code-level identifiers (operations + dtos). Code only."""
     contract = dict(state.get("contract") or {})
@@ -395,10 +433,19 @@ async def derive_contract(state: dict) -> dict:
             })
 
         def _fields():
-            return [{"name": f["vue_field"],
-                     "java_type": naming.java_type(f.get("type", "string")),
-                     "db_column": f.get("db_column", "")}
-                    for f in contract.get("fields", [])]
+            out = []
+            seen: set[str] = set()
+            for f in contract.get("fields", []):
+                name = _safe_dto_field_name(f.get("vue_field", ""))
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                out.append({
+                    "name": name,
+                    "java_type": naming.java_type(f.get("type", "string")),
+                    "db_column": f.get("db_column", ""),
+                })
+            return out
 
         dtos = [
             {"name": req_dto, "kind": "request", "fields": _fields()},

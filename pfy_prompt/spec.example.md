@@ -170,7 +170,7 @@
 
 * 시드 메타·메뉴·역할의 SSOT: **`# 10. Seed Metadata`**
 * `cmn_*` 순서·`ON CONFLICT`·`DEV_AUTO`·`ROOT98` fallback: **SEED_STANDARD.md**
-* `pgm_url`: `vue_page_path` → `/pages/.../index.vue` 변환
+* `pgm_url`: `vue_page_path` → `pages/.../index.vue` 변환 (선행 `/` 없음, §16.1)
 * 화면 UI 라벨: `{화면코드}.{대컴포넌트명}.{라벨ID}` — Vue: `t('{대컴포넌트명}.{라벨ID}')`
 * 실행 SQL 전문은 spec이 아닌 `db_init_sql`에서 생성
 
