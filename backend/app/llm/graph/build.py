@@ -13,7 +13,7 @@ from app.llm.graph.waves import MAX_WAVE, files_in_wave
 from app.llm.graph import nodes, react
 from app.llm.graph.mybatis_check import (
     autofix_binding, check_binding, autofix_dto_fields, check_dto_fields,
-    autofix_dedupe_dto_fields, autofix_dto_array_fields,
+    autofix_dedupe_dto_fields, autofix_dto_array_fields, check_service_dao_signatures,
 )
 from app.llm.graph.cpms_checks import (
     check_db_seed_sql, check_frontend_local_imports, check_lv2_whitelist,
@@ -86,6 +86,7 @@ def mybatis_fix(state: dict) -> dict:
         remaining = check_binding(fixed_files, contract)
         if contract:
             remaining = remaining + check_dto_fields(fixed_files, contract)
+        remaining = remaining + check_service_dao_signatures(fixed_files)
         # Ported CPMS domain checks (whole-file): DB seed + frontend imports + LV2.
         remaining = (remaining + check_db_seed_sql(fixed_files)
                      + check_frontend_local_imports(fixed_files)

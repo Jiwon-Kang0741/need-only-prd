@@ -1,5 +1,6 @@
 from app.llm.graph.mybatis_check import (
     parse_dao, parse_mapper, match_pairs, check_binding, autofix_binding,
+    check_service_dao_signatures,
 )
 
 
@@ -227,6 +228,22 @@ def test_autofix_dto_fields_adds_missing():
     assert check_dto_fields(fixed, _CONTRACT_DTOS) == []
 
 
+def test_autofix_dto_fields_skips_invalid_java_field_names():
+    contract = {
+        "dtos": [{
+            "name": "FooResDto",
+            "kind": "response",
+            "fields": [{"name": "searchParams.endYn", "java_type": "String"}],
+        }]
+    }
+    src = "public class FooResDto {\n    private String employeeName;\n}"
+    files = {"a/FooResDto.java": _gf("a/FooResDto.java", "dto_response", src)}
+    fixed, logs = autofix_dto_fields(files, contract)
+    content = fixed["a/FooResDto.java"]["content"]
+    assert "searchParams.endYn" not in content
+    assert any("invalid java identifier" in line for line in logs)
+
+
 # --- deterministic DTO autofixes ported from agents.py (review #1) ---
 from app.llm.graph.mybatis_check import (
     autofix_dedupe_dto_fields, autofix_dto_array_fields,
@@ -282,6 +299,47 @@ def test_array_downgrade_noop_without_arrays():
     files = {"f": _gf("a/FooResDto.java", "dto_response", src)}
     fixed, logs = autofix_dto_array_fields(files)
     assert fixed["f"]["content"] == src and not logs
+
+
+def test_service_dao_signature_flags_list_vs_dto_mismatch():
+    dao = """package p;
+public class FooDaoImpl {
+    public int updateFoo(java.util.List<FooResDto> list) { return 0; }
+}"""
+    service = """package p;
+public class FooServiceImpl {
+    private FooDaoImpl fooDao;
+    public void save(FooResDto param) {
+        fooDao.updateFoo(param);
+    }
+}"""
+    files = {
+        "d": _gf("a/FooDaoImpl.java", "dao_impl", dao),
+        "s": _gf("a/FooServiceImpl.java", "service_impl", service),
+    }
+    issues = check_service_dao_signatures(files)
+    assert any("type mismatch" in i["issue"].lower() for i in issues)
+    assert any("List<FooResDto>" in i["issue"] for i in issues)
+
+
+def test_service_dao_signature_clean_when_types_match():
+    dao = """package p;
+public class FooDaoImpl {
+    public int updateFoo(java.util.List<FooResDto> list) { return 0; }
+}"""
+    service = """package p;
+import java.util.List;
+public class FooServiceImpl {
+    private FooDaoImpl fooDao;
+    public void save(List<FooResDto> updateList) {
+        fooDao.updateFoo(updateList);
+    }
+}"""
+    files = {
+        "d": _gf("a/FooDaoImpl.java", "dao_impl", dao),
+        "s": _gf("a/FooServiceImpl.java", "service_impl", service),
+    }
+    assert check_service_dao_signatures(files) == []
 
 
 # --- review #8: id-rename must skip commented-out code ---
