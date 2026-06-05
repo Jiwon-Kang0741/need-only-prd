@@ -111,3 +111,26 @@ async def test_contract_resolve_build_user_coalesces_none(monkeypatch):
     await cr.contract_resolve({"spec_markdown": None, "confirmed_vue": None,
                                "table_info": None, "page_type": None})
     assert "None" not in captured["user"]
+
+
+async def test_contract_resolve_tolerates_null_optional_fields(monkeypatch):
+    # Real gpt-5.5 emits null for optional fields; the resolver drops nulls so
+    # pydantic uses defaults instead of raising string_type/dict_type errors.
+    contract = json.loads(json.dumps(_VALID))
+    contract["identity"]["menu_id"] = None              # optional str -> null
+    contract["seed"] = {"menu": None, "labels": None, "pgm_url": None}  # dict/list/str nulls
+    contract["api"] = None                              # optional list -> null
+    monkeypatch.setattr(cr, "gpt55_client", _Scripted(json.dumps(contract)))
+    out = await cr.contract_resolve(_state())
+    c = out["contract"]
+    assert c["identity"]["menu_id"] == ""               # default applied
+    assert c["seed"]["menu"] == {} and c["seed"]["labels"] == []
+    assert c["api"] == []
+
+
+async def test_contract_resolve_null_required_field_still_fails(monkeypatch):
+    # a REQUIRED field set to null is dropped -> 'field required' -> retry -> raise
+    bad = json.loads(json.dumps(_VALID)); bad["identity"]["module"] = None
+    monkeypatch.setattr(cr, "gpt55_client", _Scripted(json.dumps(bad), json.dumps(bad)))
+    with pytest.raises(ValueError):
+        await cr.contract_resolve(_state())

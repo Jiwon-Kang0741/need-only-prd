@@ -23,8 +23,11 @@ def _skip_llm_when_unavailable(request):
 @pytest.fixture
 def guide_stub(monkeypatch):
     """Replace guide loading with a small constant so the generator prompt stays
-    small and fast (the guide content itself is exercised in test_guides.py)."""
-    import app.llm.graph.nodes as nodes_mod
-    monkeypatch.setattr(nodes_mod.guides, "load_guide_for_file_type",
+    small and fast (the guide content itself is exercised in test_guides.py).
+
+    Patches the `guides` module directly — the contract-first nodes (gen_nodes)
+    call `guides.load_guide_for_file_type(...)` at generation time."""
+    import app.llm.graph.guides as guides_mod
+    monkeypatch.setattr(guides_mod, "load_guide_for_file_type",
                         lambda ft: "Follow CPMS conventions. Use String for IDs.")
     return None

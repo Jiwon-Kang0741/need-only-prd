@@ -63,6 +63,21 @@ def _build_user(state: dict) -> str:
     )
 
 
+def _drop_nones(obj):
+    """Recursively drop null values so pydantic falls back to field defaults.
+
+    Real gpt-5.5 routinely emits `null` for optional fields (e.g. menu_id, seed.menu);
+    with `null` present pydantic raises string_type/dict_type errors against the
+    schema's typed defaults. Dropping nulls lets defaults apply. A REQUIRED field set
+    to null is still dropped -> 'field required' -> caught -> retry (validation intact).
+    """
+    if isinstance(obj, dict):
+        return {k: _drop_nones(v) for k, v in obj.items() if v is not None}
+    if isinstance(obj, list):
+        return [_drop_nones(v) for v in obj]
+    return obj
+
+
 async def contract_resolve(state: dict) -> dict:
     """LLM -> JSON -> pydantic-validated Contract (one retry). Returns {contract, events}."""
     user = _build_user(state)
@@ -74,7 +89,7 @@ async def contract_resolve(state: dict) -> dict:
         raw = await gpt55_client.complete(CONTRACT_RESOLVER_SYSTEM, prompt)
         last_raw = raw
         try:
-            data = json.loads(_strip_fences(raw))
+            data = _drop_nones(json.loads(_strip_fences(raw)))
             # The confirmed mockup page_type is authoritative over the model's archetype
             # guess — apply it BEFORE validation (so the Literal check still covers it),
             # but only when it is a recognized archetype.
