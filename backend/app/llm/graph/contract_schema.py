@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 
 class Identity(BaseModel):
@@ -32,14 +32,9 @@ class Column(BaseModel):
     nullable: bool = True
     searchable: bool = False
     audit: bool = False
-    code: str | None = None     # cls_id when common-coded (then *_nm is JOIN-resolved)
-
-    @field_validator("code", mode="before")
-    @classmethod
-    def _code_str_or_none(cls, v):
-        # gpt-5.5 often returns a bool here ("is this column coded?") instead of the
-        # cls_id string. Accept only a real string; coerce anything else to None.
-        return v if isinstance(v, str) else None
+    # cls_id STRING when common-coded (then *_nm is JOIN-resolved), else omitted.
+    # The resolver prompt mandates string-or-omit; a bad type fails validation -> retry.
+    code: str | None = None
 
 
 class Table(BaseModel):
@@ -79,11 +74,9 @@ class ApiSig(BaseModel):
 
 class FrontendPlan(BaseModel):
     components: list[str] = []
-    # field-name strings OR rich field dicts ({camel, snake, type, filter, ...}) — gpt-5.5 varies
-    search_fields: list = []
+    search_fields: list[str] = []      # camelCase field-name strings (prompt-mandated)
     columns: list[dict] = []
-    # single API choice ("ensureLoaded") OR a list of coded field ids — gpt-5.5 varies
-    common_code_load: str | list[str] = ""
+    common_code_load: str = ""         # single API choice (prompt-mandated)
 
 
 class SeedMeta(BaseModel):

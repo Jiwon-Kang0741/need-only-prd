@@ -50,6 +50,12 @@ Rules:
   use no other names. Include "SearchForm"/"DataTable" for normal query/list screens.
   Include "SumGrid" ONLY if the screen needs per-status aggregate counts with click-to-filter.
   Never include "ProgressList" unless explicitly requested.
+- table.columns[].code: when a column maps to a common code, set it to the common-code
+  class id as a STRING (e.g. "riskClsfCd"); OMIT the field otherwise. It is NEVER a boolean.
+- frontend.search_fields: an array of camelCase field-NAME STRINGS (the search inputs),
+  e.g. ["riskNm","deptNm"] — strings only, NOT objects.
+- frontend.common_code_load: a SINGLE string — one of "ensureLoaded" | "ensureLoadedMulti" | "loadMulti".
+- Omit any optional field you don't have rather than setting it to null.
 - The contract is the single source of truth for all downstream generation.
 """
 

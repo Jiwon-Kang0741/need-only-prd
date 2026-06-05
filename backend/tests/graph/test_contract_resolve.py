@@ -134,3 +134,11 @@ async def test_contract_resolve_null_required_field_still_fails(monkeypatch):
     monkeypatch.setattr(cr, "gpt55_client", _Scripted(json.dumps(bad), json.dumps(bad)))
     with pytest.raises(ValueError):
         await cr.contract_resolve(_state())
+
+
+async def test_resolver_prompt_mandates_field_shapes():
+    # Approach A: the PROMPT (not post-coercion) is the source of the contract shapes.
+    p = cr.CONTRACT_RESOLVER_SYSTEM
+    assert "NEVER a boolean" in p                       # table.columns[].code
+    assert "field-NAME STRINGS" in p                    # frontend.search_fields
+    assert "ensureLoadedMulti" in p                     # frontend.common_code_load choices
