@@ -60,15 +60,15 @@ def test_build_graph_input_handles_missing_mockup(monkeypatch):
 
 
 def test_langgraph_event_to_sse_node_start():
-    ev = {"event": "on_chain_start", "name": "planner", "data": {}}
+    ev = {"event": "on_chain_start", "name": "gen_backend", "data": {}}
     out = langgraph_event_to_sse(ev)
-    assert out == {"type": "node_start", "node": "planner"}
+    assert out == {"type": "node_start", "node": "gen_backend"}
 
 
 def test_langgraph_event_to_sse_node_end():
-    ev = {"event": "on_chain_end", "name": "reviewer", "data": {}}
+    ev = {"event": "on_chain_end", "name": "validate", "data": {}}
     out = langgraph_event_to_sse(ev)
-    assert out == {"type": "node_end", "node": "reviewer"}
+    assert out == {"type": "node_end", "node": "validate"}
 
 
 def test_langgraph_event_to_sse_tool_start():

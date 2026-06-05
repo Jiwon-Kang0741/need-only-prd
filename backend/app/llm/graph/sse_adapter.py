@@ -48,14 +48,15 @@ def build_graph_input(session) -> dict:
 
 
 # Only these graph nodes surface as node_start/node_end events.
-_PUBLIC_NODES = {"contract_extract", "planner", "generate_file", "reviewer"}
+_PUBLIC_NODES = {"contract_resolve", "plan_and_bind", "gen_backend", "gen_frontend",
+                 "gen_data", "validate"}
 
 # Nodes whose returned `events` channel we drain to SSE. MUST exclude the
 # top-level "LangGraph" wrapper: astream_events fires on_chain_end for the
 # wrapper too, carrying the fully-accumulated `events` (add reducer), which
 # would re-emit every domain event a second time.
-_EMITTING_NODES = {"contract_extract", "planner", "derive_contract", "generate_file",
-                   "wave_gate", "mybatis_fix", "reviewer"}
+_EMITTING_NODES = {"contract_resolve", "plan_and_bind", "gen_backend", "gen_frontend",
+                   "gen_data", "validate"}
 
 
 def drained_events(ev: dict) -> list[dict]:

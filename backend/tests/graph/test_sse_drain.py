@@ -14,13 +14,13 @@ def _end(name, events):
 
 
 def test_drains_emitting_node_events():
-    out = drained_events(_end("planner", [{"type": "plan"}]))
+    out = drained_events(_end("plan_and_bind", [{"type": "plan"}]))
     assert out == [{"type": "plan"}]
 
 
-def test_drains_wave_gate_events():
-    out = drained_events(_end("wave_gate", [{"type": "wave_complete", "wave": 1}]))
-    assert out == [{"type": "wave_complete", "wave": 1}]
+def test_drains_gen_backend_events():
+    out = drained_events(_end("gen_backend", [{"type": "log", "line": "[backend] generated 5 files"}]))
+    assert out == [{"type": "log", "line": "[backend] generated 5 files"}]
 
 
 def test_skips_graph_wrapper_to_avoid_duplication():

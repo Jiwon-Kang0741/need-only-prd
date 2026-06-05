@@ -119,26 +119,21 @@ def mybatis_fix(state: dict) -> dict:
 
 
 def build_graph(checkpointer=None):
+    from app.llm.graph import contract_resolve, plan_and_bind, gen_nodes
     g = StateGraph(CodeGenState)
-    g.add_node("contract_extract", nodes.contract_extract)
-    g.add_node("planner", nodes.planner)
-    g.add_node("generate_file", nodes.generate_file)
-    g.add_node("derive_contract", nodes.derive_contract)
-    g.add_node("wave_gate", _wave_gate)
-    g.add_node("mybatis_fix", mybatis_fix)
-    g.add_node("reviewer", react.reviewer)
-
-    g.add_edge(START, "contract_extract")
-    g.add_edge("contract_extract", "planner")
-    g.add_edge("planner", "derive_contract")
-    g.add_conditional_edges("derive_contract", _route_waves,
-                            ["generate_file", "wave_gate", "mybatis_fix"])
-    g.add_edge("generate_file", "wave_gate")
-    g.add_conditional_edges("wave_gate", _route_waves,
-                            ["generate_file", "wave_gate", "mybatis_fix"])
-    g.add_edge("mybatis_fix", "reviewer")
-    g.add_edge("reviewer", END)
-
+    g.add_node("contract_resolve", contract_resolve.contract_resolve)
+    g.add_node("plan_and_bind", plan_and_bind.plan_and_bind)
+    g.add_node("gen_backend", gen_nodes.gen_backend_node)
+    g.add_node("gen_frontend", gen_nodes.gen_frontend_node)
+    g.add_node("gen_data", gen_nodes.gen_data_node)
+    g.add_node("validate", gen_nodes.validate_node)
+    g.add_edge(START, "contract_resolve")
+    g.add_edge("contract_resolve", "plan_and_bind")
+    g.add_edge("plan_and_bind", "gen_backend")
+    g.add_edge("gen_backend", "gen_frontend")
+    g.add_edge("gen_frontend", "gen_data")
+    g.add_edge("gen_data", "validate")
+    g.add_edge("validate", END)
     return g.compile(checkpointer=checkpointer)
 
 
