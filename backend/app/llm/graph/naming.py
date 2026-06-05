@@ -7,8 +7,6 @@ references the same contract uses identical names — mismatches become impossib
 
 from __future__ import annotations
 
-import re
-
 # op → (prefix, suffix, mybatis tag). Suffixed naming: {prefix}{ScreenCode}{suffix}.
 # Domain-suffixed ids make statement ids unique per screen (better traceability +
 # lets static_check distinguish a legit wrapper call from a bare base-class misuse).
@@ -80,51 +78,6 @@ def java_type(contract_type: str) -> str:
 
 def ops_for_screen_type(screen_type: str) -> list[str]:
     return list(_SCREEN_OPS.get(screen_type, _SCREEN_OPS["list"]))
-
-
-# ---------------------------------------------------------------------------
-# Target-path derivation
-#
-# Path TEMPLATES live in the guide (CODEGEN_RULES.md `codegen-paths` block) and are
-# read at runtime — NOT hardcoded here — so swapping/editing the guide changes the
-# output paths without a code change. This module only applies the templates
-# deterministically (substitutes the screen-derived segments).
-# ---------------------------------------------------------------------------
-
-_PASCAL_RE = re.compile(r"[A-Z][a-z0-9]*")
-
-
-def screen_segments(screen_code: str) -> tuple[str, str]:
-    """(module, screen) lowercased package segments from a PascalCase screen code.
-
-    'CpmsEduRsltLst' -> ('cpms', 'edursltlst'). The first token is the LV1 module;
-    the remainder forms the screen segment. A single-token (or empty) code mirrors
-    module to screen so the package never gets a dangling empty segment.
-    """
-    toks = _PASCAL_RE.findall(screen_code or "")
-    if not toks:
-        seg = (screen_code or "screen").lower()
-        return seg, seg
-    module = toks[0].lower()
-    screen = "".join(toks[1:]).lower() or module
-    return module, screen
-
-
-def file_path(file_type: str, screen_code: str) -> str | None:
-    """Target path for a generated file, driven by the guide's path templates
-    (CODEGEN_RULES.md `codegen-paths`) — not hardcoded. Substitutes `{module}` /
-    `{screen}` (derived from the screen code) and `{Screen}` (the screen code).
-    Returns None when the guide has no template for this file_type (the caller
-    then keeps the planner's path).
-    """
-    from app.llm.graph import guides
-    template = guides.load_path_templates().get(file_type)
-    if not template:
-        return None
-    module, screen = screen_segments(screen_code)
-    return (template.replace("{module}", module)
-                    .replace("{screen}", screen)
-                    .replace("{Screen}", screen_code))
 
 
 def package_from_java_path(file_path: str) -> str | None:

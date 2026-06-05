@@ -135,30 +135,3 @@ def load_table_info() -> str:
     return ""
 
 
-def load_codegen_rules() -> str:
-    """Load CODEGEN_RULES.md — the distilled must-follow rule 'spine' injected into
-    every generate_file prompt (on top of the file_type-specific guide). Fresh
-    (mtime-cached); '' when the file is absent so injection becomes a no-op."""
-    return _read_fresh(Path(settings.PROMPT_REFERENCE_DIR) / "CODEGEN_RULES.md")
-
-
-_PATHS_BLOCK_RE = re.compile(
-    r"<!--\s*BEGIN codegen-paths.*?-->(.*?)<!--\s*END codegen-paths\s*-->", re.DOTALL)
-_PATH_LINE_RE = re.compile(r"^\s*([a-z_]+)\s*=\s*(\S+)\s*$", re.MULTILINE)
-
-
-def load_named_frontend_guide(prefix: str) -> str:
-    """Load the FrontendGuide file(s) whose name starts with `prefix` (e.g. '03_'
-    for SearchForm). Used to give a generated child component its focused guide
-    instead of the whole FrontendGuide dir. Fresh (mtime-cached)."""
-    return "\n\n".join(_read_fresh(f) for f in _guide_files("frontend", prefix))
-
-
-def load_path_templates() -> dict[str, str]:
-    """Parse the file_type→path-template map from CODEGEN_RULES.md's codegen-paths
-    block, so paths come from the GUIDE (editable) — not hardcoded in Python.
-    Empty dict if the file/block is absent (caller then keeps the planner's path)."""
-    m = _PATHS_BLOCK_RE.search(load_codegen_rules())
-    if not m:
-        return {}
-    return dict(_PATH_LINE_RE.findall(m.group(1)))

@@ -60,7 +60,7 @@ def _sse(type: str, **kwargs) -> dict:
 # -------------------------------------------------------------- generate
 @router.post("/generate")
 async def generate_code(session_id: str = Depends(get_session_id)):
-    """LangGraph agentic code generation: contract -> plan -> 3-wave -> reviewer."""
+    """LangGraph agentic code generation: contract_resolve -> plan_and_bind -> gen_* -> validate."""
     session = _get_session_or_create(session_id)
     if not session.spec_markdown:
         raise HTTPException(400, "No spec generated yet")

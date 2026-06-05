@@ -93,18 +93,6 @@ def test_load_table_info(guide_dir):
     assert "TB_X" in text
 
 
-def test_load_codegen_rules_returns_content(guide_dir):
-    text = guides.load_codegen_rules()
-    assert "스파인 규칙" in text
-
-
-def test_load_codegen_rules_empty_when_missing(tmp_path, monkeypatch):
-    # no CODEGEN_RULES.md present → empty string (injection becomes a no-op)
-    monkeypatch.setattr(guides.settings, "PROMPT_REFERENCE_DIR", str(tmp_path))
-    guides._reset_cache_for_test()
-    assert guides.load_codegen_rules() == ""
-
-
 def test_guide_files_glob_is_cached_by_dir_mtime(monkeypatch, tmp_path):
     # review #6: repeated calls must not re-glob when the directory is unchanged.
     from app.llm.graph import guides
