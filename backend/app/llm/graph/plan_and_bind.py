@@ -26,9 +26,14 @@ def _identity(contract: dict) -> paths.Identity:
 
 def _ops(contract: dict) -> list[str]:
     ops = contract.get("ops") or []
-    if ops:
-        return ops
-    return naming.ops_for_screen_type(contract.get("archetype", "list"))
+    if not ops:
+        ops = naming.ops_for_screen_type(contract.get("archetype", "list"))
+    known = set(naming._OP_TABLE)
+    unknown = [o for o in ops if o not in known]
+    if unknown:
+        raise ValueError(
+            f"Unknown ops in contract: {unknown!r}; expected one of {sorted(known)}")
+    return ops
 
 
 def plan_and_bind(state: dict) -> dict:
@@ -74,5 +79,5 @@ def plan_and_bind(state: dict) -> dict:
         "files": files,
     }
     return {"contract": contract,
-            "plan": {"files": files},
-            "events": [{"type": "plan", "files": files}]}
+            "plan": {"files": list(files)},
+            "events": [{"type": "plan", "files": list(files)}]}
