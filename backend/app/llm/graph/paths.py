@@ -37,7 +37,9 @@ def backend_path(file_type: str, ident: Identity) -> str | None:
 
 
 def data_path() -> str:
-    """Convenience for the db_init_sql target. Equals backend_path('db_init_sql', ...) — db_init_sql carries no substitution tokens (project-root file)."""
+    """Convenience for the db_init_sql target. Matches backend_path('db_init_sql', ...)
+    when the guide is present (db_init_sql carries no substitution tokens — a
+    project-root file); falls back to 'db/init.sql' if §11.4 is absent."""
     return guide_config.load_backend_path_templates().get("db_init_sql", "db/init.sql")
 
 
