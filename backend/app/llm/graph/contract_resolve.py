@@ -20,6 +20,9 @@ from app.llm.graph._text import strip_fences as _strip_fences
 
 # Valid archetype values, derived from the schema Literal (no duplicated list).
 _VALID_ARCHETYPES = frozenset(get_args(Contract.model_fields["archetype"].annotation))
+assert _VALID_ARCHETYPES and all(isinstance(v, str) for v in _VALID_ARCHETYPES), (
+    f"_VALID_ARCHETYPES must be a non-empty set of strings; got {_VALID_ARCHETYPES!r}. "
+    "Did the Contract.archetype annotation shape change (e.g. wrapped in Optional/Union)?")
 
 CONTRACT_RESOLVER_SYSTEM = """\
 You are a requirements analyst for the CPMS framework. From a spec, a confirmed \
@@ -63,9 +66,11 @@ async def contract_resolve(state: dict) -> dict:
     user = _build_user(state)
     page_type = state.get("page_type") or ""
     last_err: Exception | None = None
+    last_raw = ""
     for attempt in range(2):
         prompt = user if attempt == 0 else user + "\n\nReturn ONLY valid JSON matching the schema."
         raw = await gpt55_client.complete(CONTRACT_RESOLVER_SYSTEM, prompt)
+        last_raw = raw
         try:
             data = json.loads(_strip_fences(raw))
             # The confirmed mockup page_type is authoritative over the model's archetype
@@ -80,4 +85,6 @@ async def contract_resolve(state: dict) -> dict:
         cdict = contract.model_dump()
         return {"contract": cdict,
                 "events": [{"type": "contract", "contract": cdict}]}
-    raise ValueError(f"contract_resolve: invalid contract after retry: {last_err}")
+    raise ValueError(
+        f"contract_resolve: invalid contract after retry: {last_err} "
+        f"(reply head: {last_raw[:120]!r})")

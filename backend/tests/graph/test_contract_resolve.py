@@ -86,3 +86,12 @@ async def test_contract_resolve_ignores_invalid_page_type(monkeypatch):
     monkeypatch.setattr(cr, "gpt55_client", _Scripted(json.dumps(_VALID)))
     out = await cr.contract_resolve(_state(page_type="bogus"))
     assert out["contract"]["archetype"] == "list"
+
+
+async def test_contract_resolve_raises_on_refusal(monkeypatch):
+    # A refusal / non-JSON reply is not silently accepted — both attempts fail -> raise.
+    client = _Scripted("I'm sorry, I can't help with that.", "Still refusing.")
+    monkeypatch.setattr(cr, "gpt55_client", client)
+    with pytest.raises(ValueError, match="contract_resolve"):
+        await cr.contract_resolve(_state())
+    assert len(client.calls) == 2
