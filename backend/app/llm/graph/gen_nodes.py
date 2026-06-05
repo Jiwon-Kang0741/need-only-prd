@@ -51,6 +51,7 @@ async def gen_frontend_node(state: dict) -> dict:
     types = await gen_frontend.gen_types(contract, guide)
     types_src = next(iter(types.values()), "")
     api = await gen_frontend.gen_api(contract, guide, types_src)
+    api_src = next(iter(api.values()), "")
     comp_files: dict = {}
     child_sources: dict = {}
     screen = contract["identity"]["class_name"]
@@ -60,7 +61,7 @@ async def gen_frontend_node(state: dict) -> dict:
         vue_path = paths.get(f"vue_{comp.lower()}")
         if vue_path and vue_path in cf:
             child_sources[f"{screen}{comp}"] = cf[vue_path]
-    index = await gen_frontend.gen_index(contract, guide, child_sources, types_src)
+    index = await gen_frontend.gen_index(contract, guide, child_sources, types_src, api_src)
     files = {**types, **api, **comp_files, **index}
     return {"files": _wrap(files, meta),
             "events": [{"type": "log", "line": f"[frontend] generated {len(files)} files"}]}

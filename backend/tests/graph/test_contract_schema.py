@@ -111,3 +111,14 @@ def test_frontend_common_code_load_list_rejected():
     c = {**_MIN, "frontend": {"common_code_load": ["a", "b"]}}
     with pytest.raises(ValidationError):
         parse_contract(c)
+
+
+def test_frontend_columns_are_strings():
+    c = {**_MIN, "frontend": {"columns": ["riskNm", "deptNm", "idfyDt"]}}
+    assert parse_contract(c).frontend.columns == ["riskNm", "deptNm", "idfyDt"]
+
+
+def test_frontend_columns_dicts_rejected():
+    c = {**_MIN, "frontend": {"columns": [{"field": "riskNm"}]}}
+    with pytest.raises(ValidationError):
+        parse_contract(c)

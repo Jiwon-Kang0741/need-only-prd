@@ -141,4 +141,5 @@ async def test_resolver_prompt_mandates_field_shapes():
     p = cr.CONTRACT_RESOLVER_SYSTEM
     assert "NEVER a boolean" in p                       # table.columns[].code
     assert "field-NAME STRINGS" in p                    # frontend.search_fields
+    assert "DataTable\n  columns" in p or "DataTable" in p  # frontend.columns rule present
     assert "ensureLoadedMulti" in p                     # frontend.common_code_load choices

@@ -54,6 +54,9 @@ Rules:
   class id as a STRING (e.g. "riskClsfCd"); OMIT the field otherwise. It is NEVER a boolean.
 - frontend.search_fields: an array of camelCase field-NAME STRINGS (the search inputs),
   e.g. ["riskNm","deptNm"] — strings only, NOT objects.
+- frontend.columns: an array of camelCase field-NAME STRINGS naming the DataTable
+  columns to display, in display order, e.g. ["riskNm","deptNm","idfyDt"] — strings
+  only, NOT objects. (Headers come from i18n; types come from table.columns.)
 - frontend.common_code_load: a SINGLE string — one of "ensureLoaded" | "ensureLoadedMulti" | "loadMulti".
 - Omit any optional field you don't have rather than setting it to null.
 - The contract is the single source of truth for all downstream generation.

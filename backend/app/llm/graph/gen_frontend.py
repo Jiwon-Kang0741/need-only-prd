@@ -168,11 +168,13 @@ async def gen_component(contract: dict, guide: str, comp: str, types: str) -> di
     return result
 
 
-async def gen_index(contract: dict, guide: str, components: dict, types: str) -> dict:
+async def gen_index(contract: dict, guide: str, components: dict, types: str,
+                    api: str = "") -> dict:
     """Generate index.vue (the page root) after all child components are ready.
 
     ``components`` maps component class name → source code so the prompt can
-    reference real props/emits.
+    reference real props/emits. ``api`` is the generated API-client source so the
+    page handlers call the real functions instead of stubbing them.
 
     Returns {vue_page_path: content, vue_page_scss_path: scss_stub}.
     """
@@ -184,6 +186,8 @@ async def gen_index(contract: dict, guide: str, components: dict, types: str) ->
 
     vue_page_path = paths["vue_page"]
     vue_page_scss_path = paths["vue_page_scss"]
+    # '@/...' import specifier for the generated API client (drop src/ prefix and .ts).
+    vue_api_import = paths.get("vue_api", "").removeprefix("src/").removesuffix(".ts")
 
     # Build child sources section
     children_section = "\n\n".join(
@@ -194,6 +198,8 @@ async def gen_index(contract: dict, guide: str, components: dict, types: str) ->
     user = (
         f"GUIDE:\n{guide}\n\n"
         f"DEPENDENCY TYPES SOURCE:\n{types}\n\n"
+        f"GENERATED API CLIENT SOURCE (import and CALL these real functions — never stub):\n"
+        f"{api}\n\n"
         f"CHILD COMPONENT SOURCES (for reference):\n{children_section}\n\n"
         f"TARGET FILE: {vue_page_path}\n"
         f"SCREEN: {screen_id}  CLASS: {class_name}  WINDOW_ID: {window_id}\n\n"
@@ -203,6 +209,10 @@ async def gen_index(contract: dict, guide: str, components: dict, types: str) ->
         f"- provide('searchParams', searchParams) so child SearchForm can inject it\n"
         f"- provide('t', t) for i18n injection\n"
         f"- searchParams is a reactive ref initialized with default values\n"
+        f"- handleSearch MUST call the real list-fetch function from the GENERATED API "
+        f"CLIENT SOURCE above (await it, then set rows + totalRecords from the response). "
+        f"Do NOT stub it with empty arrays, mock data, or a TODO placeholder.\n"
+        f"- Import the API function(s) from '@/{vue_api_import}' (the generated client).\n"
         f"- Call onMounted(() => handleSearch()) to load data on mount\n"
         f"- Include <ContentHeader menuId=\"{window_id}\" />\n"
         f"- Register and use all child components: {child_names}\n"

@@ -77,3 +77,19 @@ async def test_gen_index_generated_last_binds_children(monkeypatch):
     assert "CpmsEduPondgLstSearchForm" in u and "CpmsEduPondgLstDataTable" in u
     assert "provide" in u and "searchParams" in u
     assert "<template>SF</template>" in u
+
+
+async def test_gen_index_wires_real_api_not_stub(monkeypatch):
+    # The index must call the real generated API client in its handlers, not stub
+    # handleSearch with empty arrays / TODO. So gen_index gets the api source and
+    # the prompt mandates calling it.
+    c = _Scripted("<template/>")
+    monkeypatch.setattr(gf, "gpt55_client", c)
+    children = {"CpmsEduPondgLstSearchForm": "<template>SF</template>"}
+    api_src = "export function fetchCpmsEduPondgLstList(p) { return api.post('/x', p); }"
+    out = await gf.gen_index(_CONTRACT, guide="GUIDE", components=children, types="x", api=api_src)
+    assert _CONTRACT["bindings"]["paths"]["vue_page"] in out
+    u = c.last_user
+    assert "fetchCpmsEduPondgLstList" in u          # real API source provided to the prompt
+    assert "stub" in u.lower()                       # explicit "do NOT stub" instruction
+    assert "handleSearch" in u                        # wire the actual list-fetch handler

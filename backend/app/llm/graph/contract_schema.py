@@ -75,7 +75,7 @@ class ApiSig(BaseModel):
 class FrontendPlan(BaseModel):
     components: list[str] = []
     search_fields: list[str] = []      # camelCase field-name strings (prompt-mandated)
-    columns: list[dict] = []
+    columns: list[str] = []            # camelCase field-name strings, display order (prompt-mandated)
     common_code_load: str = ""         # single API choice (prompt-mandated)
 
 
