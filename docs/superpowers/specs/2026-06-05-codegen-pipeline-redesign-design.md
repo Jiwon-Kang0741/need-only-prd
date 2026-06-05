@@ -217,3 +217,17 @@ types.ts → API `[screenId].ts` → {DataTable(utils+vue+scss), SearchForm(vue+
 - **O1 (결정 필요):** `Identity`는 `module`·`category`를 명시 입력으로 요구하는데, 현 `CONTRACT_SYSTEM`은 `screen:{id,name,type}`만 추출함. Phase-2 Contract Resolver가 (a) 계약 JSON에 `module`/`category`를 LLM이 출력하게 하거나 (b) 화면코드 prefix에서 결정론 파생(구 `naming.screen_segments` 류)할지 정해야 함.
 - **O2:** `ProgressList`는 12개 FrontendGuide 문서엔 없고 `cursor/rules/MigFrontend.mdc`에만 있음 → Phase-2 fixture가 항상 등장한다고 가정 금지(명시 요청 시만).
 - **O3:** 신·구 경로 시스템 공존. 구 `naming.file_path`(CODEGEN_RULES.md `{Screen}`, `screen_segments` 기반 FE 경로)는 라이브 파이프라인용으로 Phase-6까지 잔존. **Phase-2 신규 노드는 오직 `paths.*`만 호출**하고, 구 시스템과 섞지 말 것. FE 경로는 구(`{module}/{screen}/{Pascal}`) vs 신(`{module}/{category}/{camel}`)이 구조적으로 다르며 **신 시스템이 정답**.
+
+## 13. Phase-2 완료 & Phase-3/4 입력 (2026-06-05)
+
+**Phase-2 DONE** (커밋 `b43a16f`..`4e471fb`): `contract_schema.py`(pydantic Contract, archetype/filter Literal 제약), `contract_resolve.py`(LLM 노드 — 검증+1회 재시도, page_type override 검증前·schema-derived 유효집합, 거부 진단, module/category O1), `plan_and_bind.py`(결정론 bindings: 경로/statement-id·dao(1:1)/namespace/package/file-plan; unknown-op 거부; files 리스트 aliasing 수정). 순수 추가, 라이브 그래프 미변경. 전체 비-LLM **289 green**(29 Phase-2 신규).
+
+**Phase-3 readiness:** Phase-3(skeleton Boot3/Java21/jakarta)는 contract를 소비하지 않음 → Phase-2 블로커 없음.
+
+**Phase-4 착수 전 보완 (final review 도출 — Phase-4 백엔드 생성기가 bindings/contract 소비 시 반영):**
+- **ApiSig에 `service_name` 부재.** §8.1은 모든 public 메서드에 `@ServiceName("한글설명")` 필수 → `ApiSig.service_name: str` 추가 또는 spec/service_id에서 파생 결정 필요(service_impl 생성기 작성 전).
+- **`FrontendPlan.columns: list[dict]`(무타입)** → 컬럼 dict 형태(header/field/sortable…)를 Phase-4 프론트 생성기가 알아야 함. `FrontendColumn` 모델화하면 후속 스키마 마이그레이션 회피.
+- **`popup` archetype이 `naming._SCREEN_OPS`에 없음** → ops=[] + popup이면 fallback이 `["selectList","count"]` 생성(아마 CPMS 팝업=읽기전용 그리드로 맞지만 미문서화). `_SCREEN_OPS`에 popup 명시 또는 주석.
+- **확정 지연 갭(정상):** `bindings.audit_map`=Phase-4(Mapper 생성), `seed.pgm_url`=Phase-6(프론트 산출물 필요).
+- **I3(지연):** `Contract.ops`는 Literal 미제약 — 잘못된 op는 `plan_and_bind`가 `naming._OP_TABLE` 단일출처로 거부(중복 회피 위해 schema Literal 미적용). 그래프 배선(Phase-6) 시 SSE 이벤트 순서와 함께 재검토.
+- **잔여 노트:** `plan_and_bind`의 file-plan 리스트는 복사하지만 내부 **dict 엔트리는 공유 참조** — 현재 in-place 변경 노드 없어 무해, Phase-6 배선 시 엔트리 변경하면 복사 필요.
