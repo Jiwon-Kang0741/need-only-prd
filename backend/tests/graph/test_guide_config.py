@@ -37,7 +37,7 @@ def test_parse_backend_path_templates_empty_when_section_absent():
 
 
 _SEED = """\
-## 5. Natural Key (Upsert 기준)
+# 5. Natural Key 규칙
 
 | 테이블 | Natural Key |
 |--------|-------------|
@@ -51,7 +51,7 @@ _SEED = """\
 
 모든 Upsert는 위 Key 기준 사용한다.
 
-## 3. 생성 순서
+# 3. 생성 순서
 
 1. `cmn_class`
 2. `cmn_code`
@@ -101,3 +101,35 @@ def test_load_seed_natural_keys_from_real_guide():
     assert nk.get("cmn_role_pgm") == ["role_id", "pgm_id"]
     assert set(nk) >= {"cmn_class", "cmn_code", "cmn_lbl", "cmn_pgm",
                        "cmn_menu", "cmn_role_menu", "cmn_role_pgm"}
+
+
+# ---------------------------------------------------------------------------
+# Fix I2 — section-absent returns empty (TDD: add first, must fail)
+# ---------------------------------------------------------------------------
+
+def test_parse_seed_natural_keys_empty_when_section_absent():
+    assert gc._parse_seed_natural_keys("# no relevant section\n| `cmn_x` | `a` |\n") == {}
+
+
+def test_parse_seed_order_empty_when_section_absent():
+    assert gc._parse_seed_order("# nope\n1. `cmn_class`\n2. `cmn_code`\n") == []
+
+
+# ---------------------------------------------------------------------------
+# Fix I1 — digit-safe column names
+# ---------------------------------------------------------------------------
+
+def test_parse_seed_natural_keys_preserves_digits_in_column_names():
+    text = "# 5. Natural Key\n| 테이블 | Natural Key |\n|--|--|\n| cmn_x | (col_1, id2) |\n"
+    assert gc._parse_seed_natural_keys(text) == {"cmn_x": ["col_1", "id2"]}
+
+
+# ---------------------------------------------------------------------------
+# Fix M3 — bare-word NK values (no backticks)
+# ---------------------------------------------------------------------------
+
+def test_parse_seed_natural_keys_handles_bare_word_values():
+    text = ("# 5. Natural Key\n| 테이블 | Natural Key |\n|--|--|\n"
+            "| cmn_menu | menu_id |\n| cmn_code | (cls_id, code_cd) |\n")
+    out = gc._parse_seed_natural_keys(text)
+    assert out == {"cmn_menu": ["menu_id"], "cmn_code": ["cls_id", "code_cd"]}

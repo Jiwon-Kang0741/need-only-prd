@@ -3,9 +3,10 @@
 The guides (pfy_prompt/{BackendGuide,FrontendGuide,DataGuide}) are immutable
 external input — never edited. These parsers read the machine-readable parts
 (Markdown tables, ordered lists) so codegen rules come from the guide as-is, with
-no hardcoded rule values and no guide annotation. Each loader re-reads the file,
-so a guide swap/edit reflects on the next call. `_parse_*(text)` helpers are pure
-(unit-testable); `load_*()` read the real guide then parse.
+no hardcoded rule values; the parsers never modify or annotate the guide files.
+Each loader re-reads the file, so a guide swap/edit reflects on the next call.
+`_parse_*(text)` helpers are pure (unit-testable); `load_*()` read the real guide
+then parse.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ _SEP_CHARS = set("-: ")
 
 def _parse_backend_path_templates(text: str) -> dict[str, str]:
     """Parse BackendGuide §11.4 'file path rules' Markdown table -> {file_type: tpl}."""
-    sec = re.search(r"###\s*11\.4.*?(?=\n###\s|\Z)", text, re.DOTALL)
+    sec = re.search(r"###\s*11\.4.*?(?=\n#{1,3}\s|\Z)", text, re.DOTALL)
     if not sec:
         return {}
     out: dict[str, str] = {}
@@ -70,10 +71,12 @@ def _parse_seed_natural_keys(text: str) -> dict[str, list[str]]:
         text,
         re.DOTALL | re.MULTILINE | re.IGNORECASE,
     )
-    scope = sec.group(0) if sec else text
+    if not sec:
+        return {}
+    scope = sec.group(0)
     out: dict[str, list[str]] = {}
     for m in _NK_ROW.finditer(scope):
-        out[m.group(1)] = re.findall(r"[a-z_]+", m.group(2))
+        out[m.group(1)] = re.findall(r"[a-z][a-z0-9_]*", m.group(2))
     return out
 
 
@@ -84,7 +87,9 @@ def _parse_seed_order(text: str) -> list[str]:
         text,
         re.DOTALL | re.MULTILINE,
     )
-    scope = sec.group(0) if sec else text
+    if not sec:
+        return []
+    scope = sec.group(0)
     return [m.group(1) for m in _ORDER_ROW.finditer(scope)]
 
 
