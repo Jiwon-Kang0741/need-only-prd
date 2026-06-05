@@ -95,3 +95,19 @@ async def test_contract_resolve_raises_on_refusal(monkeypatch):
     with pytest.raises(ValueError, match="contract_resolve"):
         await cr.contract_resolve(_state())
     assert len(client.calls) == 2
+
+
+async def test_contract_resolve_build_user_coalesces_none(monkeypatch):
+    # a None-valued state field must not become the literal string "None" in the prompt
+    captured = {}
+
+    class _Capture:
+        async def complete(self, system, user, max_tokens=16384):
+            captured["user"] = user
+            import json as _j
+            return _j.dumps(_VALID)
+
+    monkeypatch.setattr(cr, "gpt55_client", _Capture())
+    await cr.contract_resolve({"spec_markdown": None, "confirmed_vue": None,
+                               "table_info": None, "page_type": None})
+    assert "None" not in captured["user"]

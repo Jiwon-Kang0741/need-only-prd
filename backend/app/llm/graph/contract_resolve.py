@@ -46,18 +46,20 @@ Rules:
 - program_id is the SPEC Screen Metadata program id, verbatim.
 - Map every Vue field to its real DB column using the table info. Dates/IDs are String.
 - fields[].filter must be one of "ILIKE", "eq", "range", or "" (empty).
-- frontend.components: include "SumGrid" ONLY if the screen needs per-status aggregate
-  counts with click-to-filter; never include "ProgressList" unless explicitly requested.
+- frontend.components MUST be a subset of ["SearchForm", "DataTable", "SumGrid", "ProgressList"];
+  use no other names. Include "SearchForm"/"DataTable" for normal query/list screens.
+  Include "SumGrid" ONLY if the screen needs per-status aggregate counts with click-to-filter.
+  Never include "ProgressList" unless explicitly requested.
 - The contract is the single source of truth for all downstream generation.
 """
 
 
 def _build_user(state: dict) -> str:
     return (
-        f"=== SPEC ===\n{state.get('spec_markdown', '')}\n\n"
-        f"=== CONFIRMED VUE ===\n{state.get('confirmed_vue', '')}\n\n"
-        f"=== TABLE INFO ===\n{state.get('table_info', '')}\n\n"
-        f"=== CONFIRMED PAGE TYPE ===\n{state.get('page_type', '')}\n"
+        f"=== SPEC ===\n{state.get('spec_markdown') or ''}\n\n"
+        f"=== CONFIRMED VUE ===\n{state.get('confirmed_vue') or ''}\n\n"
+        f"=== TABLE INFO ===\n{state.get('table_info') or ''}\n\n"
+        f"=== CONFIRMED PAGE TYPE ===\n{state.get('page_type') or ''}\n"
     )
 
 
