@@ -83,6 +83,9 @@ async def gen_component(contract: dict, guide: str, comp: str, types: str) -> di
     frontend = contract.get("frontend", {})
 
     comp_key = f"vue_{comp.lower()}"
+    if comp_key not in paths:
+        raise ValueError(
+            f"gen_component: comp={comp!r} has no binding path; available: {sorted(paths)}")
     scss_key = f"vue_{comp.lower()}_scss"
     vue_path = paths[comp_key]
     scss_path = paths[scss_key]
@@ -140,8 +143,7 @@ async def gen_component(contract: dict, guide: str, comp: str, types: str) -> di
 
     result: dict = {scss_path: f"/* {class_name}{comp} styles */\n"}
 
-    # DataTable also needs utils/index.ts — generate BEFORE the .vue so that
-    # the .vue call is always last and c.last_user carries the component hints.
+    # generate utils/index.ts before the .vue (the component imports getColumns/getRows from it)
     if comp == "DataTable":
         utils_path = paths["vue_datatable_utils"]
         utils_user = (
@@ -153,6 +155,7 @@ async def gen_component(contract: dict, guide: str, comp: str, types: str) -> di
             f"REQUIREMENTS:\n"
             f"- Export getColumns(t): returns column definitions array\n"
             f"- Export getRows(data): transforms raw API response to table row format\n"
+            f"- Pre-format all date/number columns inside getRows(); never format dates in template slots.\n"
             f"- Follow the guide conventions for column/row helpers\n"
             f"Output ONLY the file content."
         )

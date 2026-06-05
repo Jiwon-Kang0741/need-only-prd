@@ -40,6 +40,7 @@ async def test_gen_component_datatable_returns_vue_scss_utils(monkeypatch):
     out = await gf.gen_component(_CONTRACT, guide="GUIDE", comp="DataTable", types="export interface R{}")
     p = _CONTRACT["bindings"]["paths"]
     assert p["vue_datatable"] in out and p["vue_datatable_scss"] in out and p["vue_datatable_utils"] in out
+    assert c.calls == 2
     u = c.last_user
     assert "GUIDE" in u and "DataTable2" in u and ":columns" in u
 
@@ -51,8 +52,16 @@ async def test_gen_component_searchform_no_utils(monkeypatch):
     p = _CONTRACT["bindings"]["paths"]
     assert p["vue_searchform"] in out and p["vue_searchform_scss"] in out
     assert p["vue_datatable_utils"] not in out
+    assert c.calls == 1
     u = c.last_user
     assert "inject" in u and "searchParams" in u          # SearchForm state pattern
+
+
+async def test_gen_component_unknown_raises(monkeypatch):
+    c = _Scripted("<template/>")
+    monkeypatch.setattr(gf, "gpt55_client", c)
+    with pytest.raises(ValueError):
+        await gf.gen_component(_CONTRACT, guide="GUIDE", comp="Bogus", types="x")
 
 
 async def test_gen_index_generated_last_binds_children(monkeypatch):
@@ -63,6 +72,8 @@ async def test_gen_index_generated_last_binds_children(monkeypatch):
     out = await gf.gen_index(_CONTRACT, guide="GUIDE", components=children, types="x")
     p = _CONTRACT["bindings"]["paths"]
     assert p["vue_page"] in out and p["vue_page_scss"] in out
+    assert c.calls == 1
     u = c.last_user
     assert "CpmsEduPondgLstSearchForm" in u and "CpmsEduPondgLstDataTable" in u
     assert "provide" in u and "searchParams" in u
+    assert "<template>SF</template>" in u

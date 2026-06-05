@@ -44,8 +44,10 @@ async def test_gen_types_returns_types_file(monkeypatch):
     out = await gf.gen_types(_CONTRACT, guide="GUIDE")
     assert _CONTRACT["bindings"]["paths"]["vue_types"] in out
     assert all("```" not in v for v in out.values())
+    assert c.calls == 1
     u = c.last_user
     assert "empNm" in u and "GUIDE" in u
+    assert "CpmsEduPondgLstResDto" in u
 
 
 async def test_gen_api_grounds_in_serviceid_and_types(monkeypatch):
@@ -53,6 +55,7 @@ async def test_gen_api_grounds_in_serviceid_and_types(monkeypatch):
     monkeypatch.setattr(gf, "gpt55_client", c)
     out = await gf.gen_api(_CONTRACT, guide="GUIDE", types="export interface R {}")
     assert _CONTRACT["bindings"]["paths"]["vue_api"] in out
+    assert c.calls == 1
     u = c.last_user
     assert "/online/mvcJson/CpmsEduPondgLst-selectList" in u
     assert "api.post" in u
