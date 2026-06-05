@@ -208,3 +208,12 @@ types.ts → API `[screenId].ts` → {DataTable(utils+vue+scss), SearchForm(vue+
 ## 11. 아웃 오브 스코프
 - spec 파이프라인(요구사항 추출·spec 생성)은 변경 없음.
 - 런타임 부팅 검증(`docker compose up`)은 별도(컴파일/빌드까지만 본 설계 범위).
+
+## 12. Phase-1 완료 & Phase-2 입력 (2026-06-05)
+
+**Phase-1 DONE** (브랜치 `feat/codegen-rewrite`, 커밋 `2f79a49`..`30dfde8`): `guide_config.py`(고정 가이드 read-only 파서: §11.4 경로표·DataGuide §5 Natural Key·시드 순서) + `paths.py`(`Identity` + 백엔드 경로[§11.4 템플릿] + 프론트 경로 resolver[golden test] + `data_path`). 순수 추가, 라이브 그래프 미변경, 전체 비-LLM 테스트 259 green.
+
+**Phase-2 착수 전 결정/주의 (final review 도출):**
+- **O1 (결정 필요):** `Identity`는 `module`·`category`를 명시 입력으로 요구하는데, 현 `CONTRACT_SYSTEM`은 `screen:{id,name,type}`만 추출함. Phase-2 Contract Resolver가 (a) 계약 JSON에 `module`/`category`를 LLM이 출력하게 하거나 (b) 화면코드 prefix에서 결정론 파생(구 `naming.screen_segments` 류)할지 정해야 함.
+- **O2:** `ProgressList`는 12개 FrontendGuide 문서엔 없고 `cursor/rules/MigFrontend.mdc`에만 있음 → Phase-2 fixture가 항상 등장한다고 가정 금지(명시 요청 시만).
+- **O3:** 신·구 경로 시스템 공존. 구 `naming.file_path`(CODEGEN_RULES.md `{Screen}`, `screen_segments` 기반 FE 경로)는 라이브 파이프라인용으로 Phase-6까지 잔존. **Phase-2 신규 노드는 오직 `paths.*`만 호출**하고, 구 시스템과 섞지 말 것. FE 경로는 구(`{module}/{screen}/{Pascal}`) vs 신(`{module}/{category}/{camel}`)이 구조적으로 다르며 **신 시스템이 정답**.
