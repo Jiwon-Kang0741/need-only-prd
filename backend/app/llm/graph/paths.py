@@ -14,6 +14,8 @@ from dataclasses import dataclass
 
 from app.llm.graph import guide_config
 
+_KNOWN_COMPONENTS = frozenset({"SearchForm", "DataTable", "SumGrid", "ProgressList"})
+
 
 @dataclass(frozen=True)
 class Identity:
@@ -28,13 +30,14 @@ def backend_path(file_type: str, ident: Identity) -> str | None:
     tpl = guide_config.load_backend_path_templates().get(file_type)
     if not tpl:
         return None
+    # {Screen} == {ClassName} (the screen code IS the class-name prefix); kept for guides that use either token.
     return (tpl.replace("{module}", ident.module)
                .replace("{ClassName}", ident.class_name)
                .replace("{Screen}", ident.class_name))
 
 
 def data_path() -> str:
-    """The db init SQL output path (db_init_sql template == 'db/init.sql')."""
+    """Convenience for the db_init_sql target. Equals backend_path('db_init_sql', ...) — db_init_sql carries no substitution tokens (project-root file)."""
     return guide_config.load_backend_path_templates().get("db_init_sql", "db/init.sql")
 
 
@@ -57,6 +60,11 @@ def frontend_paths(ident: Identity, components: list[str]) -> dict[str, str]:
     utils/index.ts, types.ts are lowercase exceptions. types.ts is category-shared.
     Only DataTable gets a utils/ dir.
     """
+    components = list(dict.fromkeys(components))   # Fix #4: dedupe, stable order
+    for comp in components:
+        if comp not in _KNOWN_COMPONENTS:
+            raise ValueError(
+                f"Unknown frontend component {comp!r}; expected one of {sorted(_KNOWN_COMPONENTS)}")
     page_base = _sub(_FE_PAGE_BASE, ident)
     api_base = _sub(_FE_API_BASE, ident)
     out: dict[str, str] = {

@@ -1,3 +1,5 @@
+import pytest
+
 from app.llm.graph.paths import Identity, backend_path, frontend_paths, data_path
 
 # CPMS domain-function family: screenId camelCase, className PascalCase.
@@ -60,3 +62,40 @@ def test_frontend_paths_includes_sumgrid_when_requested():
         "src/pages/sy/ds/pmdp020/components/pmdp020SumGrid/PMDP020SumGrid.vue")
     assert "vue_datatable_utils" in fe   # SumGrid does NOT add a utils dir
     assert "vue_sumgrid_utils" not in fe
+
+
+def test_frontend_paths_rejects_unknown_component():
+    with pytest.raises(ValueError):
+        frontend_paths(SY, components=["SearchForm", "Bogus"])
+
+
+def test_frontend_paths_dedupes_duplicate_components():
+    fe = frontend_paths(SY, components=["DataTable", "DataTable"])
+    assert fe["vue_datatable"].endswith("/PMDP020DataTable.vue")
+
+
+def test_frontend_paths_empty_components_returns_only_base_keys():
+    fe = frontend_paths(SY, components=[])
+    assert set(fe.keys()) == {"vue_page", "vue_page_scss", "vue_api", "vue_types"}
+
+
+def test_backend_path_dto_response():
+    assert backend_path("dto_response", CPMS) == (
+        "src/main/java/biz/edu/dto/response/CpmsEduPondgLstResDto.java")
+
+
+def test_backend_path_dao_impl():
+    assert backend_path("dao_impl", CPMS) == (
+        "src/main/java/biz/edu/dao/CpmsEduPondgLstDaoImpl.java")
+
+
+def test_backend_path_service_impl():
+    assert backend_path("service_impl", CPMS) == (
+        "src/main/java/biz/edu/service/CpmsEduPondgLstServiceImpl.java")
+
+
+def test_data_path_agrees_with_backend_path_template():
+    # db_init_sql has no substitution tokens, so data_path() must equal the
+    # template-driven path for any identity.
+    assert data_path() == backend_path("db_init_sql", CPMS)
+    assert data_path() == "db/init.sql"
