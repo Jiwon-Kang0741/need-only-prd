@@ -25,21 +25,11 @@ from app.llm.graph._text import strip_fences as _strip_fences
 # ---------------------------------------------------------------------------
 
 def pgm_url_from_vue_page(vue_page: str) -> str:
-    """Derive a slash-separated, no-leading-slash pgm_url from a vue_page path.
-
-    Examples
-    --------
-    ``src/pages/edu/pondg/x/index.vue`` → ``pages/edu/pondg/x/index.vue``
-    ``pages/edu/x/index.vue``           → ``pages/edu/x/index.vue``  (idempotent)
-    """
-    # normalise backslashes (Windows paths)
-    path = vue_page.replace("\\", "/")
-    # strip leading "src/" prefix if present
+    """'src/pages/{m}/{c}/{s}/index.vue' -> 'pages/...' (§16.1: strip leading src/, never a leading slash). Idempotent."""
+    path = (vue_page or "").replace("\\", "/").lstrip("/")
     if path.startswith("src/"):
         path = path[len("src/"):]
-    # guarantee no leading slash (belt-and-suspenders)
-    path = path.lstrip("/")
-    return path
+    return path.lstrip("/")
 
 
 # ---------------------------------------------------------------------------

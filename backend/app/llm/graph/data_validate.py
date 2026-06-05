@@ -12,7 +12,7 @@ import re
 from app.llm.graph import tools
 
 _LEADING_SLASH_PGM = re.compile(r"""['"]/pages/""")
-_MERGE = re.compile(r"\bMERGE\b", re.IGNORECASE)
+_MERGE = re.compile(r"\bMERGE\s+INTO\b", re.IGNORECASE)
 
 
 def validate_data(sql: str, contract: dict) -> list[dict]:

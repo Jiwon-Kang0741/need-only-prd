@@ -33,3 +33,8 @@ def test_double_quoted_leading_slash_also_flagged():
     sql = 'INSERT INTO cmn_pgm (pgm_url) VALUES ("/pages/x/index.vue");'
     issues = validate_data(sql, _CONTRACT)
     assert any("pgm_url" in i["issue"].lower() for i in issues)
+
+
+def test_merge_word_in_comment_not_flagged():
+    sql = "-- merge the lookup data here\nINSERT INTO cmn_pgm(pgm_url) VALUES('pages/x/index.vue');"
+    assert validate_data(sql, _CONTRACT) == []

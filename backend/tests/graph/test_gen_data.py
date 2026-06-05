@@ -1,8 +1,6 @@
 import pytest
 from app.llm.graph import gen_data as gd
 
-pytestmark = pytest.mark.asyncio
-
 _CONTRACT = {
     "identity": {"module": "edu", "category": "pondg", "screen_id": "cpmsEduPondgLst",
                  "class_name": "CpmsEduPondgLst", "program_id": "CPMSEDUPONDGLST"},
@@ -37,6 +35,7 @@ async def test_gen_ddl_grounds_in_table_and_returns_sql(monkeypatch):
     u = c.last_user
     assert "cptb_edu_pondg" in u and "emp_nm" in u and "GUIDE" in u
     assert "del_yn" in u and "BIGSERIAL" in u
+    assert c.calls == 1
 
 
 async def test_gen_seed_derives_pgm_url_without_leading_slash(monkeypatch):
@@ -48,6 +47,7 @@ async def test_gen_seed_derives_pgm_url_without_leading_slash(monkeypatch):
     assert "/pages/edu/pondg" not in u
     assert "CPMSEDUPONDGLST" in u
     assert "ON CONFLICT" in u
+    assert c.calls == 1
 
 
 def test_assemble_sql_concats_ddl_then_seed_at_bound_path():
@@ -61,3 +61,12 @@ def test_pgm_url_from_vue_page_helper():
     assert gd.pgm_url_from_vue_page("src/pages/edu/pondg/x/index.vue") == "pages/edu/pondg/x/index.vue"
     assert gd.pgm_url_from_vue_page("pages/edu/x/index.vue") == "pages/edu/x/index.vue"
     assert not gd.pgm_url_from_vue_page("src/pages/x/index.vue").startswith("/")
+
+
+def test_pgm_url_idempotent_and_robust():
+    f = gd.pgm_url_from_vue_page
+    assert f("/src/pages/x/index.vue") == "pages/x/index.vue"
+    assert f("src//pages/x/index.vue").startswith("pages/")
+    once = f("src/pages/a/b/c/index.vue")
+    assert f(once) == once                      # idempotent
+    assert not once.startswith("/")
