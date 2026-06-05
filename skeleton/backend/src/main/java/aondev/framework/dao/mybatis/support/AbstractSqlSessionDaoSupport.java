@@ -43,4 +43,14 @@ public abstract class AbstractSqlSessionDaoSupport {
     protected int delete(String statementId, Object parameter) {
         return this.sqlSession.delete(statementId, parameter);
     }
+
+    protected int batchUpdateReturnSumAffectedRows(String statementId, List<?> parameter) {
+        int sum = 0;
+        if (parameter != null) {
+            for (Object item : parameter) {
+                sum += sqlSession.update(statementId, item);
+            }
+        }
+        return sum;
+    }
 }
