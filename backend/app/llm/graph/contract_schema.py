@@ -7,6 +7,8 @@ boundary (parse_contract). `bindings` is filled deterministically later
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -44,7 +46,7 @@ class ReqField(BaseModel):
     snake: str
     java_type: str = "String"
     optional: bool = True
-    filter: str = ""            # ILIKE | eq | range | ""
+    filter: Literal["ILIKE", "eq", "range", ""] = ""
 
 
 class ResField(BaseModel):
@@ -94,7 +96,7 @@ class Bindings(BaseModel):
 
 class Contract(BaseModel):
     identity: Identity
-    archetype: str
+    archetype: Literal["list", "list-detail", "edit", "popup", "tab-detail"]
     ops: list[str] = []
     table: Table
     fields: Fields = Fields()

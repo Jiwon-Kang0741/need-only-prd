@@ -47,3 +47,27 @@ def test_contract_round_trips_to_dict():
     d = c.model_dump()
     assert d["identity"]["screen_id"] == "cpmsEduPondgLst"
     assert parse_contract(d).identity.class_name == "CpmsEduPondgLst"
+
+
+def test_parse_contract_rejects_unknown_archetype():
+    bad = {**_MIN, "archetype": "crud"}          # not in the Literal set
+    with pytest.raises(ValidationError):
+        parse_contract(bad)
+
+
+def test_parse_contract_accepts_popup_archetype():
+    ok = {**_MIN, "archetype": "popup"}
+    assert parse_contract(ok).archetype == "popup"
+
+
+def test_parse_contract_rejects_unknown_req_filter():
+    bad = {**_MIN, "fields": {"request": [
+        {"camel": "empNm", "snake": "emp_nm", "filter": "between"}]}}
+    with pytest.raises(ValidationError):
+        parse_contract(bad)
+
+
+def test_parse_contract_accepts_valid_req_filter():
+    ok = {**_MIN, "fields": {"request": [
+        {"camel": "empNm", "snake": "emp_nm", "filter": "ILIKE"}]}}
+    assert parse_contract(ok).fields.request[0].filter == "ILIKE"
