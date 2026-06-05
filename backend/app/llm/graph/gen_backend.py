@@ -141,7 +141,7 @@ async def gen_mapper(contract: dict, guide: str, dtos: dict) -> dict:
 
     # Build column details: include snake names so "emp_nm" is explicitly present
     columns_detail = "\n".join(
-        f"  - {col['snake']} ({col.get('db_type', '')}) -> {col.get('camel', '')} [{col.get('java_type', '')}]"
+        f"  - {col.get('snake', '')} ({col.get('db_type', '')}) -> {col.get('camel', '')} [{col.get('java_type', '')}]"
         for col in columns
     )
     stmt_ids_str = "\n".join(f"  - {sid}" for sid in statement_ids)
@@ -202,6 +202,10 @@ async def gen_service(contract: dict, guide: str, dao: str, dtos: dict) -> dict:
         f"- Every public method must have @ServiceId(\"{screen}/<method>\") and @ServiceName(\"...\") annotations\n"
         f"- Inject the DaoImpl via constructor injection\n"
         f"- Delegate each service method to the corresponding DAO method above\n"
+        f"- Write ops (insert/update/delete) MUST be @Transactional; read ops @Transactional(readOnly = true).\n"
+        f"- Every public method body MUST wrap DAO calls in try {{ ... }} catch (Exception e) {{ throw HscException.systemError(\"<업무 메시지>\", e); }} — the 2-arg form (pass e).\n"
+        f"- Do NOT call log.error()/log.warn() right before a throw (the framework logs thrown exceptions).\n"
+        f"- @Slf4j on the class; start each method with a debug log.\n"
         f"Output ONLY the Java file content."
     )
     reply = await gpt55_client.complete(GENERATOR_SYSTEM, user)

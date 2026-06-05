@@ -74,3 +74,13 @@ async def test_gen_service_grounds_in_dao_methods(monkeypatch):
     assert "insertCpmsEduPondgLst" in u                # must call real dao methods
     assert "CpmsEduPondgLst/" in u                     # ServiceId hint {class}/{method}
     assert "GUIDE" in u
+
+
+async def test_gen_service_prompt_calls_out_transactional_and_trycatch(monkeypatch):
+    c = _Scripted("class S {}")
+    monkeypatch.setattr(gb, "gpt55_client", c)
+    await gb.gen_service(_CONTRACT, guide="GUIDE",
+                         dao="class D { public int insertCpmsEduPondgLst(){} }", dtos={})
+    u = c.last_user
+    assert "@Transactional" in u
+    assert "try" in u and "HscException.systemError" in u
